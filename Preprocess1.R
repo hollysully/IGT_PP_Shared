@@ -127,10 +127,10 @@ BD$Srewlos[is.na(BD$Srewlos)] <- 0
 
 # now recode absmoney1 into a new variable called rewlos that is the absolute value of absmoney1
 
-AB$rewlos <- abs(AB$absmoney1) 
+AB$rewlos <- AB$absmoney1
 AB$rewlos[is.na(AB$rewlos)] <- 0
 
-BD$rewlos <- abs(BD$absmoney1) 
+BD$rewlos <- BD$absmoney1 
 BD$rewlos[is.na(BD$rewlos)] <- 0
 
 
