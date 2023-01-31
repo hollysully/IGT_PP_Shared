@@ -1,3 +1,6 @@
+# Ignore Mac system files
+.DS_store
 
-Data/1_Preprocessed/.DS_Store
-Data/2_Fitted/.DS_Store
+/*.txt
+/Data/1_Preprocessed/*.rds
+/Data/2_Fitted/*.rds
