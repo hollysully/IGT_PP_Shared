@@ -1,16 +1,16 @@
 library(dplyr)
 library(tidyverse) 
-library("haven")
+library(haven)
 library(lubridate)
-#install.packages("readxl")
-library("readxl")
-
+library(readxl)
+library(here)
 
 
 #import Play or Pass raw data
 # NOTE: before I saved these as .xlsx files, I converted 'SessionDate' to format:  2015-10-23, to work with lubridate
-AB <- read_excel("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/0_Raw/AB/Merged_AB.xlsx")
-BD <- read_excel("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/0_Raw/BD/Merged_BD.xlsx")
+# `here(...)` finds the root project directory, and then creates the file path given arguements
+AB <- read_excel(here("Data", "0_Raw", "AB", "Merged_AB.xlsx"))
+BD <- read_excel(here("Data", "0_Raw", "BD", "Merged_BD.xlsx"))
 
 names(AB)
 length(unique(AB$Subject)) #44
@@ -31,8 +31,8 @@ BD <- subset(BD, Procedure!="Knowledge")
 #Note: PlayPass IGT task subject numbers are 2049—2099
 
 # import questionnaire data
-Sess1_Q <- read_sav("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/0_Raw/MergedQuest_3.21.16-Session1.sav")
-Sess2_Q <- read_sav("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/0_Raw/MergedQuest_3.21.16-Session2.sav")
+Sess1_Q <- read_sav(here("Data", "0_Raw", "MergedQuest_3.21.16-Session1.sav"))
+Sess2_Q <- read_sav(here("Data", "0_Raw", "MergedQuest_3.21.16-Session2.sav"))
 # subset out just subjects from this study
 Sess1_Q <- subset(Sess1_Q, ID >= 2049)
 Sess2_Q <- subset(Sess2_Q, ID >= 2049)
@@ -41,7 +41,7 @@ length(unique(Sess1_Q$ID)) #51
 length(unique(Sess2_Q$ID)) #41
 
 
-Version <- read_sav("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/0_Raw/IGT_VersionTrackingSheet.sav")
+Version <- read_sav(here("Data", "0_Raw", "IGT_VersionTrackingSheet.sav"))
 names(Version)
 Version <- subset(Version, SubjectID >= 2049)
 Version <- subset(Version, SubjectID != 2059) # took out this sub b/c they played old IGT
@@ -263,11 +263,10 @@ unique(Sess2_IGT$ExperimentName)
 # Save IGT dataframes as .csv files
 ############################################################################################################
 
-path_out <- "/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/1_Preprocessed/"
-Sess1_IGT_dat = paste(path_out, 'Sess1_IGT.csv', sep = '')
+Sess1_IGT_dat = here("Data", "1_Preprocessed", "Sess1_IGT.csv")
 write.csv(Sess1_IGT,Sess1_IGT_dat)
 
-Sess2_IGT_dat = paste(path_out, 'Sess2_IGT.csv', sep = '')
+Sess2_IGT_dat = here("Data", "1_Preprocessed", "Sess2_IGT.csv")
 write.csv(Sess2_IGT,Sess2_IGT_dat)
 
 
@@ -279,64 +278,63 @@ write.csv(Sess2_IGT,Sess2_IGT_dat)
 # code for making stan-ready lists from just the sess 1 data or just the sess 2 data
 ############################################################################################################
 
-#Sess_data <- Sess1_IGT
-Sess_data <- Sess2_IGT
-
-# Individual Subjects
-subjList <- unique(Sess_data$Subject) # list of subject IDs from the session data specified by Sess_data
-numSubjs <- length(subjList)        # number of subjects
-
-# Trials per subject in behavioral data (0 when missing)
-Tsubj <- as.vector(rep(0, numSubjs)) 
-
-# now use these for loops to fill the array 'Tsubj' with the number of trials, when there are trials, otherwise the value stays 0
-
-
-# Trials per subject in behavioral data
-# number of trials for each subject
-for ( i in 1:numSubjs )  {
-  curSubj  <- subjList[i]
-  Tsubj[i] <- sum(Sess_data$Subject==curSubj)
+for (session in 1:2) {
+  if (session == 1) {
+    Sess_data <- Sess1_IGT
+  } else if (session == 2) {
+    Sess_data <- Sess2_IGT    
+  }
+  
+  # Individual Subjects
+  subjList <- unique(Sess_data$Subject) # list of subject IDs from the session data specified by Sess_data
+  numSubjs <- length(subjList)        # number of subjects
+  
+  # Trials per subject in behavioral data (0 when missing)
+  Tsubj <- as.vector(rep(0, numSubjs)) 
+  
+  # now use these for loops to fill the array 'Tsubj' with the number of trials, when there are trials, otherwise the value stays 0
+  
+  
+  # Trials per subject in behavioral data
+  # number of trials for each subject
+  for ( i in 1:numSubjs )  {
+    curSubj  <- subjList[i]
+    Tsubj[i] <- sum(Sess_data$Subject==curSubj)
+  }
+  maxTrials <- max(Tsubj)
+  
+  
+  
+  # Behavioral data arrays
+  RLmatrix <- SRLmatrix <- stim <- array(-1, c(numSubjs, maxTrials))
+  Ydata <- array(-1, c(numSubjs, maxTrials))
+  
+  
+  # Filling arrays with raw data
+  for (i in 1:numSubjs) {
+    currID   <- subjList[i]
+    tmp_dat  <- subset(Sess_data, Subject==currID)
+    stim[i,]  <- tmp_dat$stim
+    Ydata[i,] <- tmp_dat$ydata
+    RLmatrix[i,] <- tmp_dat$rewlos
+    SRLmatrix[i,] <- tmp_dat$Srewlos
+  }  
+  
+  
+  dataList <- list(
+    N       = numSubjs,
+    T       = maxTrials,
+    Tsubj   = Tsubj,
+    stim    = stim,
+    Srewlos = SRLmatrix,     
+    rewlos  = RLmatrix,
+    ydata   = Ydata,
+    subjID  = subjList
+  )
+  
+  # save Sess 1 or 2 lists as .rds
+  saveRDS(dataList, file = here("Data", "1_Preprocessed", paste0("Sess", session, ".rds")))
 }
-maxTrials <- max(Tsubj)
-
-
-
-# Behavioral data arrays
-RLmatrix <- SRLmatrix <- stim <- array(-1, c(numSubjs, maxTrials))
-Ydata <- array(-1, c(numSubjs, maxTrials))
-
-
-# Filling arrays with raw data
-for (i in 1:numSubjs) {
-  currID   <- subjList[i]
-  tmp_dat  <- subset(Sess_data, Subject==currID)
-  stim[i,]  <- tmp_dat$stim
-  Ydata[i,] <- tmp_dat$ydata
-  RLmatrix[i,] <- tmp_dat$rewlos
-  SRLmatrix[i,] <- tmp_dat$Srewlos
-}  
-
-
-dataList <- list(
-  N       = numSubjs,
-  T       = maxTrials,
-  Tsubj   = Tsubj,
-  stim    = stim,
-  Srewlos = SRLmatrix,     
-  rewlos  = RLmatrix,
-  ydata   = Ydata,
-  subjID  = subjList
-)
-
-# save Sess 1 lists as .rds
-# saveRDS(dataList, file = "/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/1_Preprocessed/Sess1.rds")
-
-# save Sess 2 lists as .rds
-saveRDS(dataList, file = "/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/1_Preprocessed/Sess2.rds")
-
-
-
 
 
 
