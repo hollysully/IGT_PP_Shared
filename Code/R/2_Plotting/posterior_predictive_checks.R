@@ -56,7 +56,7 @@ igt_plots <- foreach(i=seq_along(subj_list)) %do% {
     # NOTE: for my application, subjects were just numbered 1, 2, 3, ...,
     # Here, they have actual IDs, which I think is where the error is coming from.
     # e.g., if subj = 2049, the `[subj,stan_dat1$stim[subj,]==stim]` indexing
-    # is not trying to grab an index that does not exist because 
+    # is then trying to grab an index that does not exist because 
     # `dim(stan_dat1$ydata)` is only `(49, 120)`. One potential fix could be to 
     # iterate over `seq_along(subjs)` as opposed to just `subjs`.
     y <- foreach(subj=subjs, .combine = "rbind") %do% {
