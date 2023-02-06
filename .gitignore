@@ -1,6 +1,11 @@
 # Ignore Mac system files
 .DS_store
 
-/*.txt
-/Data/1_Preprocessed/*.rds
-/Data/2_Fitted/*.rds
+# R user files
+.Rhistory
+.Rproj.user
+
+# Data files 
+*.txt
+Data/1_Preprocessed/*.rds
+Data/2_Fitted/*.rds
