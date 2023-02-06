@@ -2,14 +2,9 @@
 library(rstan)
 library(hBayesDM)
 library(bayesplot)
+library(here)
 
 # working directory for running on lab server
-
-
-# working directory for running on my laptop
-setwd("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/")
-
-
 
 
 ########################################################################################## 
@@ -17,7 +12,7 @@ setwd("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/")
 ########################################################################################## 
 
 # Read in stan-ready data for single sess play pass ORL model
-stan_dat <- readRDS("Data/1_Preprocessed/Sess1.rds")
+stan_dat <- readRDS(here("Data", "1_Preprocessed", "Sess1.rds"))
 
 #explore the stan_dat
 #stan_dat$Tsubj
@@ -26,7 +21,7 @@ stan_dat <- readRDS("Data/1_Preprocessed/Sess1.rds")
 ################## skip to line 43 and read in the RDS file
 
 # Compile model
-orl_pp_sep1 <- stan_model("Code/Stan/igt_orl.stan")
+orl_pp_sep1 <- stan_model(here("Code", "Stan", "igt_orl.stan"))
 
 # Fit model
 fit_sep <- sampling(orl_pp_sep1, 
@@ -41,11 +36,11 @@ fit_sep <- sampling(orl_pp_sep1,
 
 
 #save the fitted model as an .rds file
-filename = "/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/2_Fitted/orl_pp_sess1.rds"
+filename <- here("Data", "2_Fitted", "orl_pp_sess1.rds")
 saveRDS(fit_sep, filename)
 
 # to read the .rds file back into R later, you do:
-fit_sep <- readRDS("Data/2_Fitted/orl_pp_sess1.rds")
+fit_sep <- readRDS(filename)
 
 # Extract parameters
 pars <- extract(fit_sep)
@@ -72,15 +67,15 @@ IGT_PP_sep_sess1 <- data.frame(subjID  = stan_dat$subjID,
 
 
 # posterior means for parameter mu's
-Fit_sep_sess1_mu_Arew = mean(pars$mu_Arew) # 0.002426064
-Fit_sep_sess1_mu_Apun = mean(pars$mu_Apun) # 0.001275201
-Fit_sep_sess1_mu_K = mean(pars$mu_K)  # 0.06413485
-Fit_sep_sess1_mu_betaF = mean(pars$mu_betaF)  # 0.6253355
-Fit_sep_sess1_mu_betaP = mean(pars$mu_betaP)  # 0.6657244
+Fit_sep_sess1_mu_Arew <- mean(pars$mu_Arew) # 0.002426064
+Fit_sep_sess1_mu_Apun <- mean(pars$mu_Apun) # 0.001275201
+Fit_sep_sess1_mu_K <- mean(pars$mu_K)  # 0.06413485
+Fit_sep_sess1_mu_betaF <- mean(pars$mu_betaF)  # 0.6253355
+Fit_sep_sess1_mu_betaP <- mean(pars$mu_betaP)  # 0.6657244
 
 
 #save the pars dataset
-write.csv(IGT_PP_sep_sess1,'/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/2_Fitted/IGT_PP_sep_sess1_IndPars.csv')
+write.csv(IGT_PP_sep_sess1, here("Data", "2_Fitted", "IGT_PP_sep_sess1_IndPars.csv"))
 
 
 
@@ -93,7 +88,7 @@ write.csv(IGT_PP_sep_sess1,'/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayP
 ########################################################################################## 
 
 # Read in stan-ready data for single sess play pass ORL model
-stan_dat <- readRDS("Data/1_Preprocessed/Sess2.rds")
+stan_dat <- readRDS(here("Data", "1_Preprocessed", "Sess2.rds"))
 
 #explore the stan_dat
 #stan_dat$Tsubj
@@ -102,7 +97,7 @@ stan_dat <- readRDS("Data/1_Preprocessed/Sess2.rds")
 ################## skip to line 43 and read in the RDS file
 
 # Compile model
-orl_pp_sep2 <- stan_model("Code/Stan/igt_orl.stan")
+orl_pp_sep2 <- stan_model("Code", "Stan", "igt_orl.stan")
 
 # Fit model
 fit_sep <- sampling(orl_pp_sep2, 
@@ -117,11 +112,11 @@ fit_sep <- sampling(orl_pp_sep2,
 
 
 #save the fitted model as an .rds file
-filename = "/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/2_Fitted/orl_pp_sess2.rds"
+filename = here("Data", "2_Fitted", "orl_pp_sess2.rds")
 saveRDS(fit_sep, filename)
 
 # to read the .rds file back into R later, you do:
-fit_sep <- readRDS("Data/2_Fitted/orl_pp_sess2.rds")
+fit_sep <- readRDS(filename)
 
 # Extract parameters
 pars <- extract(fit_sep)
@@ -157,6 +152,6 @@ Fit_sep_sess2_mu_betaP = mean(pars$mu_betaP)  # 1.110543
 
 
 #save the pars dataset
-write.csv(IGT_PP_sep_sess2,'/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/2_Fitted/IGT_PP_sep_sess2_IndPars.csv')
+write.csv(IGT_PP_sep_sess2,here("Data", "2_Fitted", "IGT_PP_sep_sess2_IndPars.csv"))
 
 
