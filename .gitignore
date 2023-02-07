@@ -9,3 +9,6 @@
 *.txt
 Data/1_Preprocessed/*.rds
 Data/2_Fitted/*.rds
+
+# 
+Icon?
