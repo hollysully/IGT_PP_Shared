@@ -27,14 +27,11 @@ post_pred <- pars$y_pred
 
 
 # import session 1 stan-ready data
-# NOTE: before, I had this named `raw_dat` in my own code, which I think 
-# you interpreted as the data before prepping for stan, rather than the 
-# stan-ready data. I made the naming more clear now!
 stan_dat1 <- readRDS(here("Data", "1_Preprocessed", "Sess1.rds"))
 
 
 # Set color scheme for bayesplot (it is a global setting)
-color_scheme_set("viridisC") ## this one is good! 
+color_scheme_set("viridisC") 
 
 
 # For binding together posterior predictions
@@ -42,6 +39,24 @@ acomb <- function(...) abind(..., along=3)
 
 
 subj_list <- stan_dat1["subjID"]
+
+
+subj_list <- as.data.frame(stan_dat1["subjID"])
+
+igt_plots <- foreach(stim=1:4) %do% {
+  #subj <- subj_list[i]
+  print(stim) #so far, cycling through the stim list
+  y <- foreach(i=seq_along(subj_list), .combine = "rbind") %do% {
+    # in line below, -1 recodes the play & pass values to 0 and 1
+    # that, in the stan-ready data, were 1 for play or 2 for pass
+    stan_dat1$ydata[i,stan_dat1$stim[i,]==stim]-1
+  } %>%
+    colMeans()
+}
+
+
+
+
 
 
 # NOTE: this `i=seq_along(subj_list)` loop was used in my code because I was
@@ -96,4 +111,3 @@ igt_plots <- foreach(i=seq_along(subj_list)) %do% {
 # patchwork grid to show the figures
 (igt_plots[[1]][[1]] | igt_plots[[1]][[2]]) / 
   (igt_plots[[1]][[3]] | igt_plots[[1]][[4]])
-
