@@ -1,5 +1,5 @@
-Sess1 <- read.csv("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/2_Fitted/IGT_PP_sep_sess1_IndPars.csv")
-Sess2 <- read.csv("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/Data/2_Fitted/IGT_PP_sep_sess2_IndPars.csv")
+Sess1 <- read.csv(here("Data", "2_Fitted", "IGT_PP_sep_sess1_IndPars.csv"))
+Sess2 <- read.csv(here("Data", "2_Fitted", "IGT_PP_sep_sess2_IndPars.csv"))
 
 # merge the data by subjID
 BothSess <- merge(Sess1,Sess2,by="subjID") 

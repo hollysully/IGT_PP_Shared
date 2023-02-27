@@ -129,11 +129,11 @@ BD$Srewlos[is.na(BD$Srewlos)] <- 0
 
 
 # now recode absmoney1 into a new variable called rewlos that is the value of absmoney1
-
-AB$rewlos <- AB$absmoney1
+# Scale by 100 like in the original model (since outcomes go up to the 1000's)
+AB$rewlos <- AB$absmoney1 / 100
 AB$rewlos[is.na(AB$rewlos)] <- 0
 
-BD$rewlos <- BD$absmoney1 
+BD$rewlos <- BD$absmoney1 / 100
 BD$rewlos[is.na(BD$rewlos)] <- 0
 
 

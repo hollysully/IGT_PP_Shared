@@ -43,21 +43,6 @@ subj_list <- stan_dat1["subjID"]
 
 subj_list <- as.data.frame(stan_dat1["subjID"])
 
-igt_plots <- foreach(stim=1:4) %do% {
-  #subj <- subj_list[i]
-  print(stim) #so far, cycling through the stim list
-  y <- foreach(i=seq_along(subj_list), .combine = "rbind") %do% {
-    # in line below, -1 recodes the play & pass values to 0 and 1
-    # that, in the stan-ready data, were 1 for play or 2 for pass
-    stan_dat1$ydata[i,stan_dat1$stim[i,]==stim]-1
-  } %>%
-    colMeans()
-}
-
-
-
-
-
 
 # NOTE: this `i=seq_along(subj_list)` loop was used in my code because I was
 # showing plots of different groups of subjects. We do not necessarily need to 
@@ -74,7 +59,7 @@ igt_plots <- foreach(i=seq_along(subj_list)) %do% {
     # is then trying to grab an index that does not exist because 
     # `dim(stan_dat1$ydata)` is only `(49, 120)`. One potential fix could be to 
     # iterate over `seq_along(subjs)` as opposed to just `subjs`.
-    y <- foreach(subj=subjs, .combine = "rbind") %do% {
+    y <- foreach(subj=seq_along(subjs), .combine = "rbind") %do% {
       # ydata is NxT matrix where rows = subjects and columns = trials
       # below grabs the response on trials where subject was presented 
       # a given stimulus
@@ -83,7 +68,7 @@ igt_plots <- foreach(i=seq_along(subj_list)) %do% {
       colMeans()
     
     # Group-level posterior predictions for each trial
-    yrep <- foreach(subj=subjs, .combine = "acomb") %do% {
+    yrep <- foreach(subj=seq_along(subjs), .combine = "acomb") %do% {
       # below follows same logic as above, but with posterior predictions
       # instead of actual data
       pars$y_pred[,subj,stan_dat1$stim[subj,]==stim]-1
