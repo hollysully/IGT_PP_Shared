@@ -7,8 +7,11 @@
 
 # Data files 
 *.txt
-Data/1_Preprocessed/*.rds
-Data/2_Fitted/*.rds
+1_IGT_PP/Data/1_Preprocessed/*.rds
+1_IGT_PP/Data/2_Fitted/*.rds
+
+# eprime data files
+1_SIGT_PP/Data/0_Raw/z_Rawest_Data/
 
 # 
 Icon?
