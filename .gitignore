@@ -17,6 +17,7 @@
 
 # clinical measures (includes dates, etc)
 1_SIGT_PP/Data/0_Raw/*.sav
+1_SIGT_PP/Data/0_Raw/z_FinalizedData 1st Paper/*.sav
 
 # 
 Icon?
