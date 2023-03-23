@@ -4,6 +4,7 @@
 # R user files
 .Rhistory
 .Rproj.user
+.RData
 
 # Data files 
 *.txt
