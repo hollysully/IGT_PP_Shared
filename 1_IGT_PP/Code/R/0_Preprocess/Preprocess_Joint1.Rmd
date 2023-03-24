@@ -1,0 +1,94 @@
+---
+title: "Preprocessing"
+subtitle: "Data Preparation for Joint Test-Retest Model"
+output: html_document
+---
+
+
+
+#------------------------------------------------------
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+
+Sess1_IGT_data = read.csv(here("1_IGT_PP", "Data", "1_Preprocessed", "Sess1_IGT.csv")) %>% 
+  mutate(session = 1)
+Sess2_IGT_data = read.csv(here("1_IGT_PP", "Data", "1_Preprocessed", "Sess2_IGT.csv")) %>% 
+  mutate(session = 2)
+```
+
+
+
+#------------------------------------------------------
+# Stan Data
+## Prepping Data
+```{r}
+# Combine both sessions' worth of data and select columns to use for stan data
+both_sessions = bind_rows(Sess1_IGT_data, Sess2_IGT_data) %>%
+  # Calculate a trial variable so that we can tell stan when to reinitialize starting values for ef, ev...
+  group_by(Subject, session) %>% 
+  mutate(trial = rank(X)) %>% 
+  # Select variables and rename variables of interest
+  select(subject = Subject, session, trial, card = stim, outcome = rewlos, choice = ydata)
+
+full_data = both_sessions %>% 
+  ungroup() %>% 
+  reframe(subject = unique(subject)) %>%   # Get column of subject IDs
+  mutate(ID = rank(subject)) %>%           # Rank the subject IDs consecutively
+  left_join(both_sessions) %>%             # Join the new ID column with the full dataset by matching elements of the
+                                            # subject column so that subject IDs are ranked consecutively
+  mutate(sign = sign(outcome))             # Calculate sign of outcome
+
+saveRDS(full_data, here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
+```
+
+
+
+## Make Stan List
+```{r}
+stan_data = list(N = nrow(full_data),                     # Number of observations = 10560
+                 n_J = length(unique(full_data$subject)), # Number of subjects = 49 here
+                 n_S = length(unique(full_data$session)), # Number of sessions = 2 here
+                 J = full_data$ID,                        # Vector of subject IDs
+                 S = full_data$session,                   # Vector of sessions
+                 Trials = full_data$trial,                # Vector of trials
+                 C = full_data$card,                      # Vector of cards presented to subject
+                 choice = full_data$choice,               # Vector of choices on each trial
+                 outcome = full_data$outcome,             # Vector of outcomes received on each trial
+                 sign = full_data$sign)                   # Vector of the signs of the outcome received on each trial
+```
+
+
+
+## Save Stan List
+```{r}
+saveRDS(stan_data, here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
+```
+
+#------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
