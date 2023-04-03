@@ -35,7 +35,7 @@ sr_sess1 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Sessi
                                    "basrewres", "bis", "panas_pa",
                                    "panas_na", "masqGDA", "masqAA", "masqGDD",
                                    "masqAD", "shaps_tot", "prdep_tot")) %>% 
-  # mutate(session = 1) %>%
+  mutate(session = 1) %>%
   filter(ID >= 2049,                          # Subset PP participants
          ID != 2059,                          # Remove participant that played old IFT
          ID != 2083)                          # Remove participant that had no task data
@@ -44,7 +44,7 @@ sr_sess2 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Sessi
                     col_select = c("ID", "bastot", "basdrive", "basfunsk",
                                    "basrewres", "bis", "panas_pa",
                                    "panas_na", "shaps_tot")) %>% 
-  # mutate(session = 2) %>%
+  mutate(session = 2) %>%
   filter(ID >= 2049,                          # Subset PP participants
          ID != 2059,                          # Remove participant that played old IFT
          ID != 2083,                          # Remove participant that had no task data
@@ -255,6 +255,56 @@ for(scale in c("bastot", "basdrive", "basfunsk",
                                         scale_session = 2,
                                         parameter = param,
                                         scale = scale,
+                                        r = curr_cor$Observed,
+                                        lower_ci = curr_ci$lower[1],
+                                        upper_ci = curr_ci$upper[1]))
+  }
+}
+```
+
+
+
+## Individual-Subject Mus
+```{r}
+overall_correlations = data.frame()
+
+sr_orl = bind_rows(sr_sess1, sr_sess2) %>% 
+  select(-c(sex, race, Ethnicity)) %>%   # Remove columns that we don't need
+  pivot_longer(c("bastot", "basdrive", "basfunsk",
+               "basrewres", "bis", "panas_pa",
+               "panas_na", "masqGDA", "masqAA", "masqGDD",
+               "masqAD", "shaps_tot", "prdep_tot"),
+               names_to = "scale", values_to = "score") %>% 
+  group_by(ID, scale) %>% 
+  reframe(score = mean(score, na.rm = T)) %>% 
+  left_join(orl_blups)
+  
+# Loop through each scale from session 2
+for(curr_scale in unique(sr_orl$scale)){
+  # Loop through each parameter from session 1
+  for(curr_parameter in unique(sr_orl$parameter)){
+    
+    curr_data = sr_orl %>%
+      filter(scale == curr_scale & parameter == curr_parameter) # Subset data
+    
+    curr_score = curr_data$score            # Subset scale data
+    curr_estimate = curr_data$blup_overall  # Subset estimate for parameter
+    # Run the boot-strapped correlation between the current scale and the current parameter
+    curr_cor = boot.cor.bca(x = curr_score, y = curr_estimate,
+                            null.hyp = NULL,
+                            alternative = c("two.sided", "less", "greater"),
+                            conf.level = 0.95, type = NULL, R = 9999)
+    
+    curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
+      separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
+      # Remove parentheses and turn CIs into numerics
+      mutate(lower = as.numeric(str_remove(lower, "[(]")),
+             upper = as.numeric(str_remove(upper, "[)]")))
+    
+    # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
+    overall_correlations = bind_rows(overall_correlations,
+                             data.frame(parameter = curr_parameter,
+                                        scale = curr_scale,
                                         r = curr_cor$Observed,
                                         lower_ci = curr_ci$lower[1],
                                         upper_ci = curr_ci$upper[1]))
