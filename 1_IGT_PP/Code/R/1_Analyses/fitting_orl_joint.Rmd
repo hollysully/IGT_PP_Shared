@@ -195,6 +195,7 @@ write.csv(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_jo
 
 saveRDS(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_mus.rds"))
 saveRDS(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
+saveRDS(posterior_blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_posterior_blups.rds"))
 saveRDS(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.rds"))
 ```
 
