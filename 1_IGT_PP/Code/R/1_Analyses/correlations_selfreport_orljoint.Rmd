@@ -99,11 +99,6 @@ orl_blups = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_
 # -----------------------------------------------
 # Correlations
 ```{r}
-orl_sess1 = orl_blups %>% 
-  filter(session == 1)
-orl_sess2 = orl_blups %>% 
-  filter(session == 2)
-
 correlations = data.frame()
 ```
 
@@ -117,16 +112,16 @@ for(scale in c("bastot", "basdrive", "basfunsk",
                "panas_na", "masqGDA", "masqAA", "masqGDD",
                "masqAD", "shaps_tot", "prdep_tot")){
   # Loop through each parameter from session 1
-  for(param in unique(orl_sess1$parameter)){
+  for(param in unique(orl_blups$parameter)){
     
-    curr_data = orl_sess1 %>%
+    curr_data = orl_blups %>%
       filter(parameter == param) %>%        # Subset orl parameter
       left_join(sr_sess1) %>%               # Join scales to orl parameter
       select(-c(sex, race, Ethnicity)) %>%  # Remove columns that we don't need
       na.omit()                             # Remove rows with NAs
     
     curr_scale = curr_data[[scale]]         # Subset scale data
-    curr_estimate = curr_data[["estimate"]] # Subset estimate for parameter
+    curr_estimate = curr_data$blup_session1 # Subset estimate for parameter
     # Run the boot-strapped correlation between the current scale and the current parameter
     curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
                             null.hyp = NULL,
@@ -151,16 +146,16 @@ for(scale in c("bastot", "basdrive", "basfunsk",
   }
   
   # Loop through each parameter from session 2
-  for(param in unique(orl_sess2$parameter)){
+  for(param in unique(orl_blups$parameter)){
     
-    curr_data = orl_sess2 %>%
+    curr_data = orl_blups %>%
       filter(parameter == param) %>%        # Subset orl parameter
       left_join(sr_sess1) %>%               # Join scales to orl parameter
       select(-c(sex, race, Ethnicity)) %>%  # Remove columns that we don't need
       na.omit()                             # Remove rows with NAs
     
     curr_scale = curr_data[[scale]]         # Subset scale data
-    curr_estimate = curr_data[["estimate"]] # Subset estimate for parameter
+    curr_estimate = curr_data$blup_session2 # Subset estimate for parameter
     # Run the boot-strapped correlation between the current scale and the current parameter
     curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
                             null.hyp = NULL,
@@ -195,15 +190,15 @@ for(scale in c("bastot", "basdrive", "basfunsk",
                "basrewres", "bis", "panas_pa",
                "panas_na", "shaps_tot")){
   # Loop through each parameter from session 1
-  for(param in unique(orl_sess1$parameter)){
+  for(param in unique(orl_blups$parameter)){
     
-    curr_data = orl_sess1 %>%
+    curr_data = orl_blups %>%
       filter(parameter == param) %>%        # Subset orl parameter
       left_join(sr_sess2) %>%               # Join scales to orl parameter
       na.omit()                             # Remove rows with NAs
     
     curr_scale = curr_data[[scale]]         # Subset scale data
-    curr_estimate = curr_data[["estimate"]] # Subset estimate for parameter
+    curr_estimate = curr_data$blup_session1 # Subset estimate for parameter
     # Run the boot-strapped correlation between the current scale and the current parameter
     curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
                             null.hyp = NULL,
@@ -228,15 +223,15 @@ for(scale in c("bastot", "basdrive", "basfunsk",
   }
   
   # Loop through each parameter from session 2
-  for(param in unique(orl_sess2$parameter)){
+  for(param in unique(orl_blups$parameter)){
     
-    curr_data = orl_sess2 %>%
+    curr_data = orl_blups %>%
       filter(parameter == param) %>%        # Subset orl parameter
       left_join(sr_sess2) %>%               # Join scales to orl parameter
       na.omit()                             # Remove rows with NAs
     
     curr_scale = curr_data[[scale]]         # Subset scale data
-    curr_estimate = curr_data[["estimate"]] # Subset estimate for parameter
+    curr_estimate = curr_data$blup_session2 # Subset estimate for parameter
     # Run the boot-strapped correlation between the current scale and the current parameter
     curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
                             null.hyp = NULL,
