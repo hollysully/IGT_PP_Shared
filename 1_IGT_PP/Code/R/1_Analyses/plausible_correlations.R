@@ -137,17 +137,17 @@ postRav.Density <- function(result)
 
 # Compute the posterior density for population
 pop_correct_MCMC <- function(post_samples, n_subj, kappa) {
-  # Subtract because function fails if posterior samples are too close to 1
-  dens.r <- postRav(n=n_subj, r=post_samples-.1,spacing=.01,kappa=kappa, npoints = 100) 
-  # correct for the subtraction above (shift the density over 10 elements/
-  # .1 in correlation space)
-  dens.r[11:201] <- dens.r[1:191]
+  # Scale because the method fails when values are close to bounds -1 or 1
+  dens.r <- postRav(n=n_subj, r=post_samples*.97,spacing=.01,kappa=kappa, npoints = 100)
   
   # Sample from the population-corrected PDF
   corrected_samples <- approx(
     cumsum(dens.r)/sum(dens.r),
-    seq(-1,1, length.out=length(dens.r)),
+    seq(-1,1, length.out=length(dens.r))*1.06, # rescale to corect scaling
     runif(10000)
     )
+  # set anything that goes out of bounds to bound
+  corrected_samples$y[corrected_samples$y < -1] <- -1
+  corrected_samples$y[corrected_samples$y > 1] <- 1
   return(corrected_samples$y)
 }
