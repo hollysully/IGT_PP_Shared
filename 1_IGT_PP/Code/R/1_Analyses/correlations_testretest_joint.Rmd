@@ -97,7 +97,7 @@ corrected_correlations = corrected_iterative_corrs %>%
 ```{r, eval = F}
 corrected_iterative_corrs %>% 
   filter(parameter == "Apun") %>% 
-  plotHDI(.$correlations, binSize = 50) +
+  plotHDI(.$correlation, binSize = 50) +
   scale_y_continuous(name =" ", breaks=c(0, 1, 2),
                       labels=c("0", "1", "2")) +
   scale_x_continuous(name =" ", breaks=c(0, .2, .4, .6, .8, 1),
