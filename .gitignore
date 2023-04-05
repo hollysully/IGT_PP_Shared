@@ -10,6 +10,9 @@
 *.txt
 1_IGT_PP/Data/1_Preprocessed/*.rds
 1_IGT_PP/Data/2_Fitted/*.rds
+1_IGT_PP/Data/Joing/1_Preprocessed/*.rds
+1_IGT_PP/Data/2_Fitted/Joint/*.rds
+
 1_SIGT_PP/Data/1_Preprocessed/*.rds
 1_SIGT_PP/Data/2_Fitted/*.rds
 
