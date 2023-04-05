@@ -1,0 +1,203 @@
+---
+title: "Fitting Joint Test-Retest ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+```
+
+
+
+## Load Data
+```{r}
+stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
+full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
+```
+
+
+
+# -------------------------------------------
+# Fit Model
+```{r, eval = F}
+# Compile model
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint.stan"))
+
+
+# Fit model
+orl_fit = sampling(orl_model, 
+                   data   = stan_data, 
+                   iter   = 5000, 
+                   warmup = 1000,
+                   chains = 6, 
+                   cores  = 6,
+                   seed   = 43210)
+
+
+#save the fitted model as an .rds file
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+```
+
+
+
+```{r}
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+```{r}
+focal_parameters = c("mu_p",
+                     "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP",
+                     "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]")
+```
+
+
+
+## Rhat
+```{r}
+rhats = rhat(orl_fit, pars = focal_parameters) %>% 
+  data.frame() %>% mutate(parameter = rownames(.))
+```
+
+
+
+## Traceplots
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "orl_pp_joint_trace_plots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(orl_fit, pars = focal_parameters)
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Inspect Parameters
+## Means +/- PI
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "orl_pp_joint_posterior_means.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  plot(orl_fit, pars = focal_parameters)
+dev.off()
+```
+
+
+
+## Posterior Distributions
+```{r}
+# Extract posterior distributions
+parameters = rstan::extract(orl_fit, pars = focal_parameters) %>% data.frame()
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "orl_pp_joint_posterior_distributions.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
+  # Make a density plot of the posterior distributions for the focal parameters using a for loop
+  for(i in colnames(parameters)){
+    plot(density(parameters[ , i]), main = i)
+    abline(v = mean(parameters[ , i]))
+  }
+dev.off()
+```
+
+
+
+## Save Parameter Estimates
+```{r}
+# Extract posterior samples for each parameter
+posterior = rstan::extract(orl_fit) %>% data.frame()
+
+# Get point estimates from the posterior for each parameter
+posterior_means = data.frame(estimate = colMeans(posterior)) %>% # Means
+# posterior_means = data.frame(estimate = colMedians(posterior)) %>% # Medians
+  mutate(col_name = rownames(.))
+
+
+# Bind posterior means for group mus
+  # Create dataframe with names of parameters of interest
+mus = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
+  # Create a column of sessions wherein there is a 1 & 2 for each parameter
+  group_by(parameter) %>% 
+  reframe(session = c(1, 2)) %>%
+  # Make a new column that has elements we can match to in the posterior_means dataframe
+  mutate(col_name = paste("mu_", parameter, ".", session, sep = "")) %>%
+  # Join only the posterior means that have a matching row name in col_name, then remove col_name
+  left_join(posterior_means) %>% select(-col_name)
+
+
+# Bind posterior means to individual subjects to get BLUPs
+blups = full_data %>% 
+  # Create dataframe with original and ranked subject IDs
+  reframe(subject = unique(subject),
+          ID = unique(ID)) %>% 
+  # Create a column for parameter names containing the elements in reframe for each original and ranked subject ID
+  group_by(subject, ID) %>% 
+  reframe(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
+  # Create a column of sessions wherein there is a 1 & 2 for each parameter, and subject ID
+  group_by(subject, ID, parameter) %>% 
+  reframe(session = c(1, 2)) %>% 
+  # Make a new column that has elements we can match to in the posterior_means dataframe
+  mutate(col_name = paste(parameter, ".", ID, ".", session, sep = "")) %>% 
+  # Join only the posterior means that have a matching row name in col_name, then remove col_name
+  left_join(posterior_means) %>% select(-col_name) %>% 
+  mutate(bt_estimate = case_when(parameter == "Arew" ~ qnorm(estimate),
+                                 parameter == "Apun" ~ qnorm(estimate),
+                                 parameter == "K" ~ qnorm((estimate/5)),
+                                 T ~ estimate))
+
+
+# Bind posterior means for correlations
+  # Note, these are not population-corrected - We do this in joint_test_retest_plots.Rmd
+  # Create dataframe with names of correlations of interest
+correlations = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>% 
+  # Make a new column that has elements we can match to in the posterior_means dataframe
+  mutate(col_name = paste("R_", parameter, ".2.1", sep = "")) %>% 
+  # Join only the posterior means that have a matching row name in col_name, then remove col_name
+  left_join(posterior_means) %>% select(-col_name)
+
+
+# Save data
+write.csv(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_mus.csv"))
+write.csv(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.csv"))
+write.csv(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.csv"))
+
+saveRDS(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_mus.rds"))
+saveRDS(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
+saveRDS(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.rds"))
+```
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

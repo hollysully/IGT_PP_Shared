@@ -1,0 +1,619 @@
+---
+title: "Initial Plots"
+output: html_document
+date: "2023-03-02"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages & Data
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(lemon)
+
+session1_data <- read.csv((here("1_IGT_PP", "Data", "1_Preprocessed", "Sess1_IGT.csv"))) %>% 
+  mutate(session = 1)
+session2_data <- read.csv((here("1_IGT_PP", "Data", "1_Preprocessed", "Sess2_IGT.csv"))) %>% 
+  mutate(session = 2)
+```
+
+
+
+## Data Manipulation
+```{r}
+combined_data = bind_rows(session1_data, session2_data) %>% 
+  mutate(play = recode(ydata, "2" = 0, "1" = 1),
+         version = case_when(str_detect(ExperimentName, "1") ~ 1,
+                             str_detect(ExperimentName, "2") ~ 2)) %>% 
+  group_by(Subject, session) %>% 
+  mutate(trial = 1,
+         trial = cumsum(trial),
+         stim = recode(stim, "1" = "A", "2" = "B", "3" = "C", "4" = "D"))
+```
+
+
+
+# ---------------------------------------
+# Card Order x Version
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "card_order.tiff"),
+     width = 18, height = 6, units = "cm", res = 300)
+
+  ggplot(combined_data, aes(x = trial, y = .5, color = stim)) +
+  
+      # geoms
+      geom_point(shape = "|", size = 15) +
+      
+      # scales
+      scale_color_manual(values = c("red4", "red2", "green2", "green4"),
+                         # labels = c("A", "B", "C", "D"),
+                         ) +
+      scale_x_continuous(expand = c(0, 0), limits = c(-1, 121),
+                         breaks = seq(0, 120, 20)) +
+      scale_y_continuous(expand = c(0, 0), limits = c(.25, .75),
+                         breaks = NULL) +
+      
+      # themes
+      labs(x = "Trial", y = "Card") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # legend
+            legend.title = element_blank(),
+            # legend.key.size = unit(.4, "cm"),
+            legend.position = c(.5, 1.01),
+            legend.direction = "horizontal",
+            legend.background = element_rect(colour = "transparent", fill = "transparent"),
+             
+            # panels 
+            panel.spacing.x = unit(0, "lines"),
+            panel.spacing.y = unit(.5, "lines"),
+            
+            strip.background = element_blank(),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")
+            ) +
+      facet_rep_grid(version~., repeat.tick.labels = T,
+                     labeller = labeller(version = c("1" = "Version 1",
+                                                     "2" = "Version 2"))) + 
+      guides(color = guide_legend(override.aes = list(size = 3)))
+
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# Choice Proportion
+## Overall x Deck
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "choice_proportion_overall.tiff"),
+     width = 8, height = 6, units = "cm", res = 300)
+  
+  combined_data %>% 
+    group_by(Subject, stim, version) %>% 
+    reframe(prop_play = mean(play, na.rm = T)) %>%
+    ggplot(aes(x = stim, y = prop_play, group = stim, fill = stim)) +
+  
+      # geoms
+      geom_dotplot(binaxis = "y", stackdir = "center", dotsize = .75, alpha = .25) +
+      stat_summary(fun = median, geom = "point", shape = 18,
+                   size = 3, color = "black", show.legend = F) +
+      
+      # scales
+      scale_fill_manual(values = c("red4", "red2", "green2", "green4")) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 1),
+                         breaks = seq(0, 1, .25)) +
+      
+      # themes
+      labs(x = "Card", y = "Proportion Play", caption = "Black diamonds = medians") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = -.25),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(1, "lines"),
+            panel.spacing.y = unit(.5, "lines"),
+            
+            strip.background = element_blank(),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines"))
+
+dev.off()
+```
+
+
+
+## x Session
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "choice_proportion_x_session.tiff"),
+     width = 8, height = 6, units = "cm", res = 300)
+  
+  combined_data %>% 
+    group_by(Subject, stim, session) %>% 
+    reframe(prop_play = mean(play, na.rm = T)) %>% 
+    ggplot(aes(x = stim, y = prop_play, group = stim, fill = stim)) +
+  
+      # geoms
+      geom_dotplot(binaxis = "y", stackdir = "center", alpha = .25, dotsize = 1.5) +
+      stat_summary(fun = median, geom = "point", shape = 18,
+                   size = 2, color = "black") +
+      
+      # scales
+      scale_fill_manual(values = c("red4", "red2", "green2", "green4")) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 1),
+                         breaks = seq(0, 1, .25)) +
+      
+      # themes
+      labs(x = "Card", y = "Proportion Play", caption = "Diamonds = medians") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = -.25),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(1, "lines"),
+            panel.spacing.y = unit(0, "lines"),
+            
+            strip.background = element_blank(),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+      facet_rep_grid(session~.,
+                     labeller = labeller(session = c("1" = "Session 1",
+                                                     "2" = "Session 2")))
+
+dev.off()
+```
+
+
+
+## x Version
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "choice_proportion_x_version.tiff"),
+     width = 12, height = 4, units = "cm", res = 300)
+  
+  combined_data %>% 
+    group_by(Subject, stim, version) %>% 
+    reframe(prop_play = mean(play, na.rm = T)) %>% 
+    ggplot(aes(x = stim, y = prop_play, group = stim, fill =stim)) +
+  
+      # geoms
+      geom_dotplot(binaxis = "y", stackdir = "center", alpha = .25, dotsize = 1.5) +
+      stat_summary(fun = median, geom = "point", shape = 18,
+                   size = 2, color = "black") +
+      
+      # scales
+      scale_fill_manual(values = c("red4", "red2", "green2", "green4")) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 1),
+                         breaks = seq(0, 1, .25)) +
+      
+      # themes
+      labs(x = "Card", y = "Proportion Play", caption = "Diamonds = medians") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = 0),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(0, "lines"),
+            panel.spacing.y = unit(.5, "lines"),
+            
+            strip.background = element_blank(),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+      facet_rep_grid(.~version,
+                     labeller = labeller(version = c("1" = "Version 1",
+                                                     "2" = "Version 2")))
+
+dev.off()
+```
+
+
+
+## x Session & Version
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "choice_proportion_x_session_&_version.tiff"),
+     width = 12, height = 6, units = "cm", res = 300)
+  
+  combined_data %>% 
+    group_by(Subject, stim, version, session) %>% 
+    reframe(prop_play = mean(play, na.rm = T)) %>% 
+    ggplot(aes(x = stim, y = prop_play, group = stim, fill =stim)) +
+  
+      # geoms
+      geom_dotplot(binaxis = "y", stackdir = "center", alpha = .25, dotsize = 1.5) +
+      stat_summary(fun = median, geom = "point", shape = 18,
+                   size = 2, color = "black") +
+      
+      # scales
+      scale_fill_manual(values = c("red4", "red2", "green2", "green4")) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 1),
+                         breaks = seq(0, 1, .25)) +
+      
+      # themes
+      labs(x = "Card", y = "Proportion Play", caption = "Diamonds = medians") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = -.25),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(0, "lines"),
+            panel.spacing.y = unit(0, "lines"),
+            
+            strip.background = element_blank(),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+      facet_rep_grid(session~version,
+                     labeller = labeller(session = c("1" = "Session 1",
+                                                     "2" = "Session 2"),
+                                         version = c("1" = "Version 1",
+                                                     "2" = "Version 2")))
+
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# Trial-Level Choices
+## Session-Wide
+```{r}
+group_proportions = combined_data %>% 
+  group_by(version, stim, trial) %>% 
+  reframe(prop_play = mean(play))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "trial_choices_sessionwide.tiff"),
+     width = 20, height = 8, units = "cm", res = 300)
+  
+  combined_data %>% 
+    
+    # plotting
+    ggplot(aes(x = trial, color = stim)) +
+  
+      # geoms
+      geom_point(aes(y = play),# position = position_jitter(height = .05, width = 0),
+                alpha = .05, shape = 124) +
+      geom_point(data = group_proportions, aes(y = prop_play)) +
+      
+      # scales
+      scale_x_continuous(expand = c(0, 0), limits = c(-1, 121),
+                         breaks = seq(0, 120, 30)) +
+      scale_y_continuous(breaks = seq(0, 1, .25)) +
+      scale_color_manual(values = c("red4", "red2", "green2", "green4")) +
+      
+      # themes
+      labs(x = "Trial", y = "Proportion Play",
+           caption = "Solid datapoints = group proportions\nLight datapoints = individual choices") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = 0, vjust = 1.5),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(0, "lines"),
+            panel.spacing.y = unit(0, "lines"),
+            
+            strip.background = element_blank(),
+            strip.text.x = element_text(color = "black"),
+            strip.text.y = element_text(color = "black"),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+        facet_rep_grid(session~version,
+                       labeller = labeller(session = c("1" = "Session 1",
+                                                       "2" = "Session 2"),
+                                           version = c("1" = "Version 1",
+                                                       "2" = "Version 2")))
+
+dev.off()
+```
+
+
+
+## Overall x Deck
+```{r}
+ind_plays = bind_rows(session1_data, session2_data) %>% 
+  mutate(play = recode(ydata, "2" = 0, "1" = 1),
+         version = case_when(str_detect(ExperimentName, "1") ~ 1,
+                             str_detect(ExperimentName, "2") ~ 2)) %>% 
+  group_by(Subject, session, stim) %>% 
+  mutate(trial = 1,
+         trial = cumsum(trial),
+         stim = factor(stim))
+
+group_proportions = ind_plays %>% 
+  group_by(stim, trial) %>% 
+  reframe(prop_play = mean(play))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "trial_choices_overall.tiff"),
+     width = 12, height = 8, units = "cm", res = 300)
+  
+  ind_plays %>% 
+    
+    # plotting
+    ggplot(aes(x = trial, color = stim)) +
+  
+      # geoms
+      geom_point(aes(y = play), position = position_jitter(height = .05, width = 0),
+                alpha = .025) +
+      geom_point(data = group_proportions, aes(y = prop_play)) +
+      
+      # scales
+      scale_x_continuous(expand = c(0, 0), limits = c(-1, 31),
+                         breaks = seq(0, 30, 5)) +
+      scale_y_continuous(breaks = seq(0, 1, .25)) +
+      scale_color_manual(values = c("red4", "red2", "green2", "green4")) +
+      
+      # themes
+      labs(x = "Trial", y = "Proportion Play", caption = "Solid datapoints = group proportions\nLight datapoints = individual choices") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = 0, vjust = 1.5),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(0, "lines"),
+            panel.spacing.y = unit(0, "lines"),
+            
+            strip.background = element_blank(),
+            strip.text.x = element_text(color = "black"),
+            strip.text.y = element_blank(),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+        facet_rep_wrap(stim~.,
+                       labeller = labeller(stim = c("1" = "Card A",
+                                                    "2" = "Card B",
+                                                    "3" = "Card C",
+                                                    "4" = "Card D")))
+
+dev.off()
+```
+
+
+
+## x Session
+```{r}
+ind_plays = bind_rows(session1_data, session2_data) %>% 
+  mutate(play = recode(ydata, "2" = 0, "1" = 1),
+         version = case_when(str_detect(ExperimentName, "1") ~ 1,
+                             str_detect(ExperimentName, "2") ~ 2)) %>% 
+  group_by(Subject, session, stim) %>% 
+  mutate(trial = 1,
+         trial = cumsum(trial),
+         stim = factor(stim))
+
+group_proportions = ind_plays %>% 
+  group_by(stim, trial, session) %>% 
+  reframe(prop_play = mean(play))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "trial_choices_x_session.tiff"),
+     width = 14, height = 8, units = "cm", res = 300)
+  
+  ind_plays %>% 
+    
+    # plotting
+    ggplot(aes(x = trial, color = stim)) +
+  
+      # geoms
+      geom_point(aes(y = play), position = position_jitter(height = .05, width = 0),
+                alpha = .025) +
+      geom_point(data = group_proportions, aes(y = prop_play)) +
+      
+      # scales
+      scale_x_continuous(expand = c(0, 0), limits = c(-1, 31),
+                         breaks = seq(0, 30, 5)) +
+      scale_y_continuous(breaks = seq(0, 1, .25)) +
+      scale_color_manual(values = c("red4", "red2", "green2", "green4")) +
+      
+      # themes
+      labs(x = "Trial", y = "Proportion Play", caption = "Solid datapoints = group proportions\nLight datapoints = individual choices") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = 0, vjust = 1.5),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(-1, "lines"),
+            panel.spacing.y = unit(0, "lines"),
+            
+            strip.background = element_blank(),
+            strip.text.x = element_text(color = "black"),
+            strip.text.y = element_text(color = "black"),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+        facet_rep_grid(session~stim,
+                       labeller = labeller(session = c("1" = "Session 1",
+                                                       "2" = "Session 2"),
+                                           stim = c("1" = "Card A",
+                                                    "2" = "Card B",
+                                                    "3" = "Card C",
+                                                    "4" = "Card D")))
+
+dev.off()
+```
+
+
+
+## x Version
+```{r}
+ind_plays = bind_rows(session1_data, session2_data) %>% 
+  mutate(play = recode(ydata, "2" = 0, "1" = 1),
+         version = case_when(str_detect(ExperimentName, "1") ~ 1,
+                             str_detect(ExperimentName, "2") ~ 2)) %>% 
+  group_by(Subject, version, stim) %>% 
+  mutate(trial = 1,
+         trial = cumsum(trial),
+         stim = factor(stim))
+
+group_proportions = ind_plays %>% 
+  group_by(stim, trial, version) %>% 
+  reframe(prop_play = mean(play))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "trial_choices_x_version.tiff"),
+     width = 14, height = 8, units = "cm", res = 300)
+  
+  ind_plays %>% 
+    
+    # plotting
+    ggplot(aes(x = trial, color = stim)) +
+  
+      # geoms
+      geom_point(aes(y = play), position = position_jitter(height = .05, width = 0),
+                alpha = .025) +
+      geom_point(data = group_proportions, aes(y = prop_play)) +
+      
+      # scales
+      scale_x_continuous(expand = c(0, 0), limits = c(-1, 31),
+                         breaks = seq(0, 30, 5)) +
+      scale_y_continuous(breaks = seq(0, 1, .25)) +
+      scale_color_manual(values = c("red4", "red2", "green2", "green4")) +
+      
+      # themes
+      labs(x = "Trial", y = "Proportion Play", caption = "Solid datapoints = group proportions\nLight datapoints = individual choices") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(# axes
+            axis.title.x = element_text(size = 9, color = "black"),
+            axis.title.y = element_text(size = 9),
+            axis.text.x = element_text(size = 9, color = "black"),
+            axis.text.y = element_text(size = 9, color = "black"),
+            
+            # caption
+            plot.caption = element_text(size = 7, hjust = 0, vjust = 1.5),
+            
+            # legend
+            legend.position = "none",
+             
+            # panels 
+            panel.spacing.x = unit(-1, "lines"),
+            panel.spacing.y = unit(0, "lines"),
+            
+            strip.background = element_blank(),
+            strip.text.x = element_text(color = "black"),
+            strip.text.y = element_text(color = "black"),
+            
+            # plot
+            plot.margin = margin(t = .5, r = .5, unit = "lines")) +
+        facet_rep_grid(version~stim,
+                       labeller = labeller(version = c("1" = "Version 1",
+                                                       "2" = "Version 2"),
+                                           stim = c("1" = "Card A",
+                                                    "2" = "Card B",
+                                                    "3" = "Card C",
+                                                    "4" = "Card D")))
+
+dev.off()
+```
+
+# ---------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

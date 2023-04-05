@@ -1,0 +1,177 @@
+---
+title: "Joint Model Test-Retest Plots"
+output: html_document
+date: "2023-03-15"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages & Data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(lemon)
+library(rstan)
+library(hBayesDM)
+library(ggh4x)
+library(hypergeo)
+source(here("1_IGT_PP", "Code", "R", "1_Analyses", "plausible_correlations.R"))
+
+blups = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
+
+correlations = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.rds"))
+
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+```
+
+
+
+# ---------------------------------------
+# Population Corrections
+```{r}
+# Extract posterior samples for each parameter
+posterior = rstan::extract(orl_fit)
+```
+
+
+
+```{r}
+# Create empty dataframe
+iterative_correlations = data.frame()
+
+
+for(param in c("Arew", "Apun", "K", "betaF", "betaP")){
+  for(i in 1:nrow(posterior[[param]])){
+    # Correlate parameter value between session 1 and session 2 on iteration i
+    current_corr = data.frame(parameter = param,
+                              correlation = cor(posterior[[param]][i, , 1],
+                                                posterior[[param]][i, , 2]))
+    
+    # Bind this iteration's correlation with all the other correlations
+    iterative_correlations = bind_rows(iterative_correlations,
+                                       current_corr)
+  }
+}
+```
+
+
+
+```{r}
+# Create empty dataframe
+corrected_iterative_corrs = data.frame()
+
+for(param in c(#"Arew", # doesn't work for some reason
+               "Apun",
+               # "K",   # doesn't work for some reason
+               "betaF", "betaP")){
+  # subset correlations for parameter
+  current_param = filter(iterative_correlations, parameter == param)
+  
+  # apply population correction
+  current_corrected = data.frame(parameter = param,
+                                 correlation = pop_correct_MCMC(current_param$correlation,
+                                                                n_subj = 49, kappa = 1))
+  
+  # Bind this iteration's correlation with all the other correlations
+  corrected_iterative_corrs = bind_rows(corrected_iterative_corrs, current_corrected)
+}
+```
+
+
+
+```{r}
+# Get point estimate of correlation between session 1 & session 2 for each parameter
+corrected_correlations = corrected_iterative_corrs %>% 
+  group_by(parameter) %>% 
+  reframe(mean_cor = mean(correlation))
+```
+
+
+
+# ---------------------------------------
+# Distribution Plots
+```{r, eval = F}
+corrected_iterative_corrs %>% 
+  filter(parameter == "Apun") %>% 
+  plotHDI(.$correlation, binSize = 50) +
+  scale_y_continuous(name =" ", breaks=c(0, 1, 2),
+                      labels=c("0", "1", "2")) +
+  scale_x_continuous(name =" ", breaks=c(0, .2, .4, .6, .8, 1),
+                      labels=c("0", ".2", ".4", ".6", ".8", "1"), limits=c(-.1, 1.05))# +
+  # facet_rep_wrap(parameter~.)
+  #+ 
+  # theme_hdi()
+```
+
+
+
+# ---------------------------------------
+# Session 2 v Session 1 Plot
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "joint_testretest.tiff"),
+     width = 12, height = 8.5, units = "cm", res = 300)
+
+blups %>% 
+  
+  # using transformed estimates
+  # select(-bt_estimate) %>%
+  
+  # using back-transformed estimates
+  select(-estimate) %>% select(estimate = bt_estimate, everything()) %>%
+  
+  # pivot wider so that I can session 1 on x-axis and session 2 on y-axis
+  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>% 
+  # bind correlations by parameter so that I can display correlations on plot
+  left_join(correlations) %>% 
+  # label parameters with specific text
+  mutate(parameter = factor(parameter,
+                            levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                            labels = c(expression(paste(italic(A), "+", sep = "")),
+                                       expression(paste(italic(A), "-", sep = "")),
+                                       expression(paste("\u03B2", italic(f), sep = "")),
+                                       expression(paste("\u03B2", italic(p), sep = "")),
+                                       expression(italic(K))))) %>%
+  # plotting
+  ggplot(aes(x = session_1, y = session_2)) +
+    # add geoms
+    geom_point(shape = 1) +
+    geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F) +
+    
+    # scales
+    # scale_x_continuous(labels = function(x) sprintf("%.2f", x)) +
+    # scale_y_continuous(labels = function(x) sprintf("%.2f", x)) +
+    scale_x_continuous(labels = function(x) round(x, 2), n.breaks = 4) +
+    scale_y_continuous(labels = function(x) round(x, 2), n.breaks = 4) +
+  
+    # themes
+    labs(x = "Session 1", y = "Session 2") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          plot.margin = unit(c(.3, .3, .3, .3), "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent")) +
+    coord_cartesian(clip = "off") +
+    facet_rep_wrap(.~parameter, scales = "free",
+                   labeller = label_parsed)
+
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
