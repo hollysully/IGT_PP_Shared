@@ -310,7 +310,8 @@ for(curr_scale in unique(sr_orl$scale)){
 
 
 # -----------------------------------------------
-# Format Correlations
+# Formatted Correlations
+## By Session
 ```{r}
 formatted_correlations = correlations %>% 
   # Identify CIs that DO NOT overlap with 0
@@ -329,6 +330,29 @@ formatted_correlations = correlations %>%
               values_fill = "")
 
 write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "Joint", "formatted_correlations.csv"))
+```
+
+
+
+## Overall
+```{r}
+formatted_correlations = overall_correlations %>% 
+  # Identify CIs that DO NOT overlap with 0
+  mutate(sig = case_when(lower_ci < 0 & upper_ci < 0 ~ "*",
+                         lower_ci > 0 & upper_ci > 0 ~ "*",
+                         T ~ ""),
+         # Format numerics
+         r = str_replace(format(round(r, 2), nsmall = 2), "0.", replacement = "."),
+         lower_ci = str_replace(format(round(lower_ci, 2), nsmall = 2), "0.", replacement = "."),
+         upper_ci = str_replace(format(round(upper_ci, 2), nsmall = 2), "0.", replacement = "."),
+         # Concatenating correlations and CIs
+         estimate = paste(r, " (", lower_ci, ", ", upper_ci, ")", sig,
+                          sep = "")) %>% 
+  select(-c(sig, r, lower_ci, upper_ci)) %>% 
+  pivot_wider(names_from = "parameter", values_from = estimate,
+              values_fill = "")
+
+write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "Joint", "formatted_overall_correlations.csv"))
 ```
 
 

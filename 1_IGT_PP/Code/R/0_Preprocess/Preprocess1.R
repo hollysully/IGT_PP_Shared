@@ -11,8 +11,8 @@ library(here)
 #import Play or Pass raw data
 # NOTE: before I saved these as .xlsx files, I converted 'SessionDate' to format:  2015-10-23, to work with lubridate
 # `here(...)` finds the root project directory, and then creates the file path given arguements
-AB <- read_excel(here("Data", "0_Raw", "AB", "Merged_AB.xlsx"))
-BD <- read_excel(here("Data", "0_Raw", "BD", "Merged_BD.xlsx"))
+AB <- read_excel(here("1_IGT_PP", "Data", "0_Raw", "AB", "Merged_AB.xlsx"))
+BD <- read_excel(here("1_IGT_PP", "Data", "0_Raw", "BD", "Merged_BD.xlsx"))
 
 names(AB)
 length(unique(AB$Subject)) #44

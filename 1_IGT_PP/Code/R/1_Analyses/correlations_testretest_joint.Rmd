@@ -19,7 +19,7 @@ library(rstan)
 library(hBayesDM)
 library(ggh4x)
 library(hypergeo)
-source(here("1_IGT_PP", "Code", "R", "1_Analyses", "plausible_correlations.R"))
+source(here("1_IGT_PP", "Code", "R", "1_Analyses", "JH_plausible_correlations.R"))
 
 blups = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
 
@@ -64,10 +64,11 @@ for(param in c("Arew", "Apun", "K", "betaF", "betaP")){
 # Create empty dataframe
 corrected_iterative_corrs = data.frame()
 
-for(param in c(#"Arew", # doesn't work for some reason
+for(param in c("Arew",
                "Apun",
-               # "K",   # doesn't work for some reason
-               "betaF", "betaP")){
+               "K",
+               "betaF", "betaP" # these do not get corrected because they're normally distributed, but I include them here to see that they don't change meaningfully
+               )){
   # subset correlations for parameter
   current_param = filter(iterative_correlations, parameter == param)
   
@@ -116,15 +117,6 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "joint_testretest.tiff"),
      width = 12, height = 8.5, units = "cm", res = 300)
 
 blups %>% 
-  
-  # using transformed estimates
-  # select(-bt_estimate) %>%
-  
-  # using back-transformed estimates
-  select(-estimate) %>% select(estimate = bt_estimate, everything()) %>%
-  
-  # pivot wider so that I can session 1 on x-axis and session 2 on y-axis
-  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>% 
   # bind correlations by parameter so that I can display correlations on plot
   left_join(correlations) %>% 
   # label parameters with specific text
@@ -136,7 +128,7 @@ blups %>%
                                        expression(paste("\u03B2", italic(p), sep = "")),
                                        expression(italic(K))))) %>%
   # plotting
-  ggplot(aes(x = session_1, y = session_2)) +
+  ggplot(aes(x = blup_session1, y = blup_session2)) +
     # add geoms
     geom_point(shape = 1) +
     geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F) +
