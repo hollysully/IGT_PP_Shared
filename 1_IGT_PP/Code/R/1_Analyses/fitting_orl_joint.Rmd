@@ -42,8 +42,8 @@ orl_fit = sampling(orl_model,
                    data   = stan_data, 
                    iter   = 5000, 
                    warmup = 1000,
-                   chains = 6, 
-                   cores  = 6,
+                   chains = 4, 
+                   cores  = 4,
                    seed   = 43210)
 
 
@@ -140,8 +140,8 @@ mus = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
   left_join(posterior_means) %>% select(-col_name)
 
 
-# Bind posterior means to individual subjects to get BLUPs
-blups = full_data %>% 
+
+ind_columns = full_data %>% 
   # Create dataframe with original and ranked subject IDs
   reframe(subject = unique(subject),
           ID = unique(ID)) %>% 
@@ -152,13 +152,30 @@ blups = full_data %>%
   group_by(subject, ID, parameter) %>% 
   reframe(session = c(1, 2)) %>% 
   # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste(parameter, ".", ID, ".", session, sep = "")) %>% 
-  # Join only the posterior means that have a matching row name in col_name, then remove col_name
-  left_join(posterior_means) %>% select(-col_name) %>% 
-  mutate(bt_estimate = case_when(parameter == "Arew" ~ qnorm(estimate),
-                                 parameter == "Apun" ~ qnorm(estimate),
-                                 parameter == "K" ~ qnorm((estimate/5)),
-                                 T ~ estimate))
+  mutate(col_name = paste(parameter, ".", ID, ".", session, sep = ""))
+
+
+# Calculate overall BLUP for each participant
+posterior_blups = posterior %>% 
+  # Use the values of col_name in ind_columns to select columns in posterior dataframe
+  select(ind_columns$col_name) %>% 
+  # Create a column with iteration number for each parameter
+  mutate(iteration = rownames(.)) %>% 
+  # Pivot data longer so that it's easier to separate what is the parameter, subject, and session from the posterior columns
+  pivot_longer(cols = -iteration, names_to = "param_ID_sess", values_to = "estimate") %>% 
+  separate(col = param_ID_sess, into = c("parameter", "ID", "session"), sep = "\\.") %>%
+  # Pivot wider so that we can calculate the mean of session 1 and session 2 estimate on each iteration of the posterior
+  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>%
+  mutate(overall_estimate = (session_1 + session_2)/2,
+         ID = as.numeric(ID))
+
+blups = posterior_blups %>% 
+  # Calculate posterior means for individual subjects by session and overall
+  group_by(parameter, ID) %>% 
+  reframe(blup_session1 = mean(session_1),
+          blup_session2 = mean(session_2),
+          blup_overall = mean(overall_estimate)) %>% 
+  left_join(reframe(full_data, subject = unique(subject), ID = unique(ID)))
 
 
 # Bind posterior means for correlations
@@ -178,6 +195,7 @@ write.csv(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_jo
 
 saveRDS(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_mus.rds"))
 saveRDS(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
+saveRDS(posterior_blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_posterior_blups.rds"))
 saveRDS(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.rds"))
 ```
 
