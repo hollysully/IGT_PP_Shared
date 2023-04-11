@@ -34,27 +34,26 @@ stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds
 
 ## Data Manipulation
 ```{r}
-# Card vector
-S = stan_data$S
-
-# Card vector
-C = stan_data$C
-
-# Subject vector
-J = stan_data$J
+# Card matrix
+cards = stan_data$card
 
 
 # Recode choice data
-choice_data = ifelse(stan_data$choice == 2, 0, 1)
+choices = ifelse(stan_data$choice == 2, 0, 1)
+
+
+# Trial matrix (to skip when participant wasn't there)
+trials = stan_data$Tsubj
 
 
 # Extract parameters
 model_parameters = extract(fit)
-predicted_values = ifelse(model_parameters$y_pred == 2, 0, 1)
+predicted_values = ifelse(model_parameters$choice_pred == 2, 0, 1)
 
 
 # For binding together posterior predictions
-acomb <- function(...) abind(..., along=3)
+acomb = function(...) abind(..., along=3)
+bcomb = function(...) abind(..., along=4)
 ```
 
 
@@ -63,14 +62,12 @@ acomb <- function(...) abind(..., along=3)
 # Prep Data
 ## Choice Data
 ```{r}
-# Calculates group-level choice proportions - subset the subject's data for a given card and bind it to data, then return that output into choice_proportions
-choice_proportions = foreach(session = 1:2) %do% {
-  whichcard = foreach(card = 1:4, .combine = "cbind") %do% {
-    whichsubject = foreach(subj = unique(J), .combine = "rbind") %do% {
-      if(length(choice_data[S == session & C == card & J == subj] > 0))
-        choice_data[S == session & C == card & J == subj]
-    } %>% 
-      colMeans()
+# Calculates group-level choice proportions into a 30 (trial) x 4 (card) x 2 (session) matrix
+choice_proportions = foreach(s = 1:2, .combine = "acomb") %do% {
+  foreach(c = 1:4, .combine = "cbind") %do% {
+    temp = foreach(i = 1:49, .combine = "rbind") %do% {
+        choices[i, cards[i, , s] == c, s]
+    } %>% colMeans()
   }
 }
 ```
@@ -79,15 +76,14 @@ choice_proportions = foreach(session = 1:2) %do% {
 
 ## Predicted Values
 ```{r}
-# Group-level posterior predictions for each trial - 
-predicted_proportions = foreach(session = 1:2) %do% {
-  whichcard = foreach(card = 1:4, .combine = "acomb") %do% {
-    whichsubject = foreach(subj = unique(J), .combine = "acomb") %do% {
-      if(length(predicted_values[,S == session & C == card & J == subj]) > 0){
-        predicted_values[,S == session & C == card & J == subj]
+predicted_proportions = foreach(s = 1:2, .combine = "bcomb") %do% {
+  foreach(c = 1:4, .combine = "acomb") %do% {
+    foreach(i = 1:49, .combine = "acomb") %do% {
+      if(trials[i, s] > 0){
+        predicted_values[ , i, cards[i, , s] == c, s]
       }
-    } %>%
-    apply(., c(1,2), mean)
+    } %>% 
+      apply(., c(1,2), mean)
   }
 }
 ```
@@ -125,7 +121,7 @@ make_plot = function(y_data, yrep_data, top, right,
                 prob = 0.50, 
                 prob_outer = .80) +
     geom_text(aes(x = 30, y = .05, label = session_text),
-              color = "black", hjust = 1, vjust = 0) +
+              color = "black", hjust = 1, vjust = 0, check_overlap = T) +
     scale_x_continuous(expand = c(0, 0), limits = c(0, 31), breaks = seq(0, 30, 5)) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 1), breaks = seq(0, 1, .25)) +
     theme_classic() +
@@ -144,22 +140,22 @@ make_plot = function(y_data, yrep_data, top, right,
 
 ## Make Plots
 ```{r}
-plots = ggarrange(make_plot(choice_proportions[[1]][,1], predicted_proportions[[1]][,,1],
+plots = ggarrange(make_plot(choice_proportions[, 1, 1], predicted_proportions[,, 1, 1],
                             T, 0, "transparent", "black", "Deck A"),
-                  make_plot(choice_proportions[[1]][,2], predicted_proportions[[1]][,,2],
+                  make_plot(choice_proportions[, 2, 1], predicted_proportions[,, 2, 1],
                             T, 0, "transparent", "transparent", "Deck B"),
-                  make_plot(choice_proportions[[1]][,3], predicted_proportions[[1]][,,3],
+                  make_plot(choice_proportions[, 3, 1], predicted_proportions[,, 3, 1],
                             T, 0, "transparent", "transparent", "Deck C"),
-                  make_plot(choice_proportions[[1]][,4], predicted_proportions[[1]][,,4],
+                  make_plot(choice_proportions[, 4, 1], predicted_proportions[,, 4, 1],
                             T, 1, "transparent", "transparent", "Deck D"),
                   
-                  make_plot(choice_proportions[[2]][,1], predicted_proportions[[2]][,,1],
+                  make_plot(choice_proportions[, 1, 2], predicted_proportions[,, 1, 2],
                             F, 0, "black", "black", ""),
-                  make_plot(choice_proportions[[2]][,2], predicted_proportions[[2]][,,2],
+                  make_plot(choice_proportions[, 2, 2], predicted_proportions[,, 2, 2],
                             F, 0, "black", "transparent", ""),
-                  make_plot(choice_proportions[[2]][,3], predicted_proportions[[2]][,,3],
+                  make_plot(choice_proportions[, 3, 2], predicted_proportions[,, 3, 2],
                             F, 0, "black", "transparent", ""),
-                  make_plot(choice_proportions[[2]][,4], predicted_proportions[[2]][,,4],
+                  make_plot(choice_proportions[, 4, 2], predicted_proportions[,, 4, 2],
                             F, 2, "black", "transparent", ""),
                   nrow = 2, ncol = 4)
 ```

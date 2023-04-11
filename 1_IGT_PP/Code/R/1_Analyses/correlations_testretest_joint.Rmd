@@ -64,10 +64,7 @@ for(param in c("Arew", "Apun", "K", "betaF", "betaP")){
 # Create empty dataframe
 corrected_iterative_corrs = data.frame()
 
-for(param in c(#"Arew", # doesn't work for some reason
-               "Apun",
-               # "K",   # doesn't work for some reason
-               "betaF", "betaP")){
+for(param in c("Arew", "Apun", "K", "betaF", "betaP")){
   # subset correlations for parameter
   current_param = filter(iterative_correlations, parameter == param)
   
@@ -88,6 +85,8 @@ for(param in c(#"Arew", # doesn't work for some reason
 corrected_correlations = corrected_iterative_corrs %>% 
   group_by(parameter) %>% 
   reframe(mean_cor = mean(correlation))
+
+write.csv(corrected_correlations, here("1_IGT_PP", "Figs_Tables", "Joint", "joint_testretest_correlations.csv"))
 ```
 
 
@@ -117,14 +116,6 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "joint_testretest.tiff"),
 
 blups %>% 
   
-  # using transformed estimates
-  # select(-bt_estimate) %>%
-  
-  # using back-transformed estimates
-  select(-estimate) %>% select(estimate = bt_estimate, everything()) %>%
-  
-  # pivot wider so that I can session 1 on x-axis and session 2 on y-axis
-  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>% 
   # bind correlations by parameter so that I can display correlations on plot
   left_join(correlations) %>% 
   # label parameters with specific text
@@ -136,7 +127,7 @@ blups %>%
                                        expression(paste("\u03B2", italic(p), sep = "")),
                                        expression(italic(K))))) %>%
   # plotting
-  ggplot(aes(x = session_1, y = session_2)) +
+  ggplot(aes(x = blup_session1, y = blup_session2)) +
     # add geoms
     geom_point(shape = 1) +
     geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F) +
