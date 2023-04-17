@@ -101,11 +101,20 @@ combined_data = bind_rows(session1_data, session2_data) %>%
   mutate(trial = 1,
          trial = cumsum(trial),
          stim = recode(stim, "1" = "A", "2" = "B", "3" = "C", "4" = "D")) %>% 
-  group_by(Subject, session, stim) %>% 
-  reframe(prop_good = mean(play)) %>% 
   filter(stim == "D" | stim == "C") %>% 
+  group_by(Subject, session) %>% 
+  reframe(prop_good = mean(play)) %>% 
   pivot_wider(names_from = "session", values_from = "prop_good", names_prefix = "session_") %>% 
   select(ID = Subject, everything())
+```
+
+
+
+# -----------------------------------------------
+# Test-Retest
+```{r}
+cor(combined_data$session_1, combined_data$session_2,
+    use = "pairwise.complete.obs")
 ```
 
 
