@@ -34,7 +34,7 @@ full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&
 # Fit Model
 ```{r, eval = F}
 # Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu.stan"))
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu2.stan"))
 
 
 # Fit model
@@ -42,28 +42,28 @@ orl_fit = sampling(orl_model,
                    data   = stan_data,
                    
                    # Setup for testing model
-                   # iter   = 1000,
-                   # warmup = 200,
-                   # chains = 8, 
-                   # cores  = 8,
-                   
-                   # Setup for fitting final model
-                   iter   = 5000,
+                   iter   = 2000,
                    warmup = 1000,
                    chains = 4,
                    cores  = 4,
+                   
+                   # Setup for fitting final model
+                   # iter   = 5000,
+                   # warmup = 1000,
+                   # chains = 4,
+                   # cores  = 4,
                    
                    seed   = 43210)
 
 
 #save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_joint_indMu2.rds"))
 ```
 
 
 
 ```{r}
-orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_joint_indMu2.rds"))
 ```
 
 
@@ -71,16 +71,26 @@ orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_in
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-focal_parameters = c("mu_p",
-                     "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP",
-                     "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]")
+posterior = extract(orl_fit)
+
+focal_parameters = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
+                     "mu_group_betaF", "mu_group_betaP", "sigma_group_Arew",
+                     "sigma_group_Apun", "sigma_group_K", "sigma_group_betaF",
+                     "sigma_group_betaP", "mu_person_Arew", "mu_person_Apun",
+                     "mu_person_K", "mu_person_betaF", "mu_person_betaP",
+                     "sigma_person_Arew", "sigma_person_Apun", "sigma_person_K",
+                     "sigma_person_betaF", "sigma_person_betaP", "mu_person_session_Arew",
+                     "mu_person_session_Apun", "mu_person_session_K", "mu_person_session_betaF",
+                     "mu_person_session_betaP")
 ```
 
 
 
 ## Rhat
 ```{r}
-rhats = rhat(orl_fit, pars = focal_parameters) %>% 
+rhats = rhat(orl_fit,
+             pars = focal_parameters
+             ) %>% 
   data.frame() %>% mutate(parameter = rownames(.))
 ```
 
@@ -89,10 +99,32 @@ rhats = rhat(orl_fit, pars = focal_parameters) %>%
 ## Traceplots
 ```{r}
 tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-          "orl_pp_joint_indMu_trace_plots.tiff"),
+          "orl_pp_joint_indMu2_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
-  traceplot(orl_fit, pars = focal_parameters)
+  traceplot(orl_fit,
+            pars = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
+                     "mu_group_betaF", "mu_group_betaP", "sigma_group_Arew",
+                     "sigma_group_Apun", "sigma_group_K", "sigma_group_betaF")
+            )
 dev.off()
+
+labels = c("mu_person_Arew", "mu_person_Apun", "mu_person_K", "mu_person_betaF",
+           "mu_person_betaP", "sigma_person_Arew", "sigma_person_Apun", "sigma_person_K",
+           "sigma_person_betaF", "sigma_person_betaP", "mu_person_session_Arew",
+           "mu_person_session_Apun", "mu_person_session_K", 
+           "mu_person_session_betaF", "mu_person_session_betaP")
+
+for(i in labels){
+  
+  tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
+            paste("orl_pp_joint_indMu2_", i, "_traceplots.tiff", sep = "")),
+       width = 35, height = 25, units = "cm", res = 300)
+    traceplot(orl_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+  
+}
 ```
 
 
@@ -102,9 +134,11 @@ dev.off()
 ## Means +/- PI
 ```{r}
 tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-          "orl_pp_joint_indMu_posterior_means.tiff"),
+          "orl_pp_joint_indMu2_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
-  plot(orl_fit, pars = focal_parameters)
+  plot(orl_fit, pars = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
+                     "mu_group_betaF", "mu_group_betaP", "sigma_group_Arew",
+                     "sigma_group_Apun", "sigma_group_K", "sigma_group_betaF"))
 dev.off()
 ```
 
@@ -113,10 +147,14 @@ dev.off()
 ## Posterior Distributions
 ```{r}
 # Extract posterior distributions
-parameters = rstan::extract(orl_fit, pars = focal_parameters) %>% data.frame()
+parameters = rstan::extract(orl_fit, pars = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
+                                              "mu_group_betaF", "mu_group_betaP",
+                                              "sigma_group_Arew", "sigma_group_Apun",
+                                              "sigma_group_K", "sigma_group_betaF")) %>%
+  data.frame()
 
 tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-          "orl_pp_joint_indMu_posterior_distributions.tiff"),
+          "orl_pp_joint_indMu2_posterior_distributions.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
   # Make a density plot of the posterior distributions for the focal parameters using a for loop
@@ -131,44 +169,17 @@ dev.off()
 
 ## Save Parameter Estimates
 ```{r}
-# Extract posterior samples for each parameter
-posterior = rstan::extract(orl_fit) %>% data.frame()
-
 # Get point estimates from the posterior for each parameter
 posterior_means = data.frame(estimate = colMeans(posterior)) %>% # Means
 # posterior_means = data.frame(estimate = colMedians(posterior)) %>% # Medians
   mutate(col_name = rownames(.))
 
 
-# Bind posterior means for group mus
-  # Create dataframe with names of parameters of interest
-mus = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
-  # Create a column of sessions wherein there is a 1 & 2 for each parameter
-  group_by(parameter) %>% 
-  reframe(session = c(1, 2)) %>%
-  # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste("mu_", parameter, ".", session, sep = "")) %>%
-  # Join only the posterior means that have a matching row name in col_name, then remove col_name
-  left_join(posterior_means) %>% select(-col_name)
-
-
-
-ind_columns = full_data %>% 
-  # Create dataframe with original and ranked subject IDs
-  reframe(subject = unique(subject),
-          ID = unique(ID)) %>% 
-  # Create a column for parameter names containing the elements in reframe for each original and ranked subject ID
-  group_by(subject, ID) %>% 
-  reframe(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
-  # Create a column of sessions wherein there is a 1 & 2 for each parameter, and subject ID
-  group_by(subject, ID, parameter) %>% 
-  reframe(session = c(1, 2)) %>% 
-  # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste(parameter, ".", ID, ".", session, sep = ""))
-
-
 # Calculate overall BLUP for each participant
 posterior_blups = posterior %>% 
+  data.frame() %>% 
+  select(starts_with("mu_person_Arew"), starts_with("mu_person_Apun"), starts_with("mu_person_K"), starts_with("mu_person_betaF"),
+           starts_with("mu_person_betaP"))
   # Use the values of col_name in ind_columns to select columns in posterior dataframe
   select(ind_columns$col_name) %>% 
   # Create a column with iteration number for each parameter
