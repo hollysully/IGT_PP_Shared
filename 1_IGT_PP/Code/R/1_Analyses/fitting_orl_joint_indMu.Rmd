@@ -24,8 +24,8 @@ library(miscTools)
 
 ## Load Data
 ```{r}
-stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
-full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
+stan_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_joint_retest.rds"))
+full_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
 ```
 
 
@@ -33,28 +33,18 @@ full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&
 # -------------------------------------------
 # Fit Model
 ```{r, eval = F}
-# Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu2.stan"))
-
+orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu.stan"))
 
 # Fit model
-orl_fit = sampling(orl_model, 
-                   data   = stan_data,
-                   
-                   # Setup for testing model
-                   iter   = 2000,
-                   warmup = 1000,
-                   chains = 4,
-                   cores  = 4,
-                   
-                   # Setup for fitting final model
-                   # iter   = 5000,
-                   # warmup = 1000,
-                   # chains = 4,
-                   # cores  = 4,
-                   
-                   seed   = 43210)
-
+orl_fit <- sampling(
+  orl_model, 
+  data = stan_data,
+  iter = 200,
+  warmup = 100,
+  chains = 7,
+  cores = 7,
+  seed = 43210
+)
 
 #save the fitted model as an .rds file
 saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_joint_indMu2.rds"))
