@@ -69,7 +69,6 @@ transformed parameters{
       K[i,s] = Phi_approx((mu_pr[1,3] + K_tilde[1,i]) + day[i,s] * (mu_pr[2,3] + K_tilde[2,i]))*5;
       betaF[i,s] = (mu_pr[1,4] + betaF_tilde[1,i]) + day[i,s] * (mu_pr[2,4] + betaF_tilde[2,i]);
       betaP[i,s] = (mu_pr[1,5] + betaP_tilde[1,i]) + day[i,s] * (mu_pr[2,5] + betaP_tilde[2,i]);
-      
     }
   }
 }
@@ -95,7 +94,8 @@ model{
   R_chol_betaP ~ lkj_corr_cholesky(1);
   
   // Hyperparameters for RL learning algorithm
-  to_vector(mu_pr) ~ normal(0, 1);
+  mu_pr[1,:] ~ normal(0, 1);
+  mu_pr[2,:] ~ normal(0, .025);
   
   // 'Variance' components
   sigma_Arew ~ normal(0, 0.2);
