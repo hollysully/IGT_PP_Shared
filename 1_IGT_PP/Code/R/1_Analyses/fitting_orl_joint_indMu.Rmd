@@ -190,6 +190,33 @@ abline(v = mean(betaP_Rs))
 
 
 
+### Session 1/2 Differences
+```{r}
+par(mfrow = c(2, 3))
+plot(density(posterior$mu_pr[,2,1]), main = "A+")
+abline(v = mean(posterior$mu_pr[,2,1]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,1]), col = "red")
+
+plot(density(posterior$mu_pr[,2,2]), main = "A-")
+abline(v = mean(posterior$mu_pr[,2,2]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,2]), col = "red")
+
+plot(density(posterior$mu_pr[,2,3]), main = "K")
+abline(v = mean(posterior$mu_pr[,2,3]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,3]), col = "red")
+
+plot(density(posterior$mu_pr[,2,4]), main = expression(paste(beta, italic(f), sep = "")))
+abline(v = mean(posterior$mu_pr[,2,4]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,4]), col = "red")
+
+plot(density(posterior$mu_pr[,2,5]), main = expression(paste(beta, italic(p), sep = "")))
+abline(v = mean(posterior$mu_pr[,2,5]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,5]), col = "red")
+```
+
+
+
+#### Nothing done below here
 ```{r}
 posterior_df <- posterior %>% data.frame()
 # Get point estimates from the posterior for each parameter
