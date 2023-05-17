@@ -139,7 +139,7 @@ parameters <- rstan::extract(orl_fit, pars = group_parameters) %>%
   data.frame()
 
 tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
-          "orl_pp_joint_indMu2_posterior_distributions.tiff"),
+          "orl_pp_joint_indMu_posterior_distributions.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
   # Make a density plot of the posterior distributions for the focal parameters using a for loop
@@ -151,8 +151,45 @@ dev.off()
 ```
 
 
-### NOTE: below here still needs updated
-## Save Parameter Estimates 
+
+## BLUPs
+### Correlations
+```{r}
+Arew_Rs = matrix(data = NA, nrow = 3500)
+Apun_Rs = matrix(data = NA, nrow = 3500)
+K_Rs = matrix(data = NA, nrow = 3500)
+betaF_Rs = matrix(data = NA, nrow = 3500)
+betaP_Rs = matrix(data = NA, nrow = 3500)
+
+for(i in 1:3500){
+  Arew_Rs[i] = cor(posterior$Arew[i,,1], posterior$Arew[i,,2]) 
+  Apun_Rs[i] = cor(posterior$Apun[i,,1], posterior$Apun[i,,2]) 
+  K_Rs[i] = cor(posterior$K[i,,1], posterior$K[i,,2]) 
+  betaF_Rs[i] = cor(posterior$betaF[i,,1], posterior$betaF[i,,2]) 
+  betaP_Rs[i] = cor(posterior$betaP[i,,1], posterior$betaP[i,,2]) 
+}
+
+mean(Arew_Rs)
+mean(Apun_Rs)
+mean(K_Rs)
+mean(betaF_Rs)
+mean(betaP_Rs)
+
+par(mfrow = c(2, 3))
+plot(density(Arew_Rs), main = "A+")
+abline(v = mean(Arew_Rs))
+plot(density(Apun_Rs), main = "A-")
+abline(v = mean(Apun_Rs))
+plot(density(K_Rs), main = "K")
+abline(v = mean(K_Rs))
+plot(density(betaF_Rs), main = expression(paste(beta, italic(f), sep = "")))
+abline(v = mean(betaF_Rs))
+plot(density(betaP_Rs), main = expression(paste(beta, italic(p), sep = "")))
+abline(v = mean(betaP_Rs))
+```
+
+
+
 ```{r}
 posterior_df <- posterior %>% data.frame()
 # Get point estimates from the posterior for each parameter
