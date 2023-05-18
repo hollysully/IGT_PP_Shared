@@ -155,6 +155,11 @@ dev.off()
 ## BLUPs
 ### Correlations
 ```{r}
+source(here("1_IGT_PP", "Code", "R", "1_Analyses", "plausible_correlations.R"))
+```
+
+
+```{r}
 Arew_Rs = matrix(data = NA, nrow = 3500)
 Apun_Rs = matrix(data = NA, nrow = 3500)
 K_Rs = matrix(data = NA, nrow = 3500)
@@ -162,9 +167,9 @@ betaF_Rs = matrix(data = NA, nrow = 3500)
 betaP_Rs = matrix(data = NA, nrow = 3500)
 
 for(i in 1:3500){
-  Arew_Rs[i] = cor(posterior$Arew[i,,1], posterior$Arew[i,,2]) 
-  Apun_Rs[i] = cor(posterior$Apun[i,,1], posterior$Apun[i,,2]) 
-  K_Rs[i] = cor(posterior$K[i,,1], posterior$K[i,,2]) 
+  Arew_Rs[i] = pop_correct_MCMC(cor(posterior$Arew[i,,1], posterior$Arew[i,,2]), n_subj = 49, kappa = 1)
+  Apun_Rs[i] = pop_correct_MCMC(cor(posterior$Apun[i,,1], posterior$Apun[i,,2]), n_subj = 49, kappa = 1) 
+  K_Rs[i] = pop_correct_MCMC(cor(posterior$K[i,,1], posterior$K[i,,2]), n_subj = 49, kappa = 1) 
   betaF_Rs[i] = cor(posterior$betaF[i,,1], posterior$betaF[i,,2]) 
   betaP_Rs[i] = cor(posterior$betaP[i,,1], posterior$betaP[i,,2]) 
 }
