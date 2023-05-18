@@ -329,7 +329,7 @@ IGT$rewlos[is.na(IGT$rewlos)] <- 0
 # but to code the "neutral face" outcomes in 3 different ways (3 diff analyses):
 
 # 1. Code rewlos as the actual % facial morph used, but code Srewlos for neutral outcome as 0
-# 2. Set the rewlos value for the neutral outcome as 0 & shift all the other rewlos values accordingly (i.e. subtracting XX as Tom suggested)
+# 2. Set the rewlos value for the neutral outcome as 0 & shift all the other rewlos values accordingly (i.e. subtracting 25 as Tom suggested)
 # 3. Code rewlos as the actual % facial morph used, and allow Srewlos to take on the actual positive sign according to the true value for rewlos 
 #    (which would then make the only true 0 rewlos/sign outcome the pass outcome)  
 
@@ -510,9 +510,6 @@ names(SIGT_v1_pre) <- names(SIGT_v2_pre) <- names(SIGT_v3_pre) <- c("Subject", "
 # code for making stan-ready lists 
 ############################################################################################################
 ############################################################################################################
-
-
-# I'm here
 
 
 for (df in 1:4) {

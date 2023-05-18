@@ -2,7 +2,6 @@
 library(rstan)
 library(hBayesDM)
 library(bayesplot)
-library("loo")
 library(here)
 
 # the here package relates somehow to using "projects", which I set up when putting this on github
@@ -89,24 +88,30 @@ for (lis in 1:4) {
   if (lis == 1) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "IGT_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
-    fit_name <- "IGT"
+    fit_name <- "IGT_fitted"
   } else if (lis == 2) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT_v1_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v1_pre.rds"))
-    fit_name <- "SIGT_v1"
+    fit_name <- "SIGT_v1_fitted"
   } else if (lis == 3) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT_v2_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v2_pre.rds"))
-    fit_name <- "SIGT_v2"
+    fit_name <- "SIGT_v2_fitted"
   } else if (lis == 4) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT_v3_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v3_pre.rds"))
-    fit_name <- "SIGT_v3"
+    fit_name <- "SIGT_v3_fitted"
   }
 
   
   # Extract parameters
   pars <- extract(fit_sep)
+
+  # check 𝑅̂ (Rhat) is an index of the convergence of the chains. 
+  # 𝑅̂ values close to 1.00 would indicate that MCMC chains are converged to stationary target distributions.  
+  r_hat <- rhat(fit_sep)
+  
+  
 
   # compute posterior means for different pars for each person, and then combine into 
   # data.frame with another column indicating their respective IDs
@@ -114,8 +119,7 @@ for (lis in 1:4) {
                     Apun = colMeans(pars$Apun[,]),
                     K = colMeans(pars$K[,]),
                     betaF = colMeans(pars$betaF[,]),
-                    betaP = colMeans(pars$betaP[,]),
-                    fit_stat = print)
+                    betaP = colMeans(pars$betaP[,]))
   
   names(tmp) <- c((paste("Fit_sep_", fit_name, "_Arew", sep = '')), (paste("Fit_sep_", fit_name, "_Apun", sep = '')), (paste("Fit_sep_", fit_name, "_K", sep = '')), (paste("Fit_sep_", fit_name, "_betaF", sep = '')), (paste("Fit_sep_", fit_name, "_betaP", sep = '')))  
     
@@ -125,30 +129,13 @@ for (lis in 1:4) {
 
 
 
-# save the fitted posterior means to a .csv 
-outdir = here("1_SIGT_PP", "Data", "2_Fitted")
 
-filename = paste(outdir,'/', 'SIGT_fitted_data.csv',sep = '')
-write.csv(SIGT_fitted_task,filename)
-
-
-
-# check 𝑅̂ (Rhat) is an index of the convergence of the chains. 
-# 𝑅̂ values close to 1.00 would indicate that MCMC chains are converged to stationary target distributions.  
-r_hat <- rhat(fit_sep)
+### WHAT I NEED TO DO NEXT:
+### object 'SIGT_fitted_task' not found, SO I NEED TO DEFINE IT BEFORE THE LOOP
+### ALSO, THE 'SIGT_fitted_task' dataframe should be filled with subject IDs before you fill it with pars
 
 
 
-
-# Plot "traceplots" & save as pdf
-# when using HbayesDM, these should look like furry caterpillars, where chains are similar
-# but here, I think we are seeing the posterior distribution for the chains, so we want to see narrow distributions
-
-# create the plot
-plot(fit_sep, type = "trace")
-image <- paste0("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_SIGT_PP/Data/2_Fitted/", fit_name, "_traceplot.png")
-dev.copy(png, image)
-dev.off()
 
 
 
