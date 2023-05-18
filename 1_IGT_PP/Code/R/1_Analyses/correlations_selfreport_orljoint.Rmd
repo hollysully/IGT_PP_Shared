@@ -88,10 +88,18 @@ sr_sess2 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Sessi
 
 ## ORL Parameters
 ```{r}
-orl_blups = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds")) %>% 
-  
+orl_blups = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
+
+IDs = group_by(orl_blups) %>% 
+  reframe(ID = unique(ID), subject = unique(subject))
+
+orl_blups = orl_blups %>% 
   # Rename ID column to be same as in self-report dataframe
   select(-ID) %>% select(ID = subject, everything())
+
+orl_indMu_blups = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_joint_indMu_blups.rds")) %>% 
+  mutate(ID = as.numeric(ID)) %>% 
+  left_join(IDs) %>% select(-ID) %>% select(ID = subject, everything())
 ```
 
 
@@ -117,7 +125,7 @@ sr_orl = bind_rows(sr_sess1, sr_sess2) %>%
                names_to = "scale", values_to = "score") %>% 
   group_by(ID, scale) %>% 
   reframe(score = mean(score, na.rm = T)) %>% 
-  left_join(orl_blups)
+  left_join(orl_indMu_blups)
   
 # Loop through each scale from session 2
 for(curr_scale in unique(sr_orl$scale)){
@@ -128,7 +136,7 @@ for(curr_scale in unique(sr_orl$scale)){
       filter(scale == curr_scale & parameter == curr_parameter) # Subset data
     
     curr_score = curr_data$score            # Subset scale data
-    curr_estimate = curr_data$blup_overall  # Subset estimate for parameter
+    curr_estimate = curr_data$estimate      # Subset estimate for parameter
     # Run the boot-strapped correlation between the current scale and the current parameter
     curr_cor = boot.cor.bca(x = curr_score, y = curr_estimate,
                             null.hyp = NULL,

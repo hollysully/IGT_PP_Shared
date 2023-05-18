@@ -8,10 +8,7 @@
 
 # Data files 
 *.txt
-1_IGT_PP/Data/1_Preprocessed/*.rds
-1_IGT_PP/Data/2_Fitted/*.rds
-1_SIGT_PP/Data/1_Preprocessed/*.rds
-1_SIGT_PP/Data/2_Fitted/*.rds
+*.rds
 
 # eprime data files
 1_SIGT_PP/Data/0_Raw/z_Rawest_Data/
@@ -21,12 +18,22 @@
 1_SIGT_PP/Data/0_Raw/z_FinalizedData 1st Paper/*.sav
 
 # the Notes folder
-/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_SIGT_PP/z.Notes/ 
+1_SIGT_PP/z.Notes/ 
+
+# Ignore some of Jerem'ys folders
+dead_end_models/
+Manuscript/
+1_IGT_PP/Code/R/2_Plotting/group_PPCs_joint_indMu.Rmd
+1_IGT_PP/Code/Stan/simple_IRT.stan
+1_IGT_PP/Data/2_Fitted/IRT/
+1_IGT_PP/Code/R/1_Analyses/Full_PANAS_simple_IRT.Rmd
+1_IGT_PP/Code/R/1_Analyses/NA_PANAS_simple_IRT.Rmd
+1_IGT_PP/Code/R/1_Analyses/PA_PANAS_simple_IRT.Rmd
+1_IGT_PP/Code/R/2_Plotting/posterior_predictive_checks_joint_indMu.Rmd
+1_IGT_PP/Code/R/1_Analyses/fitting_orl_joint_indMu.Rmd
 
 # 
 Icon?
-*.rds
-*.rds
-1_IGT_PP/Data/2_Fitted/Joint/orl_pp_joint_blups.rds
-1_IGT_PP/Manuscript/
-1_IGT_PP/dead_end_models/
+
+# Ignore plots
+*.tiff

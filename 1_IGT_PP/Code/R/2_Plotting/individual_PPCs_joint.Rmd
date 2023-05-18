@@ -1,0 +1,292 @@
+---
+title: "Posterior Predictive Checks"
+output: html_document
+date: "2023-03-09"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages & Data
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(dplyr)
+library(ggplot2)
+library(foreach)
+library(tidybayes)
+library(patchwork)
+library(abind)
+library(zoo)
+library(here)
+library(ggpubr)
+library(egg)
+library(grid)
+library(HDInterval)
+library(lemon)
+
+fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
+```
+
+
+
+## Prep Data
+```{r}
+posteriors = extract(fit)
+```
+
+
+```{r}
+N = data$N
+S = data$S
+C = 4
+Trials = data$T
+
+proportions = data.frame()
+
+for(i in 1:N){
+  for(s in 1:S){
+    if(data$Tsubj[i,s] > 0){
+      for(c in 1:C){
+        curr_data = ifelse(data$choice[i,data$card[i,,s] == c,s] == 2, 0, 1)
+        curr_posterior = ifelse(posteriors$choice_pred[,i,data$card[i,,s] == c,s] == 2, 0, 1)
+        for(k in 1:26){
+          proportions = data.frame(
+            subject = i,
+            session = s,
+            binC = median(k:(k+4)),
+            card = c,
+            choice = mean(curr_data[k:(k+4)]),
+            prob = mean(hdi(apply(curr_posterior[,k:(k+4)], 1, mean))),
+            lower = hdi(apply(curr_posterior[,k:(k+4)], 1, mean))[1],
+            upper = hdi(apply(curr_posterior[,k:(k+4)], 1, mean))[2]
+            ) %>% 
+            bind_rows(proportions)
+        }
+      }
+    }
+  }
+}
+```
+
+
+
+# ---------------------------------------
+# Plotting
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckA_Session1_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 1 & session == 1) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 1) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckA_Session2_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 1 & session == 2) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 1) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckB_Session1_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 2 & session == 1) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 2) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckB_Session2_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 2 & session == 2) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 2) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckC_Session1_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 3 & session == 1) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 2) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckC_Session2_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 3 & session == 2) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 2) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckD_Session1_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 4 & session == 1) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 2) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckD_Session2_individual_PPC.tiff"),
+     width = 35, height = 35, units = "cm", res = 300)
+
+  proportions %>% 
+    filter(card == 4 & session == 2) %>% 
+    ggplot(aes(x = binC)) +
+      geom_linerange(aes(ymin = lower, ymax = upper),
+                     linewidth = .5) +
+      geom_point(aes(y = prob),
+                 shape = 21, size = 2, fill = "darkgoldenrod1") +
+      geom_point(aes(y = choice), size = 2) +
+      scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
+      scale_size_continuous(range = c(2, 6)) +
+      labs(x = "5-Trial Bin", y = "Proportion") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none") +
+      facet_rep_wrap(.~subject)
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
