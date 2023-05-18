@@ -26,8 +26,8 @@ library(ggpubr)
 library(egg)
 library(grid)
 
-fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
-# fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
+# fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
 stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
 ```
 
