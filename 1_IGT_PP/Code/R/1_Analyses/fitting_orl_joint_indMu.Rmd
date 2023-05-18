@@ -24,8 +24,8 @@ library(miscTools)
 
 ## Load Data
 ```{r}
-stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
-full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
+stan_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_joint_retest.rds"))
+full_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
 ```
 
 
@@ -33,37 +33,29 @@ full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&
 # -------------------------------------------
 # Fit Model
 ```{r, eval = F}
-# Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu2.stan"))
-
+orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu.stan"))
 
 # Fit model
-orl_fit = sampling(orl_model, 
-                   data   = stan_data,
-                   
-                   # Setup for testing model
-                   iter   = 2000,
-                   warmup = 1000,
-                   chains = 4,
-                   cores  = 4,
-                   
-                   # Setup for fitting final model
-                   # iter   = 5000,
-                   # warmup = 1000,
-                   # chains = 4,
-                   # cores  = 4,
-                   
-                   seed   = 43210)
+orl_fit <- sampling(
+  orl_model, 
+  data = stan_data,
+  iter = 1000,
+  warmup = 500,
+  chains = 7,
+  cores = 7,
+  seed = 43210
+)
+
 
 
 #save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_joint_indMu2.rds"))
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
 ```
 
 
 
 ```{r}
-orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_joint_indMu2.rds"))
+orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
 ```
 
 
@@ -71,53 +63,51 @@ orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu", "orl_pp_jo
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-posterior = extract(orl_fit)
+posterior <- extract(orl_fit)
 
-focal_parameters = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
-                     "mu_group_betaF", "mu_group_betaP", "sigma_group_Arew",
-                     "sigma_group_Apun", "sigma_group_K", "sigma_group_betaF",
-                     "sigma_group_betaP", "mu_person_Arew", "mu_person_Apun",
-                     "mu_person_K", "mu_person_betaF", "mu_person_betaP",
-                     "sigma_person_Arew", "sigma_person_Apun", "sigma_person_K",
-                     "sigma_person_betaF", "sigma_person_betaP", "mu_person_session_Arew",
-                     "mu_person_session_Apun", "mu_person_session_K", "mu_person_session_betaF",
-                     "mu_person_session_betaP")
+focal_parameters <- c(
+  "mu_Arew", "mu_Apun", "mu_K",
+  "mu_betaF", "mu_betaP", 
+  "sigma_Arew", "sigma_Apun", "sigma_K",
+  "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun",
+  "K", "betaF", "betaP"
+)
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 ```
 
 
 
 ## Rhat
 ```{r}
-rhats = rhat(orl_fit,
-             pars = focal_parameters
-             ) %>% 
-  data.frame() %>% mutate(parameter = rownames(.))
+rhats <- rhat(
+  orl_fit,
+  pars = focal_parameters
+) %>% 
+  as.data.frame() %>%
+  mutate(parameter = rownames(.))
 ```
 
 
 
 ## Traceplots
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-          "orl_pp_joint_indMu2_group_traceplots.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
+          "orl_pp_joint_indMu_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
-  traceplot(orl_fit,
-            pars = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
-                     "mu_group_betaF", "mu_group_betaP", "sigma_group_Arew",
-                     "sigma_group_Apun", "sigma_group_K", "sigma_group_betaF")
-            )
+  traceplot(
+    orl_fit,
+    pars = group_parameters
+)
 dev.off()
 
-labels = c("mu_person_Arew", "mu_person_Apun", "mu_person_K", "mu_person_betaF",
-           "mu_person_betaP", "sigma_person_Arew", "sigma_person_Apun", "sigma_person_K",
-           "sigma_person_betaF", "sigma_person_betaP", "mu_person_session_Arew",
-           "mu_person_session_Apun", "mu_person_session_K", 
-           "mu_person_session_betaF", "mu_person_session_betaP")
+labels <- person_parameters
 
 for(i in labels){
-  
-  tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-            paste("orl_pp_joint_indMu2_", i, "_traceplots.tiff", sep = "")),
+  tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
+            paste("orl_pp_joint_indMu_", i, "_traceplots.tiff", sep = "")),
        width = 35, height = 25, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
@@ -133,12 +123,10 @@ for(i in labels){
 # Inspect Parameters
 ## Means +/- PI
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-          "orl_pp_joint_indMu2_posterior_means.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
+          "orl_pp_joint_indMu_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
-  plot(orl_fit, pars = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
-                     "mu_group_betaF", "mu_group_betaP", "sigma_group_Arew",
-                     "sigma_group_Apun", "sigma_group_K", "sigma_group_betaF"))
+  plot(orl_fit, pars = group_parameters)
 dev.off()
 ```
 
@@ -147,14 +135,11 @@ dev.off()
 ## Posterior Distributions
 ```{r}
 # Extract posterior distributions
-parameters = rstan::extract(orl_fit, pars = c("mu_group_Arew", "mu_group_Apun", "mu_group_K",
-                                              "mu_group_betaF", "mu_group_betaP",
-                                              "sigma_group_Arew", "sigma_group_Apun",
-                                              "sigma_group_K", "sigma_group_betaF")) %>%
+parameters <- rstan::extract(orl_fit, pars = group_parameters) %>%
   data.frame()
 
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint_indMu",
-          "orl_pp_joint_indMu2_posterior_distributions.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
+          "orl_pp_joint_indMu_posterior_distributions.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
   # Make a density plot of the posterior distributions for the focal parameters using a for loop
@@ -167,19 +152,89 @@ dev.off()
 
 
 
-## Save Parameter Estimates
+## BLUPs
+### Correlations
 ```{r}
+source(here("1_IGT_PP", "Code", "R", "1_Analyses", "plausible_correlations.R"))
+```
+
+
+```{r}
+Arew_Rs = matrix(data = NA, nrow = 3500)
+Apun_Rs = matrix(data = NA, nrow = 3500)
+K_Rs = matrix(data = NA, nrow = 3500)
+betaF_Rs = matrix(data = NA, nrow = 3500)
+betaP_Rs = matrix(data = NA, nrow = 3500)
+
+for(i in 1:3500){
+  Arew_Rs[i] = pop_correct_MCMC(cor(posterior$Arew[i,,1], posterior$Arew[i,,2]), n_subj = 49, kappa = 1)
+  Apun_Rs[i] = pop_correct_MCMC(cor(posterior$Apun[i,,1], posterior$Apun[i,,2]), n_subj = 49, kappa = 1) 
+  K_Rs[i] = pop_correct_MCMC(cor(posterior$K[i,,1], posterior$K[i,,2]), n_subj = 49, kappa = 1) 
+  betaF_Rs[i] = cor(posterior$betaF[i,,1], posterior$betaF[i,,2]) 
+  betaP_Rs[i] = cor(posterior$betaP[i,,1], posterior$betaP[i,,2]) 
+}
+
+mean(Arew_Rs)
+mean(Apun_Rs)
+mean(K_Rs)
+mean(betaF_Rs)
+mean(betaP_Rs)
+
+par(mfrow = c(2, 3))
+plot(density(Arew_Rs), main = "A+")
+abline(v = mean(Arew_Rs))
+plot(density(Apun_Rs), main = "A-")
+abline(v = mean(Apun_Rs))
+plot(density(K_Rs), main = "K")
+abline(v = mean(K_Rs))
+plot(density(betaF_Rs), main = expression(paste(beta, italic(f), sep = "")))
+abline(v = mean(betaF_Rs))
+plot(density(betaP_Rs), main = expression(paste(beta, italic(p), sep = "")))
+abline(v = mean(betaP_Rs))
+```
+
+
+
+### Session 1/2 Differences
+```{r}
+par(mfrow = c(2, 3))
+plot(density(posterior$mu_pr[,2,1]), main = "A+")
+abline(v = mean(posterior$mu_pr[,2,1]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,1]), col = "red")
+
+plot(density(posterior$mu_pr[,2,2]), main = "A-")
+abline(v = mean(posterior$mu_pr[,2,2]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,2]), col = "red")
+
+plot(density(posterior$mu_pr[,2,3]), main = "K")
+abline(v = mean(posterior$mu_pr[,2,3]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,3]), col = "red")
+
+plot(density(posterior$mu_pr[,2,4]), main = expression(paste(beta, italic(f), sep = "")))
+abline(v = mean(posterior$mu_pr[,2,4]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,4]), col = "red")
+
+plot(density(posterior$mu_pr[,2,5]), main = expression(paste(beta, italic(p), sep = "")))
+abline(v = mean(posterior$mu_pr[,2,5]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,5]), col = "red")
+```
+
+
+
+#### Nothing done below here
+```{r}
+posterior_df <- posterior %>% data.frame()
 # Get point estimates from the posterior for each parameter
-posterior_means = data.frame(estimate = colMeans(posterior)) %>% # Means
+posterior_means <- data.frame(estimate = colMeans(posterior_df)) %>% # Means
 # posterior_means = data.frame(estimate = colMedians(posterior)) %>% # Medians
   mutate(col_name = rownames(.))
 
 
 # Calculate overall BLUP for each participant
-posterior_blups = posterior %>% 
-  data.frame() %>% 
-  select(starts_with("mu_person_Arew"), starts_with("mu_person_Apun"), starts_with("mu_person_K"), starts_with("mu_person_betaF"),
-           starts_with("mu_person_betaP"))
+posterior_blups <- posterior_df %>% 
+  select(starts_with("Arew"), starts_with("Apun"),
+         starts_with("K"), starts_with("betaF"),
+         starts_with("betaP"))
   # Use the values of col_name in ind_columns to select columns in posterior dataframe
   select(ind_columns$col_name) %>% 
   # Create a column with iteration number for each parameter
