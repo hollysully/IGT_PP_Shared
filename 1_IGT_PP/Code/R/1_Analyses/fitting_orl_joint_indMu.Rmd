@@ -267,13 +267,16 @@ scale_sess2 = c("bastot", "basdrive", "basfunsk", "basrewres", "bis",
 
 #### Correlation Function
 ```{r}
-get_SR_corrs = function(p_session, parameter, p_name, scale, scale_names){
+get_SR_corrs = function(post, p_session, parameter, p_name, scale, scale_names){
+  post = post[[p_name]]
+  if(length(unique(scale$ID)) == 39) post = post[,stan_data$Tsubj[,2]==120,]
+  
   corrs = matrix(data = NA, nrow = iterations, ncol = length(scale_names),
                  dimnames = list(c(1:iterations), c(unique(scale_names))))
   
   for(scale_name in scale_names){
     for(i in 1:iterations){
-      corrs[i, scale_name] = cor(posterior[[p_name]][i,,p_session], scale[[scale_name]])
+      corrs[i, scale_name] = cor(post[i,,p_session], scale[[scale_name]])
     }
   }
   return(corrs)
@@ -285,27 +288,27 @@ get_SR_corrs = function(p_session, parameter, p_name, scale, scale_names){
 #### ORL 1 vs SR 1
 ```{r}
 print("Arew")
-Arew1_SR1_Rs = get_SR_corrs(p_session = 1, parameter = posterior$Arew,
+Arew1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Arew,
                             p_name = "Arew", scale = sr_sess1, scale_names = scale_sess1)
 apply(Arew1_SR1_Rs, 2, mean)
 
 print("Apun")
-Apun1_SR1_Rs = get_SR_corrs(p_session = 1, parameter = posterior$Apun,
+Apun1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Apun,
                             p_name = "Apun", scale = sr_sess1, scale_names = scale_sess1)
 apply(Apun1_SR1_Rs, 2, mean)
 
 print("K")
-K1_SR1_Rs = get_SR_corrs(p_session = 1, parameter = posterior$K,
+K1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$K,
                          p_name = "K", scale = sr_sess1, scale_names = scale_sess1)
 apply(K1_SR1_Rs, 2, mean)
 
 print("BetaF")
-betaF1_SR1_Rs = get_SR_corrs(p_session = 1, parameter = posterior$betaF,
+betaF1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaF,
                              p_name = "betaF", scale = sr_sess1, scale_names = scale_sess1)
 apply(betaF1_SR1_Rs, 2, mean)
 
 print("BetaP")
-betaP1_SR1_Rs = get_SR_corrs(p_session = 1, parameter = posterior$betaP,
+betaP1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaP,
                              p_name = "betaP", scale = sr_sess1, scale_names = scale_sess1)
 apply(betaP1_SR1_Rs, 2, mean)
 ```
@@ -313,29 +316,29 @@ apply(betaP1_SR1_Rs, 2, mean)
 
 
 #### ORL 1 vs SR 2
-```{r, eval = F}
+```{r, eval}
 print("Arew")
-Arew1_SR2_Rs = get_SR_corrs(p_session = 1, parameter = posterior$Arew,
+Arew1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Arew,
                             p_name = "Arew", scale = sr_sess2, scale_names = scale_sess2)
 apply(Arew1_SR2_Rs, 2, mean)
 
 print("Apun")
-Apun1_SR2_Rs = get_SR_corrs(p_session = 1, parameter = posterior$Apun,
+Apun1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Apun,
                             p_name = "Apun", scale = sr_sess2, scale_names = scale_sess2)
 apply(Apun1_SR2_Rs, 2, mean)
 
 print("K")
-K1_SR2_Rs = get_SR_corrs(p_session = 1, parameter = posterior$K,
+K1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$K,
                          p_name = "K", scale = sr_sess2, scale_names = scale_sess2)
 apply(K1_SR2_Rs, 2, mean)
 
 print("BetaF")
-betaF1_SR2_Rs = get_SR_corrs(p_session = 1, parameter = posterior$betaF,
+betaF1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaF,
                              p_name = "betaF", scale = sr_sess2, scale_names = scale_sess2)
 apply(betaF1_SR2_Rs, 2, mean)
 
 print("BetaP")
-betaP1_SR2_Rs = get_SR_corrs(p_session = 1, parameter = posterior$betaP,
+betaP1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaP,
                              p_name = "betaP", scale = sr_sess2, scale_names = scale_sess2)
 apply(betaP1_SR2_Rs, 2, mean)
 ```
@@ -343,29 +346,29 @@ apply(betaP1_SR2_Rs, 2, mean)
 
 
 #### ORL 2 vs SR 1
-```{r, eval = F}
+```{r, eval}
 print("Arew")
-Arew2_SR1_Rs = get_SR_corrs(p_session = 2, parameter = posterior$Arew,
+Arew2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Arew,
                             p_name = "Arew", scale = sr_sess1, scale_names = scale_sess1)
 apply(Arew2_SR1_Rs, 2, mean)
 
 print("Apun")
-Apun2_SR1_Rs = get_SR_corrs(p_session = 2, parameter = posterior$Apun,
+Apun2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Apun,
                             p_name = "Apun", scale = sr_sess1, scale_names = scale_sess1)
 apply(Apun2_SR1_Rs, 2, mean)
 
 print("K")
-K2_SR1_Rs = get_SR_corrs(p_session = 2, parameter = posterior$K,
+K2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$K,
                          p_name = "K", scale = sr_sess1, scale_names = scale_sess1)
 apply(K2_SR1_Rs, 2, mean)
 
 print("BetaF")
-betaF2_SR1_Rs = get_SR_corrs(p_session = 2, parameter = posterior$betaF,
+betaF2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaF,
                              p_name = "betaF", scale = sr_sess1, scale_names = scale_sess1)
 apply(betaF2_SR1_Rs, 2, mean)
 
 print("BetaP")
-betaP2_SR1_Rs = get_SR_corrs(p_session = 2, parameter = posterior$betaP,
+betaP2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaP,
                              p_name = "betaP", scale = sr_sess1, scale_names = scale_sess1)
 apply(betaP2_SR1_Rs, 2, mean)
 ```
@@ -375,177 +378,32 @@ apply(betaP2_SR1_Rs, 2, mean)
 #### ORL 2 vs SR 2
 ```{r}
 print("Arew")
-Arew2_SR2_Rs = get_SR_corrs(p_session = 2, parameter = posterior$Arew,
+Arew2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Arew,
                             p_name = "Arew", scale = sr_sess2, scale_names = scale_sess2)
 apply(Arew2_SR2_Rs, 2, mean)
 
 print("Apun")
-Apun2_SR2_Rs = get_SR_corrs(p_session = 2, parameter = posterior$Apun,
+Apun2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Apun,
                             p_name = "Apun", scale = sr_sess2, scale_names = scale_sess2)
 apply(Apun2_SR2_Rs, 2, mean)
 
 print("K")
-K2_SR2_Rs = get_SR_corrs(p_session = 2, parameter = posterior$K,
+K2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$K,
                          p_name = "K", scale = sr_sess2, scale_names = scale_sess2)
 apply(K2_SR2_Rs, 2, mean)
 
 print("BetaF")
-betaF2_SR2_Rs = get_SR_corrs(p_session = 2, parameter = posterior$betaF,
+betaF2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaF,
                              p_name = "betaF", scale = sr_sess2, scale_names = scale_sess2)
 apply(betaF2_SR2_Rs, 2, mean)
 
 print("BetaP")
-betaP2_SR2_Rs = get_SR_corrs(p_session = 2, parameter = posterior$betaP,
+betaP2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaP,
                              p_name = "betaP", scale = sr_sess2, scale_names = scale_sess2)
 apply(betaP2_SR2_Rs, 2, mean)
 ```
 
 
-
-# -------------------------------------------
-#### Nothing done below here
-
-#### Run Correlations
-```{r}
-# Loop through each scale from session 1
-for(scale in c("bastot", "basdrive", "basfunsk",
-               "basrewres", "bis", "panas_pa",
-               "panas_na", "masqGDA", "masqAA", "masqGDD",
-               "masqAD", "shaps_tot", "prdep_tot")){
-  # Loop through each parameter from session 1
-  for(param in unique(orl_blups$parameter)){
-    
-    curr_data = orl_blups %>%
-      filter(parameter == param) %>%             # Subset orl parameter
-      left_join(sr_sess1) %>%                    # Join scales to orl parameter
-      select(-c(sex, race, Ethnicity)) %>%       # Remove columns that we don't need
-      na.omit()                                  # Remove rows with NAs
-    
-    curr_scale = curr_data[[scale]]              # Subset scale data
-    curr_estimate = curr_data[["blup_session1"]] # Subset estimate for parameter
-    # Run the boot-strapped correlation between the current scale and the current parameter
-    curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
-                            null.hyp = NULL,
-                            alternative = c("two.sided", "less", "greater"),
-                            conf.level = 0.95, type = NULL, R = 9999)
-    
-    curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
-      separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
-      # Remove parentheses and turn CIs into numerics
-      mutate(lower = as.numeric(str_remove(lower, "[(]")),
-             upper = as.numeric(str_remove(upper, "[)]")))
-    
-    # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
-    correlations = bind_rows(correlations,
-                             data.frame(parameter_session = 1,
-                                        scale_session = 1,
-                                        parameter = param,
-                                        scale = scale,
-                                        r = curr_cor$Observed,
-                                        lower_ci = curr_ci$lower[1],
-                                        upper_ci = curr_ci$upper[1]))
-  }
-  
-  # Loop through each parameter from session 2
-  for(param in unique(orl_blups$parameter)){
-    
-    curr_data = orl_blups %>%
-      filter(parameter == param) %>%             # Subset orl parameter
-      left_join(sr_sess1) %>%                    # Join scales to orl parameter
-      select(-c(sex, race, Ethnicity)) %>%       # Remove columns that we don't need
-      na.omit()                                  # Remove rows with NAs
-    
-    curr_scale = curr_data[[scale]]              # Subset scale data
-    curr_estimate = curr_data[["blup_session2"]] # Subset estimate for parameter
-    # Run the boot-strapped correlation between the current scale and the current parameter
-    curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
-                            null.hyp = NULL,
-                            alternative = c("two.sided", "less", "greater"),
-                            conf.level = 0.95, type = NULL, R = 9999)
-    
-    curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
-      separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
-      # Remove parentheses and turn CIs into numerics
-      mutate(lower = as.numeric(str_remove(lower, "[(]")),
-             upper = as.numeric(str_remove(upper, "[)]")))
-    
-    # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
-    correlations = bind_rows(correlations,
-                             data.frame(parameter_session = 2,
-                                        scale_session = 1,
-                                        parameter = param,
-                                        scale = scale,
-                                        r = curr_cor$Observed,
-                                        lower_ci = curr_ci$lower[1],
-                                        upper_ci = curr_ci$upper[1]))
-  }
-}
-```
-
-
-
-
-```{r}
-posterior_df <- posterior %>% data.frame()
-# Get point estimates from the posterior for each parameter
-posterior_means <- data.frame(estimate = colMeans(posterior_df)) %>% # Means
-# posterior_means = data.frame(estimate = colMedians(posterior)) %>% # Medians
-  mutate(col_name = rownames(.))
-
-
-# Calculate overall BLUP for each participant
-posterior_blups <- posterior_df %>% 
-  select(starts_with("Arew"), starts_with("Apun"),
-         starts_with("K"), starts_with("betaF"),
-         starts_with("betaP"))
-  # Use the values of col_name in ind_columns to select columns in posterior dataframe
-  select(ind_columns$col_name) %>% 
-  # Create a column with iteration number for each parameter
-  mutate(iteration = rownames(.)) %>% 
-  # Pivot data longer so that it's easier to separate what is the parameter, subject, and session from the posterior columns
-  pivot_longer(cols = -iteration, names_to = "param_ID_sess", values_to = "estimate") %>% 
-  separate(col = param_ID_sess, into = c("parameter", "ID", "session"), sep = "\\.") %>%
-  # Pivot wider so that we can calculate the mean of session 1 and session 2 estimate on each iteration of the posterior
-  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>%
-  mutate(overall_estimate = (session_1 + session_2)/2,
-         ID = as.numeric(ID))
-
-blups = posterior_blups %>% 
-  # Calculate posterior means for individual subjects by session and overall
-  group_by(parameter, ID) %>% 
-  reframe(blup_session1 = mean(session_1),
-          blup_session2 = mean(session_2),
-          blup_overall = mean(overall_estimate)) %>% 
-  left_join(reframe(full_data, subject = unique(subject), ID = unique(ID)))
-
-
-# Bind posterior means for correlations
-  # Note, these are not population-corrected - We do this in joint_test_retest_plots.Rmd
-  # Create dataframe with names of correlations of interest
-correlations = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>% 
-  # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste("R_", parameter, ".2.1", sep = "")) %>% 
-  # Join only the posterior means that have a matching row name in col_name, then remove col_name
-  left_join(posterior_means) %>% select(-col_name)
-
-
-# Save data
-write.csv(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                    "orl_pp_joint_indMu_mus.csv"))
-write.csv(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                      "orl_pp_joint_indMu_blups.csv"))
-write.csv(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                             "orl_pp_joint_indMu_model_correlations.csv"))
-
-saveRDS(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                  "orl_pp_joint_indMu_mus.rds"))
-saveRDS(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                    "orl_pp_joint_indMu_blups.rds"))
-saveRDS(posterior_blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                              "orl_pp_joint_indMu_posterior_blups.rds"))
-saveRDS(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint_indMu",
-                           "orl_pp_joint_indMu_model_correlations.rds"))
-```
 
 # -------------------------------------------
 
