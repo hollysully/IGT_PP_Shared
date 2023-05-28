@@ -1,4 +1,14 @@
-data{
+functions {
+  real Phi_approx_group_mean_rng(real mu, real sigma, int n_samples) {
+    vector[n_samples] par;
+    for (i in 1:n_samples) {
+      par[i] = Phi_approx(normal_rng(mu, sigma));
+    }
+    return mean(par);
+  }
+}
+
+data {
   int<lower=1> N; // Number of participants
   int<lower=1> S; // Number of sessions
   int<lower=1> T; // Total possile number of trials
@@ -10,9 +20,7 @@ data{
   int day[N,S]; // num days from day 0 predictor for linear model
 }
 
-
-// ---------------------------------------------------------------------------------------
-parameters{
+parameters {
 // Declare parameters
   // Hyper(group)-parameters
   matrix[2,5] mu_pr; // 2 (intercept and slope) x 5 (number of parameters) matrix of mus
@@ -39,7 +47,7 @@ parameters{
   cholesky_factor_corr[2] R_chol_betaP;
 }
 
-transformed parameters{
+transformed parameters {
   // Declare transformed parameters
   matrix<lower=0,upper=1>[N,2] Arew;  // Transformed Arews
   matrix<lower=0,upper=1>[N,2] Apun;  // Transformed Apuns
@@ -73,7 +81,7 @@ transformed parameters{
   }
 }
 
-model{
+model {
   // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
   matrix[4,2] ef;
   matrix[4,2] ev;
@@ -126,34 +134,34 @@ model{
         
         for (t in 1:Tsubj[i,s]) {
           
-        // Likelihood - predict choice as a function of utility
-        choice[i,t,s] ~ categorical_logit(to_vector(utility[card[i,t,s], :]));
-        
-        // After choice, calculate prediction error
-        PEval      = outcome[i,t,s] - ev[card[i,t,s], choice[i,t,s]];     // Value prediction error
-        PEfreq     = sign[i,t,s] - ef[card[i,t,s], choice[i,t,s]];        // Win-frequency prediction error
-        PEfreq_fic = -sign[i,t,s]/1 - ef[card[i,t,s], (3-choice[i,t,s])]; // Lose-frequency prediction error?
-        
-        if (outcome[i,t,s] >= 0){  // If participant DID NOT lose
-          // Update expected win-frequency of what participant DID NOT chose to do
-          ef[card[i,t,s], (3-choice[i,t,s])] = ef[card[i,t,s], (3-choice[i,t,s])] + Apun[i,s] * PEfreq_fic;
-          // Update what participant chose
-          ef[card[i,t,s], choice[i,t,s]] = ef[card[i,t,s], choice[i,t,s]] + Arew[i,s] * PEfreq;
-          ev[card[i,t,s], choice[i,t,s]] = ev[card[i,t,s], choice[i,t,s]] + Arew[i,s] * PEval;
-        } else { // If participant DID lose
-          // Update expected win-frequency of what participant DID NOT choose to do
-          ef[card[i,t,s], (3-choice[i,t,s])] = ef[card[i,t,s], (3-choice[i,t,s])] + Arew[i,s] * PEfreq_fic;
-          // Update what participant chose
-          ef[card[i,t,s], choice[i,t,s]] = ef[card[i,t,s], choice[i,t,s]] + Apun[i,s] * PEfreq;
-          ev[card[i,t,s], choice[i,t,s]] = ev[card[i,t,s], choice[i,t,s]] + Apun[i,s] * PEval;
-        }
-        
-        // Update perseverance
-        pers[card[i,t,s], choice[i,t,s]] = 1;
-        pers = pers / (1 + K_tr);
-        
-        // Calculate expected value of card
-        utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
+          // Likelihood - predict choice as a function of utility
+          choice[i,t,s] ~ categorical_logit(to_vector(utility[card[i,t,s], :]));
+          
+          // After choice, calculate prediction error
+          PEval      = outcome[i,t,s] - ev[card[i,t,s], choice[i,t,s]];     // Value prediction error
+          PEfreq     = sign[i,t,s] - ef[card[i,t,s], choice[i,t,s]];        // Win-frequency prediction error
+          PEfreq_fic = -sign[i,t,s]/1 - ef[card[i,t,s], (3-choice[i,t,s])]; // Lose-frequency prediction error?
+          
+          if (outcome[i,t,s] >= 0){  // If participant DID NOT lose
+            // Update expected win-frequency of what participant DID NOT chose to do
+            ef[card[i,t,s], (3-choice[i,t,s])] = ef[card[i,t,s], (3-choice[i,t,s])] + Apun[i,s] * PEfreq_fic;
+            // Update what participant chose
+            ef[card[i,t,s], choice[i,t,s]] = ef[card[i,t,s], choice[i,t,s]] + Arew[i,s] * PEfreq;
+            ev[card[i,t,s], choice[i,t,s]] = ev[card[i,t,s], choice[i,t,s]] + Arew[i,s] * PEval;
+          } else { // If participant DID lose
+            // Update expected win-frequency of what participant DID NOT choose to do
+            ef[card[i,t,s], (3-choice[i,t,s])] = ef[card[i,t,s], (3-choice[i,t,s])] + Arew[i,s] * PEfreq_fic;
+            // Update what participant chose
+            ef[card[i,t,s], choice[i,t,s]] = ef[card[i,t,s], choice[i,t,s]] + Apun[i,s] * PEfreq;
+            ev[card[i,t,s], choice[i,t,s]] = ev[card[i,t,s], choice[i,t,s]] + Apun[i,s] * PEval;
+          }
+          
+          // Update perseverance
+          pers[card[i,t,s], choice[i,t,s]] = 1;
+          pers = pers / (1 + K_tr);
+          
+          // Calculate expected value of card
+          utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
         }
       }
     }
@@ -187,8 +195,8 @@ generated quantities {
 
   // Set all posterior predictions to -1 (avoids NULL values)
   for (i in 1:N) {
-    for (s in 1:S){
-      for (t in 1:T){
+    for (s in 1:S) {
+      for (t in 1:T) {
         choice_pred[i,t,s] = -1;
       }
     }
@@ -196,15 +204,14 @@ generated quantities {
   
   // Group-level means
   for (s in 1:S) {
-    mu_Arew[s] = Phi_approx(mu_pr[s, 1]);
-    mu_Apun[s] = Phi_approx(mu_pr[s, 2]);
-    mu_K[s] = Phi_approx(mu_pr[s, 3]) * 5;
+    mu_Arew[s] = Phi_approx_group_mean_rng(mu_pr[s, 1], sigma_Arew[s], 10000);
+    mu_Apun[s] = Phi_approx_group_mean_rng(mu_pr[s, 2], sigma_Apun[s], 10000);
+    mu_K[s] = Phi_approx_group_mean_rng(mu_pr[s, 3], sigma_K[s], 10000)*5;
     mu_betaF[s] = mu_pr[s, 4];
     mu_betaP[s] = mu_pr[s, 5];
   }
   
   { // local section, this saves time and space
-  
     // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
     matrix[4,2] ef;
     matrix[4,2] ev;
@@ -216,7 +223,6 @@ generated quantities {
     real PEfreq_fic;
     real K_tr;
   
-    // -------------------------------
     for (i in 1:N) {        
       for (s in 1:S) {      
         if (Tsubj[i,s] > 0) {
