@@ -102,8 +102,13 @@ scales = data.frame(scale = c(# Session 1 only
 # Make scaled scores and check out which scores are below the minimums - for those scores, we'll truncate them to 0
 full_data = both_sessions %>% 
   left_join(scales) %>% 
-  mutate(scaled_score = case_when(score-min < 0 ~ 0, is.numeric(score) ~ score - min),
-         confirm = score > max | score < min)
+  mutate(scaled_score = case_when(score-min < 0 ~ 0, is.numeric(score) ~ score - min))
+
+# To check for range problems, uncomment & run below
+# full_data %>% 
+#   mutate(raw_pbx = case_when(score > max ~ "too high", score < min ~ "too low", T ~ ""),
+#          scaled_pbx = case_when(scaled_score > scaled_max ~ "too high", scaled_score < 0 ~ "too low", T ~ "")) %>% 
+#   View()
 
 
 # Create lists to store data in for each scale
