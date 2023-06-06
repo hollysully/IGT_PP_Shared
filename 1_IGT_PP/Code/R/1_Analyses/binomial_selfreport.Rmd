@@ -1,0 +1,150 @@
+---
+title: "Fitting Self-Report Binomial Model"
+output: html_document
+---
+
+
+
+# -----------------------------------------------
+# Setup
+## Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(haven)
+library(here)
+library(wBoot)
+library(rstan)
+library(foreach)
+library(abind)
+library(bayesplot)
+```
+
+
+
+## Load Data
+```{r}
+selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_selfreport.rds"))
+```
+
+
+
+# -----------------------------------------------
+# Model
+## Fitting
+```{r, eval = F}
+stan_model = stan_model(here("1_IGT_PP", "Code", "Stan", "binomial_selfreport.stan"))
+
+models = list()
+
+scales = "prdep_tot" # for testing
+
+for(scale in scales){
+  models[[scale]] =
+    sampling(stan_model,
+             data = selfreport[[scale]],
+             iter = 2000, warmup = 1000,
+             chains = 8, cores = 8,
+             seed = 20230601)
+}
+saveRDS(models, here("1_IGT_PP", "Data", "2_Fitted", "self_report_models.RDS"))
+```
+
+
+
+```{r}
+models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "self_report_models.RDS"))
+```
+
+
+
+## Diagnostics
+```{r}
+for(scale in scales){
+  View(as.data.frame(rhat(models[[scale]])), title = scale)
+}
+```
+
+
+
+```{r}
+for(scale in scales){
+ pairs(models[[scale]], pars = c("kappaMinusTwo", "omega"))
+}
+```
+
+
+
+```{r}
+for(scale in scales){
+  tiff(here("1_IGT_PP", "Figs_Tables", "self_report", paste(scale, "grp_traceplot.tiff", sep = "_")),
+       width = 15, height = 5, units = "cm", res = 300)
+    traceplot(models[[scale]], pars = c("kappaMinusTwo", "omega"))
+  dev.off()
+  
+  tiff(here("1_IGT_PP", "Figs_Tables", "self_report", paste(scale, "thetas_traceplot.tiff", sep = "_")),
+       width = 20, height = 20, units = "cm", res = 300)
+    traceplot(models[[scale]], pars = "theta")
+  dev.off()
+}
+```
+
+
+
+## PPCs
+```{r}
+set.seed(20230606)
+for(scale in scales){
+  posteriors = extract(models[[scale]])
+  
+  # Group-level means
+  obs_grp_mean = mean(selfreport[[scale]]$score)
+  est_grp_mean = rbeta(10000,
+                       shape1 = sample(posteriors$omega*((posteriors$kappaMinusTwo+2)-2)+1, 10000, T),
+                       shape2 = sample((1-posteriors$omega)*((posteriors$kappaMinusTwo+2)-2)+1, 10000, T))*
+                 selfreport[[scale]]$M
+  
+  # Person-level means
+  obs_ind_mean = apply(selfreport[[scale]]$score, 1, mean, na.rm = T)
+  est_ind_mean = apply(posteriors$theta*selfreport[[scale]]$M, 2, mean)
+  
+  correlations = vector()
+  
+  for(i in 1:length(posteriors$kappaMinusTwo)){
+    correlations[i] = cor(obs_ind_mean, posteriors$theta[i,]*selfreport[[scale]]$M)
+  }
+  
+  r_value = mean(correlations)
+  
+  xlimit = c(floor(min(c(obs_ind_mean, y = est_ind_mean))),
+             ceiling(max(c(obs_ind_mean, y = est_ind_mean))))
+  ylimit = c(floor(min(c(obs_ind_mean, y = est_ind_mean))),
+             ceiling(max(c(obs_ind_mean, y = est_ind_mean))))
+  
+  par(pty="s")
+  plot(x = obs_ind_mean, y = est_ind_mean,
+       main = paste(scale, ", r = ", round(r_value, 2),"\n",
+                    "Obs M = ", round(obs_grp_mean, 2), ", Est M = ", round(mean(est_grp_mean), 2), sep = ""),
+       xlim = xlimit, xlab = "Observed",
+       ylim = ylimit, ylab = "Estimated")
+    abline(0,1)
+    lines(x = c(obs_grp_mean, obs_grp_mean), y = c(-100, mean(est_grp_mean)))
+    lines(x = c(-100, obs_grp_mean), y = c(mean(est_grp_mean), mean(est_grp_mean)))
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

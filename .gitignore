@@ -26,6 +26,7 @@ Manuscript/
 1_IGT_PP/Code/R/2_Plotting/group_PPCs_joint_indMu.Rmd
 1_IGT_PP/Code/Stan/simple_IRT.stan
 1_IGT_PP/Data/2_Fitted/IRT/
+1_IGT_PP/Figs_Tables/self_report/
 1_IGT_PP/Code/R/1_Analyses/Full_PANAS_simple_IRT.Rmd
 1_IGT_PP/Code/R/1_Analyses/NA_PANAS_simple_IRT.Rmd
 1_IGT_PP/Code/R/1_Analyses/PA_PANAS_simple_IRT.Rmd
@@ -33,6 +34,8 @@ Manuscript/
 1_IGT_PP/Code/R/1_Analyses/fitting_orl_joint_indMu.Rmd
 1_IGT_PP/Code/Stan/self_report_mus.stan
 1_IGT_PP/Code/R/1_Analyses/selfreport_indMu.RMD
+1_IGT_PP/Code/R/1_Analyses/selfreport_1mu.RMD
+1_IGT_PP/Code/R/1_Analyses/self_report_1mu.stan
 
 
 # 
