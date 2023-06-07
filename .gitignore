@@ -31,6 +31,9 @@ Manuscript/
 1_IGT_PP/Code/R/1_Analyses/PA_PANAS_simple_IRT.Rmd
 1_IGT_PP/Code/R/2_Plotting/posterior_predictive_checks_joint_indMu.Rmd
 1_IGT_PP/Code/R/1_Analyses/fitting_orl_joint_indMu.Rmd
+1_IGT_PP/Code/Stan/self_report_mus.stan
+1_IGT_PP/Code/R/1_Analyses/selfreport_indMu.RMD
+
 
 # 
 Icon?
