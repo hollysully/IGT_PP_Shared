@@ -1,3 +1,18 @@
+# before running this code, I had updated to a new version of R, 
+# which messed up renv. So, I "archived" the old renv folder & renv.lock file
+# then I reinstalled renv, ran renv::init() (which I believe created a new renv folder & renv.lock file)
+# I was given 3 options & I chose:  "Activate the project and use the existing library."
+# Then I was prompted "* The project is currently out-of-sync." & "* Use `renv::status()` for more details."
+# Then, I ran renv::snapshot() which gave me a list of packages called in the project but not installed 
+# I think I typed a y to proceed and the new version of R (4.3.0) was updated in the lockfile
+# Then, I ran renv::status() and again got a list of packages called in the project but not installed 
+# as prompted, I ran renv::install() and the list of packages were installed
+# a warning box appeared at the top of Rstudio with the option to install more packages and I click install
+# then, I renv::snapshot() again, which gave me a list of packages again & I typed y to install them
+# not sure why they weren't installed the 1st time, but I think it was due to needing to install the packages 
+# in the warning box that appeared???
+
+
 # Package for fitting .stan
 library(rstan)
 library(hBayesDM)
