@@ -13,8 +13,8 @@ data {
 transformed data {
   real sign[N, T];
   
-  for (i in 1:N) {
-    for (t in 1:T) {
+  for (i in 1:N) {   // i is the individual subject
+    for (t in 1:T) {  // t is the individual trial
       if (Srewlos[i,t]>0) {
         sign[i,t] = 1;
       } else if (Srewlos[i,t]==0) {
@@ -133,6 +133,9 @@ generated quantities {
   real                  mu_betaP;
   
   // For log likelihood calculation
+  real log_lik[N];
+  
+  // For log likelihood calculation
   int y_pred[N,T];
 
   mu_Arew   = Phi_approx(mu_p[1]);
@@ -158,6 +161,7 @@ generated quantities {
       real K_tr;
       
       // Initialize values
+      log_lik[i] = 0;
       K_tr = pow(3, K[i]) - 1;
       for (j in 1:2) {
         ef[:,j] = rep_vector(0,4);
@@ -168,6 +172,10 @@ generated quantities {
       
       for (t in 1:Tsubj[i]) {
         // softmax choice
+        log_lik[i] += categorical_logit_lpmf( ydata[i,t] | util );
+        
+        // softmax choice
+        // generate posterior prediction for current trial
         y_pred[i,t] = categorical_rng(softmax(to_vector(util[stim[i,t],:])));
         
         // Prediction error
