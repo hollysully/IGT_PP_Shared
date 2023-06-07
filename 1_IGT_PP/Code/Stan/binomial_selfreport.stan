@@ -10,22 +10,19 @@ data {
 
 
 parameters {
-  real kappaMinusTwo;
-  real omega;
+  real kappa;
+  real<lower=0, upper=1> omega;
   vector<lower=0, upper=1>[N] theta; // specify theta as a vector with N values
 }
 
 model {
-  real kappa; // Declare transformed kappa hyperprior
-  
   // PRIORS
   // Hyperpriors
-  kappaMinusTwo ~ gamma(.01,.01);
-  kappa = kappaMinusTwo+2;
+  kappa ~ gamma(.01,.01);
   omega ~ beta(1,1);
   
   // Lower-level priors
-  theta ~ beta(omega*(kappa-2)+1, (1-omega)*(kappa-2)+1);
+  theta ~ beta(omega*kappa, (1-omega)*kappa);
   
   // LIKELIHOOD
   for(s in 1:S){
