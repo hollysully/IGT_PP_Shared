@@ -49,7 +49,8 @@ session1 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Sessi
                                    "bastot", "basdrive", "basfunsk",
                                    "basrewres", "bis", "panas_pa",
                                    "panas_na", "masqGDA", "masqAA", "masqGDD",
-                                   "masqAD", "shaps_tot", "prdep_tot")) %>% 
+                                   # "masqAD", # Removed
+                                   "shaps_tot", "prdep_tot")) %>% 
   mutate(session = 1) %>%                     # Create session variable
   filter(ID >= 2049,                          # Subset PP participants
          ID != 2059,                          # Remove participant that played old IFT
@@ -70,7 +71,8 @@ session2 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Sessi
 both_sessions = bind_rows(session1, session2) %>% 
   select(ID, session,
          # Session 1 only
-         prdep_tot, masqGDA, masqAA, masqGDD, masqAD,
+         prdep_tot, masqGDA, masqAA, masqGDD,
+         # masqAD, # Removed
          # Both sessions
          bastot, basdrive, basfunsk, basrewres,
          bis, panas_pa, panas_na, shaps_tot,
@@ -87,14 +89,15 @@ N = length(IDs)
 
 # Make dataframe describing each scale
 scales = data.frame(scale = c(# Session 1 only
-                              "prdep_tot", "masqGDA", "masqAA", "masqGDD", "masqAD",
+                              "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+                              # "masqAD", # Removed
                               # Both Sessions
                               "bastot", "basdrive", "basfunsk", "basrewres",
                               "bis", "panas_pa", "panas_na", "shaps_tot"),
-                    n_items = c(28, 11, 17, 12, NA_real_, 13, 4, 4, 5, 7, 10, 10, 14),
-                    min_item_score = c(0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-                    max_item_score = c(4, 5, 5, 5, NA_real_, 4, 4, 4, 4, 4, 5, 5, 4),
-                    n_sessions = c(1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2)) %>% 
+                    n_items = c(28, 11, 17, 12, 13, 4, 4, 5, 7, 10, 10, 14),
+                    min_item_score = c(0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0),
+                    max_item_score = c(4, 5, 5, 5, 4, 4, 4, 4, 4, 5, 5, 1),
+                    n_sessions = c(1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2)) %>% 
   mutate(min = n_items * min_item_score,
          max = n_items * max_item_score,
          scaled_max = max - min)
@@ -102,13 +105,13 @@ scales = data.frame(scale = c(# Session 1 only
 # Make scaled scores and check out which scores are below the minimums - for those scores, we'll truncate them to 0
 full_data = both_sessions %>% 
   left_join(scales) %>% 
-  mutate(scaled_score = case_when(score-min < 0 ~ 0, is.numeric(score) ~ score - min))
+  mutate(scaled_score = case_when(score-min < 0 ~ 0, is.numeric(score) ~ as.integer(round(score - min))))
 
 # To check for range problems, uncomment & run below
-# full_data %>% 
+# full_data %>%
 #   mutate(raw_pbx = case_when(score > max ~ "too high", score < min ~ "too low", T ~ ""),
-#          scaled_pbx = case_when(scaled_score > scaled_max ~ "too high", scaled_score < 0 ~ "too low", T ~ "")) %>% 
-#   View()
+#          scaled_pbx = case_when(scaled_score > scaled_max ~ "too high", scaled_score < 0 ~ "too low", T ~ "")) %>%
+#   View(title = "Check_Pbxs")
 
 
 # Create lists to store data in for each scale

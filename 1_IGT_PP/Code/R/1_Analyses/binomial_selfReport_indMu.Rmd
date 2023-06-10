@@ -1,5 +1,5 @@
 ---
-title: "Fitting Self-Report Binomial Model"
+title: "Fitting Self-Report Ind-Mu Binomial Model"
 output: html_document
 ---
 
@@ -30,31 +30,61 @@ selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_bino
 
 
 
+## Scales
+```{r}
+# scales = "prdep_tot" # For testing
+scales = c(# Session 1 only
+           "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+           # "masqAD", # Removed
+           # Both Sessions
+           "bastot", "basdrive", "basfunsk", "basrewres",
+           "bis", "panas_pa", "panas_na", "shaps_tot")
+```
+
+
+
 # -----------------------------------------------
 # Model
+## Simulate Priors
+```{r}
+set.seed(20230607)
+sim_kappa = rgamma(16000, shape = 2, rate = .1)
+hist(sim_kappa, breaks = 50)
+abline(v = mean(sim_kappa), col = "red")
+
+sim_omega = rbeta(16000, shape1 = 1, shape2 = 1)
+hist(sim_omega, breaks = 50)
+abline(v = mean(sim_omega), col = "red")
+
+sim_theta = rbeta(16000, shape1 = mean(sim_omega)*mean(sim_kappa),
+                  shape2 = (1-mean(sim_omega))*mean(sim_kappa))
+hist(sim_theta, breaks = 50, xlim = c(0,1))
+abline(v = mean(sim_omega), col = "red")
+```
+
+
+
 ## Fitting
 ```{r, eval = F}
-stan_model = stan_model(here("1_IGT_PP", "Code", "Stan", "binomial_selfreport.stan"))
+stan_model = stan_model(here("1_IGT_PP", "Code", "Stan", "binomial_selfreport_indMu.stan"))
 
 models = list()
-
-scales = "prdep_tot" # for testing
 
 for(scale in scales){
   models[[scale]] =
     sampling(stan_model,
              data = selfreport[[scale]],
-             iter = 2000, warmup = 1000,
+             iter = 5000, warmup = 1000,
              chains = 8, cores = 8,
              seed = 20230601)
 }
-saveRDS(models, here("1_IGT_PP", "Data", "2_Fitted", "self_report_models.RDS"))
+saveRDS(models, here("1_IGT_PP", "Data", "2_Fitted", "binomial_selfreport_indMu_fits.RDS"))
 ```
 
 
 
 ```{r}
-models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "self_report_models.RDS"))
+models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "binomial_selfreport_indMu_fits.RDS"))
 ```
 
 
@@ -70,7 +100,7 @@ for(scale in scales){
 
 ```{r}
 for(scale in scales){
- pairs(models[[scale]], pars = c("kappaMinusTwo", "omega"))
+ pairs(models[[scale]], pars = c("kappa", "omega"))
 }
 ```
 
@@ -78,14 +108,16 @@ for(scale in scales){
 
 ```{r}
 for(scale in scales){
-  tiff(here("1_IGT_PP", "Figs_Tables", "self_report", paste(scale, "grp_traceplot.tiff", sep = "_")),
+  tiff(here("1_IGT_PP", "Figs_Tables", "Binomial_SelfReport_IndMu",
+            paste(scale, "grp_traceplot.tiff", sep = "_")),
        width = 15, height = 5, units = "cm", res = 300)
-    traceplot(models[[scale]], pars = c("kappaMinusTwo", "omega"))
+    traceplot(models[[scale]], pars = c("kappa", "omega")) %>% print()
   dev.off()
   
-  tiff(here("1_IGT_PP", "Figs_Tables", "self_report", paste(scale, "thetas_traceplot.tiff", sep = "_")),
-       width = 20, height = 20, units = "cm", res = 300)
-    traceplot(models[[scale]], pars = "theta")
+  tiff(here("1_IGT_PP", "Figs_Tables", "Binomial_SelfReport_IndMu",
+            paste(scale, "thetas_traceplot.tiff", sep = "_")),
+       width = 25, height = 20, units = "cm", res = 300)
+    traceplot(models[[scale]], pars = "theta") %>% print()
   dev.off()
 }
 ```
@@ -99,19 +131,19 @@ for(scale in scales){
   posteriors = extract(models[[scale]])
   
   # Group-level means
-  obs_grp_mean = mean(selfreport[[scale]]$score)
+  obs_grp_mean = mean(replace(selfreport[[scale]]$score, selfreport[[scale]]$score == -999, NA), na.rm = T)
   est_grp_mean = rbeta(10000,
-                       shape1 = sample(posteriors$omega*((posteriors$kappaMinusTwo+2)-2)+1, 10000, T),
-                       shape2 = sample((1-posteriors$omega)*((posteriors$kappaMinusTwo+2)-2)+1, 10000, T))*
+                       shape1 = sample(posteriors$omega*posteriors$kappa, 10000, T),
+                       shape2 = sample((1-posteriors$omega)*posteriors$kappa, 10000, T))*
                  selfreport[[scale]]$M
   
   # Person-level means
-  obs_ind_mean = apply(selfreport[[scale]]$score, 1, mean, na.rm = T)
+  obs_ind_mean = apply(replace(selfreport[[scale]]$score, selfreport[[scale]]$score == -999, NA), 1, mean, na.rm = T)
   est_ind_mean = apply(posteriors$theta*selfreport[[scale]]$M, 2, mean)
   
   correlations = vector()
   
-  for(i in 1:length(posteriors$kappaMinusTwo)){
+  for(i in 1:length(posteriors$kappa)){
     correlations[i] = cor(obs_ind_mean, posteriors$theta[i,]*selfreport[[scale]]$M)
   }
   
