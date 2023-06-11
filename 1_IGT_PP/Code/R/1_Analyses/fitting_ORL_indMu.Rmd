@@ -26,7 +26,7 @@ library(haven)
 
 ## Load Data
 ```{r}
-stan_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_IGT_ORL.rds"))
+stan_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
 full_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
 ```
 
@@ -99,7 +99,7 @@ rhats <- rhat(
 ## Traceplots
 ```{r}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_indMu",
-          "orl_pp_joint_indMu_group_traceplots.tiff"),
+          "orl_pp_indMu_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   traceplot(
     orl_fit,
@@ -110,8 +110,8 @@ dev.off()
 labels <- person_parameters
 
 for(i in labels){
-  tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
-            paste("orl_pp_joint_indMu_", i, "_traceplots.tiff", sep = "")),
+  tiff(here("1_IGT_PP", "Figs_Tables", "ORL_indMu",
+            paste("orl_pp_indMu_", i, "_traceplots.tiff", sep = "")),
        width = 35, height = 25, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
@@ -128,7 +128,7 @@ for(i in labels){
 ## Means +/- PI
 ```{r}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_indMu",
-          "orl_pp_joint_indMu_posterior_means.tiff"),
+          "orl_pp_indMu_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   plot(orl_fit, pars = group_parameters)
 dev.off()
@@ -143,7 +143,7 @@ orl_parameters <- rstan::extract(orl_fit, pars = group_parameters) %>%
   data.frame()
 
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_indMu",
-          "orl_pp_joint_indMu_posterior_distributions.tiff"),
+          "orl_pp_indMu_posterior_distributions.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
   # Make a density plot of the posterior distributions for the focal parameters using a for loop

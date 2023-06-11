@@ -106,6 +106,19 @@ combined_data = bind_rows(session1_data, session2_data) %>%
   reframe(prop_good = mean(play)) %>% 
   pivot_wider(names_from = "session", values_from = "prop_good", names_prefix = "session_") %>% 
   select(ID = Subject, everything())
+
+card_proportions = bind_rows(session1_data, session2_data) %>% 
+  mutate(play = recode(ydata, "2" = 0, "1" = 1),
+         version = case_when(str_detect(ExperimentName, "1") ~ 1,
+                             str_detect(ExperimentName, "2") ~ 2)) %>% 
+  group_by(Subject, session) %>% 
+  mutate(trial = 1,
+         trial = cumsum(trial),
+         stim = recode(stim, "1" = "A", "2" = "B", "3" = "C", "4" = "D")) %>% 
+  group_by(Subject, session, stim) %>% 
+  reframe(prop_good = mean(play)) %>% 
+  pivot_wider(names_from = "session", values_from = "prop_good", names_prefix = "session_") %>% 
+  select(ID = Subject, everything())
 ```
 
 

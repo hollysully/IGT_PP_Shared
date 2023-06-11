@@ -412,5 +412,5 @@ stan_dat <- list(
   subjIDs = subjList 
 )     
 
-saveRDS(stan_dat, file = here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_joint_retest.rds"))
+saveRDS(stan_dat, file = here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_IGT_ORL.rds"))
 
