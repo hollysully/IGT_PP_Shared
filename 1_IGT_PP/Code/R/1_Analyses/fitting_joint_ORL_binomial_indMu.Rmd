@@ -26,8 +26,8 @@ library(haven)
 
 ## Load Data
 ```{r}
-stan_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_IGT_ORL.rds"))
-full_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
+igt_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_selfreport.rds"))
 ```
 
 
@@ -35,29 +35,46 @@ full_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1
 # -------------------------------------------
 # Fit Model
 ```{r, eval = F}
-orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_indMu.stan"))
+orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_selfreport_orl_binomial_joint_indMu.stan"))
 
-# Fit model
-orl_fit <- sampling(
-  orl_model, 
-  data = stan_data,
-  iter = 5000,
-  warmup = 1000,
-  chains = 4,
-  cores = 4,
-  seed = 43210
-)
+scales = "prdep_tot" # For testing
+# scales = c(# Session 1 only
+#            "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+#            # "masqAD", # Removed
+#            # Both Sessions
+#            "bastot", "basdrive", "basfunsk", "basrewres",
+#            "bis", "panas_pa", "panas_na", "shaps_tot")
 
-
-
-#save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
+for(scale in scales){
+  
+  stan_data = igt_data
+  stan_data$SR_sess = selfreport[[scale]]$S
+  stan_data$missing = selfreport[[scale]]$missing
+  stan_data$score = selfreport[[scale]]$score
+  stan_data$M = selfreport[[scale]]$M
+  
+  # Fit model
+  orl_fit <- sampling(
+    orl_model, 
+    data = stan_data,
+    iter = 5000,
+    warmup = 1000,
+    chains = 4,
+    cores = 4,
+    seed = 43210
+  )
+  
+  
+  
+  #save the fitted model as an .rds file
+  saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", paste("igt_", scale, "_orl_binomial_joint_indMu.rds", sep = "")))
+}
 ```
 
 
 
 ```{r}
-orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_indMu.rds"))
+orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "igt_selfreport_orl_binomial_joint_indMu.rds"))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -88,7 +105,7 @@ person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 ```{r}
 rhats <- rhat(
   orl_fit,
-  pars = focal_parameters
+  # pars = focal_parameters
 ) %>% 
   as.data.frame() %>%
   mutate(parameter = rownames(.))
@@ -98,8 +115,8 @@ rhats <- rhat(
 
 ## Traceplots
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
-          "orl_pp_joint_indMu_group_traceplots.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
+          "orl_pp_binomial_joint_indMu_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   traceplot(
     orl_fit,
@@ -110,8 +127,8 @@ dev.off()
 labels <- person_parameters
 
 for(i in labels){
-  tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
-            paste("orl_pp_joint_indMu_", i, "_traceplots.tiff", sep = "")),
+  tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
+            paste("orl_pp_binomial_joint_indMu_", i, "_traceplots.tiff", sep = "")),
        width = 35, height = 25, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
@@ -127,8 +144,8 @@ for(i in labels){
 # Inspect Parameters
 ## Means +/- PI
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
-          "orl_pp_joint_indMu_posterior_means.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
+          "orl_pp_binomial_joint_indMu_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   plot(orl_fit, pars = group_parameters)
 dev.off()
@@ -142,8 +159,8 @@ dev.off()
 orl_parameters <- rstan::extract(orl_fit, pars = group_parameters) %>%
   data.frame()
 
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint",
-          "orl_pp_joint_indMu_posterior_distributions.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
+          "orl_pp_binomial_joint_indMu_posterior_distributions.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
   # Make a density plot of the posterior distributions for the focal parameters using a for loop

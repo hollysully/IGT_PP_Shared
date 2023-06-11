@@ -47,10 +47,10 @@ functions {
 
 
 data {
-  int<lower=1> N;      // Number of participants
-  int<lower=1> S;      // Number of sessions
+  int<lower=1> N; // Number of participants
   
   // IGT-SPECIFIC DATA
+  int<lower=1> S;      // Number of sessions
   int<lower=1> T;      // Total possile number of trials
   int card[N,T,S];     // Cards presented on each trial
   int Tsubj[N,S];      // Total number of trials presented to each subject on each session
@@ -59,66 +59,52 @@ data {
   real sign[N,T,S];    // Signs of the outcome received on each trial
   
   // SELF-REPORT-SPECIFIC DATA
-  int missing[N,S];    // Matrix of missingness for current scale
-  int score[N,S];      // Matrix of scores for current scale
-  int M;               // Max score for current scale
+  int SR_sess;            // Number of session's worth of self-report data
+  int missing[N,SR_sess]; // Matrix of missingness for current scale
+  int score[N,SR_sess];   // Matrix of scores for current scale
+  int M;                  // Max score for current scale
 }
 
 
 parameters {
   // Hyper(group)-parameters
-  vector[6] mu_p;         // Vector of 5 ORL mus and 1 binomial Mu
-  real<lower=0>[6] sigma; // Vector of 5 ORL sigmas and 1 binomial sigma
+  vector[6] mu_p;           // Vector of 5 ORL mus and 1 binomial Mu
+  vector<lower=0>[6] sigma; // Vector of 5 ORL sigmas and 1 binomial sigma
   
   // Untransformed & non-correlated subject-level parameters
-  vector[N] Arew_pr;  
-  vector[N] Apun_pr;  
-  vector[N] K_pr;   
-  vector[N] betaF_pr;
-  vector[N] betaP_pr;
-  vector[N] theta_pr;
+  matrix[6,N] parameter_pr;
   
   // Correlation matrices for correlating between parameters
   cholesky_factor_corr[6] R_chol;
 }
 
+
 transformed parameters {
   // Transformed & correlated subject-level parameters
-  vector<lower=0,upper=1>[N] Arew; 
-  vector<lower=0,upper=1>[N] Apun; 
-  vector<lower=0,upper=5>[N] K;    
+  vector<lower=0,upper=1>[N] Arew;
+  vector<lower=0,upper=1>[N] Apun;
+  vector<lower=0,upper=5>[N] K;
   vector[N] betaF;
   vector[N] betaP;
   vector<lower=0, upper=1>[N] theta;
   
   // Untransformed but correlated subject-level parameters
-  vector[N] Arew_tilde;
-  vector[N] Apun_tilde;
-  vector[N] K_tilde;
-  vector[N] betaF_tilde;
-  vector[N] betaP_tilde;
-  vector[N] theta_tilde;
-  
-  // Calculate transformed parameters
+  matrix[6,N] parameter_tilde;
   
   // Untransformed subject-level parameters incorporating correlation between parameters
-  Arew_tilde  = diag_pre_multiply(sigma, R_chol) * Arew_pr;  
-  Apun_tilde  = diag_pre_multiply(sigma, R_chol) * Apun_pr;  
-  K_tilde     = diag_pre_multiply(sigma, R_chol) * K_pr;  
-  betaF_tilde = diag_pre_multiply(sigma, R_chol) * betaF_pr;  
-  betaP_tilde = diag_pre_multiply(sigma, R_chol) * betaP_pr;
-  theta_tilde = diag_pre_multiply(sigma, R_chol) * theta_pr;
+  parameter_tilde = diag_pre_multiply(sigma, R_chol) * parameter_pr;
   
   // Transform parameters to use in likelihoods
   for(i in 1:N){  // Loop over participants
-    Arew[i] = Phi_approx(mu_p[1] + Arew_tilde[i]);
-    Apun[i] = Phi_approx(mu_p[2] + Apun_tilde[i]);
-    K[i]    = Phi_approx(mu_p[3] + K_tilde[i]) * 5;
-    betaF[i] = mu_p[4] + betaF_tilde[i];
-    betaP[i] = mu_p[5] + betaP_tilde[i];
-    theta[i] = Phi_approx(mu_p[6] + theta_tilde[i]);
+    Arew[i]  = Phi_approx(mu_p[1] + parameter_tilde[1,i]);
+    Apun[i]  = Phi_approx(mu_p[2] + parameter_tilde[2,i]);
+    K[i]     = Phi_approx(mu_p[3] + parameter_tilde[3,i]) * 5;
+    betaF[i] = mu_p[4] + parameter_tilde[4,i];
+    betaP[i] = mu_p[5] + parameter_tilde[5,i];
+    theta[i] = Phi_approx(mu_p[6] + parameter_tilde[6,i]);
   }
 }
+
 
 model {
   // Declare variables to calculate utility after each trial for ORL: These 4 (number of cards) x 2 (playing vs. not playing) matrices
@@ -133,31 +119,28 @@ model {
   real K_tr;
   
   // Hyperpriors
-  mu_p     ~ normal(0, 1);
-  sigma[1] ~ normal(0, 0.2); // Arew
-  sigma[2] ~ normal(0, 0.2); // Apun
-  sigma[3] ~ normal(0, 0.2); // K
-  sigma[4] ~ cauchy(0, 1);   // betaF
-  sigma[5] ~ cauchy(0, 1);   // betaP
-  sigma[6] ~ cauchy(0, 1);   // theta
+  mu_p  ~ normal(0, 1);
+  sigma ~ normal(0, 1);      // Arew
+  // sigma[2] ~ normal(0, 0.2); // Apun
+  // sigma[3] ~ normal(0, 0.2); // K
+  // sigma[4] ~ cauchy(0, 1);   // betaF
+  // sigma[5] ~ cauchy(0, 1);   // betaP
+  // sigma[6] ~ cauchy(0, 1);   // theta
   
-  R_chol   ~ lkj_corr_cholesky(1); // Correlation matrix
+  R_chol ~ lkj_corr_cholesky(1); // Correlation matrix
   
   // Priors for untransformed and non-correated subject-level parameters
-  Arew_pr  ~ normal(0, 1.0);
-  Apun_pr  ~ normal(0, 1.0);
-  K_pr     ~ normal(0, 1.0);
-  betaF_pr ~ normal(0, 1.0);
-  betaP_pr ~ normal(0, 1.0);
-  theta_pr ~ normal(0, 1.0);
+  to_vector(parameter_pr) ~ normal(0, 1.0);
   
   // Loop through both sets of data
   for (i in 1:N) {         // Loop through individual participants
     for (s in 1:S) {       // Loop though sessions for participant i
     
       // SELF-REPORT LIKELIHOOD - predict number of "endorsements" out of max
-      if(missing[i,s] == 0){
-        score[i,s] ~ binomial(M, theta[i]);
+      if(SR_sess >= s){ // This ensures that if there is only 1 session of self-report data, we run the likelihood for 1 session
+        if(missing[i,s] == 0){
+          score[i,s] ~ binomial(M, theta[i]);
+        }
       }
       
       if (Tsubj[i,s] > 0) {    // If we have data for participant i on session s, run through RL algorithm
@@ -207,6 +190,7 @@ model {
   }
 }
 
+
 generated quantities {
   // Hyper(group)-parameters 
   real<lower=0,upper=1> mu_Arew;
@@ -214,7 +198,7 @@ generated quantities {
   real<lower=0,upper=5> mu_K;
   real mu_betaF;
   real mu_betaP;
-  real<lower=0,upper=M> mu_theta;
+  real<lower=0,upper=1> mu_theta;
 
   // For posterior predictive check
   real choice_pred[N,T,S];
@@ -229,7 +213,7 @@ generated quantities {
   // Set all posterior predictions to -1 (avoids NULL values)
   for (i in 1:N) {
     for (s in 1:S) {
-      score_pred[i,s] = theta*M;
+      score_pred[i,s] = theta[i]*M;
       for (t in 1:T) {
         choice_pred[i,t,s] = -1;
       }
@@ -237,12 +221,12 @@ generated quantities {
   }
   
   // Compute group-level means
-  mu_Arew = Phi_approx_group_mean_rng(mu_p[1], sigma, 10000);
-  mu_Apun = Phi_approx_group_mean_rng(mu_p[2], sigma, 10000);
-  mu_K = Phi_approx_group_mean_rng(mu_p[3], sigma, 10000) * 5; 
+  mu_Arew  = Phi_approx_group_mean_rng(mu_p[1], sigma[1], 10000);
+  mu_Apun  = Phi_approx_group_mean_rng(mu_p[2], sigma[2], 10000);
+  mu_K     = Phi_approx_group_mean_rng(mu_p[3], sigma[3], 10000) * 5; 
   mu_betaF = mu_p[4];
   mu_betaP = mu_p[5];
-  mu_theta = Phi_approx_group_mean_rng(mu_p[6], sigma, 10000);
+  mu_theta = Phi_approx_group_mean_rng(mu_p[6], sigma[6], 10000);
   
   { // local section, this saves time and space
     // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
@@ -260,7 +244,9 @@ generated quantities {
       for (s in 1:S) {    // Loop though sessions for participant i
     
         // SELF-REPORT LIKELIHOOD - predict number of "endorsements" out of max
-        score_pred[i,s] ~ binomial_rng(M, theta[i]);
+      if(SR_sess >= s){ // This ensures that if there is only 1 session of self-report data, we run the likelihood for 1 session
+        score_pred[i,s] = binomial_rng(M, theta[i]);
+      }
         
         if (Tsubj[i,s] > 0) {    // If we have data for participant i on session s, run through RL algorithm
           
