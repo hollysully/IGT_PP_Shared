@@ -1,18 +1,3 @@
-# before running this code, I had updated to a new version of R, 
-# which messed up renv. So, I "archived" the old renv folder & renv.lock file
-# then I reinstalled renv, ran renv::init() (which I believe created a new renv folder & renv.lock file)
-# I was given 3 options & I chose:  "Activate the project and use the existing library."
-# Then I was prompted "* The project is currently out-of-sync." & "* Use `renv::status()` for more details."
-# Then, I ran renv::snapshot() which gave me a list of packages called in the project but not installed 
-# I think I typed a y to proceed and the new version of R (4.3.0) was updated in the lockfile
-# Then, I ran renv::status() and again got a list of packages called in the project but not installed 
-# as prompted, I ran renv::install() and the list of packages were installed
-# a warning box appeared at the top of Rstudio with the option to install more packages and I click install
-# then, I renv::snapshot() again, which gave me a list of packages again & I typed y to install them
-# not sure why they weren't installed the 1st time, but I think it was due to needing to install the packages 
-# in the warning box that appeared???
-
-
 # Package for fitting .stan
 library(rstan)
 library(hBayesDM)
@@ -42,24 +27,24 @@ orl_pp <- stan_model(here("1_SIGT_PP", "Code", "Stan", "igt_orl.stan"))
 # Read in stan-ready data for running the play or pass model on a single task 
 # NOTE: there are two for loops here: 1st for 1:2, 2nd for 3:4
 
-for (lis in 1:2) {
-  if (lis == 1) {
-    stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
-    dat_name <- "IGT_fitted"
-  } else if (lis == 2) {
-    stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v1_pre.rds"))
-    dat_name <- "SIGT_v1_fitted"
-  }
-  
-  
-# for (lis in 3:4) {
-#   if (lis == 3) {
-#     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v2_pre.rds"))
-#     dat_name <- "SIGT_v2_fitted"
-#   } else if (lis == 4) {
-#     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v3_pre.rds"))
-#     dat_name <- "SIGT_v3_fitted"
+# for (lis in 1:2) {
+#   if (lis == 1) {
+#     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
+#     dat_name <- "IGT_fitted"
+#   } else if (lis == 2) {
+#     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v1_pre.rds"))
+#     dat_name <- "SIGT_v1_fitted"
 #   }
+  
+  
+for (lis in 3:4) {
+  if (lis == 3) {
+    stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v2_pre.rds"))
+    dat_name <- "SIGT_v2_fitted"
+  } else if (lis == 4) {
+    stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v3_pre.rds"))
+    dat_name <- "SIGT_v3_fitted"
+  }
 
 
 
@@ -92,6 +77,8 @@ saveRDS(fit_sep, file = here("1_SIGT_PP", "Data", "2_Fitted", paste0(dat_name, "
 ########################################################################################## 
 ########################################################################################## 
 
+library(loo)
+
 # read in the first stan_dat, to extract subject numbers
 stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
 
@@ -104,20 +91,29 @@ for (lis in 1:4) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "IGT_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
     fit_name <- "IGT_fitted"
+    #put model fit into an array
+    log_lik_IGT <- extract_log_lik(fit_sep)
   } else if (lis == 2) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT_v1_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v1_pre.rds"))
     fit_name <- "SIGT_v1_fitted"
+    #put model fit into an array
+    log_lik_SIGT_v1 <- extract_log_lik(fit_sep)
   } else if (lis == 3) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT_v2_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v2_pre.rds"))
     fit_name <- "SIGT_v2_fitted"
+    #put model fit into an array
+    log_lik_SIGT_v2 <- extract_log_lik(fit_sep)
   } else if (lis == 4) {
     fit_sep <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT_v3_fitted.rds"))
     stan_dat <- readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_v3_pre.rds"))
     fit_name <- "SIGT_v3_fitted"
+    #put model fit into an array
+    log_lik_SIGT_v3 <- extract_log_lik(fit_sep)
   }
 
+  
   
   # Extract parameters
   pars <- extract(fit_sep)
@@ -144,14 +140,86 @@ for (lis in 1:4) {
 
 
 
-
-### WHAT I NEED TO DO NEXT:
-### object 'SIGT_fitted_task' not found, SO I NEED TO DEFINE IT BEFORE THE LOOP
-### ALSO, THE 'SIGT_fitted_task' dataframe should be filled with subject IDs before you fill it with pars
-
+#save the pars dataset
+SIGT_fitted_IndPars = paste((here("1_SIGT_PP", "Data", "2_Fitted")),'/', 'SIGT_fitted_IndPars.csv',sep = '')
+write.csv(SIGT_fitted_task, SIGT_fitted_IndPars)
 
 
 
+
+
+################################################################################
+# Model comparison for diff codign schemes for the SIGT
+################################################################################
+
+
+fit_List <- list(
+  log_lik_IGT = log_lik_IGT,
+  log_lik_SIGT_v1 = log_lik_SIGT_v1,
+  log_lik_SIGT_v2 = log_lik_SIGT_v2,
+  log_lik_SIGT_v3 = log_lik_SIGT_v3)
+
+
+# save fit_list as .rds
+saveRDS(fit_List, file = here("1_SIGT_PP", "Data", "2_Fitted", paste0("fit_List.rds")))
+}
+
+
+# to read the .rds file back into R:
+fit_List <- readRDS(here("1_SIGT_PP", "Data", "2_Fitted", paste0("fit_List.rds")))
+
+
+# compute fit stats
+loo_IGT <- loo(log_lik_IGT)
+loo_SIGT_v1 <- loo(log_lik_SIGT_v1)
+loo_SIGT_v2 <- loo(log_lik_SIGT_v2)
+loo_SIGT_v3 <- loo(log_lik_SIGT_v3)
+
+
+# now, compare the 3 SIGT models (that differ based on reward coding scheme)
+loo_compare(loo_SIGT_v1, loo_SIGT_v2, loo_SIGT_v3)
+
+# elpd_diff se_diff
+# model1   0.0       0.0  
+# model2 -31.4       5.9  
+# model3 -70.0      14.6  
+
+## the SIGT_v1 coding scheme is best fitting
+
+# Here are notes on the coding scheme pasted in from file:  
+# /Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_SIGT_PP/Code/R/0_Preprocess/Preprocess_SIGT.R
+
+# Because the "neutral" face outcome in SIGT used a very low % morph of a happy face rather than a truly neutral face
+# However, the neutral face is only presented when subs "play" & get a neutral outcome,
+# when subs "pass" they recieve no facial feedback at all
+# so this presents a challenge in terms of how to code the rewlos and the Srewlos variables for these two conditions:
+# code as "neutral face" neutral? code "neutral face" as positive? 
+# (see email with subject line:  SIGT: values for neutral stim)
+
+# So for SIGT, we decided to always code the pass outcome as truly neutral, 
+# but to code the "neutral face" outcomes in 3 different ways (3 diff analyses):
+
+# 1. Code rewlos as the actual % facial morph used, but code Srewlos for neutral outcome as 0
+# 2. Set the rewlos value for the neutral outcome as 0 & shift all the other rewlos values accordingly (i.e. subtracting 25 as Tom suggested)
+# 3. Code rewlos as the actual % facial morph used, and allow Srewlos to take on the actual positive sign according to the true value for rewlos 
+#    (which would then make the only true 0 rewlos/sign outcome the pass outcome)  
+
+
+# NOTE: 
+# pass >> SIGT$winlose1 = NA 
+# play, but neutral outcome >> SIGT$winlose1 == "No change"
+
+
+
+
+# just for curioity, also adding the IGT model to the comparison
+loo_compare(loo_IGT, loo_SIGT_v1, loo_SIGT_v2, loo_SIGT_v3)
+
+# elpd_diff se_diff
+# model2    0.0       0.0 
+# model3  -31.4       5.9 
+# model4  -70.0      14.6 
+# model1 -576.8     273.1 
 
 
 
@@ -164,9 +232,6 @@ Fit_sep_mu_K <- mean(pars$mu_K)  # 0.06413485
 Fit_sep_mu_betaF <- mean(pars$mu_betaF)  # 0.6253355
 Fit_sep_mu_betaP <- mean(pars$mu_betaP)  # 0.6657244
 
-
-#save the pars dataset
-write.csv(IGT_PP_sep_sess1, here("Data", "2_Fitted", "IGT_PP_sep_sess1_IndPars.csv"))
 
 
 
