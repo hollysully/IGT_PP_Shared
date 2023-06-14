@@ -18,7 +18,7 @@ parameters {
 model {
   // PRIORS
   // Hyperpriors
-  kappa ~ gamma(2,.1);
+  kappa ~ gamma(2,.05);
   omega ~ beta(1,1);
   
   // Lower-level priors

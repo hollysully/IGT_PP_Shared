@@ -48,7 +48,7 @@ scales = c(# Session 1 only
 ## Simulate Priors
 ```{r}
 set.seed(20230607)
-sim_kappa = rgamma(16000, shape = 2, rate = .1)
+sim_kappa = rgamma(16000, shape = 2, rate = .05)
 hist(sim_kappa, breaks = 50)
 abline(v = mean(sim_kappa), col = "red")
 
@@ -65,18 +65,20 @@ abline(v = mean(sim_omega), col = "red")
 
 
 ## Fitting
-```{r, eval = F}
+```{r, eval = T}
 stan_model = stan_model(here("1_IGT_PP", "Code", "Stan", "binomial_selfreport_indMu.stan"))
 
 models = list()
 
 for(scale in scales){
+  print(paste("Begin fitting model for", scale))
   models[[scale]] =
     sampling(stan_model,
              data = selfreport[[scale]],
              iter = 5000, warmup = 1000,
              chains = 8, cores = 8,
              seed = 20230601)
+  print(paste("End fitting model for", scale))
 }
 saveRDS(models, here("1_IGT_PP", "Data", "2_Fitted", "binomial_selfreport_indMu_fits.RDS"))
 ```

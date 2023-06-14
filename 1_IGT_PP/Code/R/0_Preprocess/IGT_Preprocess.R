@@ -104,7 +104,8 @@ AB <- mutate(AB, stim = recode(cardname, 'A'= 1, 'B' = 2, 'C' = 3, 'D' = 4), tim
 
 
 BD$cardname
-BD <- mutate(BD, stim = recode(cardname, 'A'= 3, 'B' = 1, 'C' = 4, 'D' = 2), time = SessionDate)
+# BD <- mutate(BD, stim = recode(cardname, 'A'= 3, 'B' = 1, 'C' = 4, 'D' = 2), time = SessionDate)
+BD <- mutate(BD, stim = recode(cardname, 'A'= 1, 'B' = 2, 'C' = 3, 'D' = 4), time = SessionDate)
 
 
 
@@ -267,10 +268,10 @@ unique(Sess2_IGT$ExperimentName)
 # Save IGT dataframes as .csv files
 ############################################################################################################
 
-Sess1_IGT_dat = here("Data", "1_Preprocessed", "Sess1_IGT.csv")
+Sess1_IGT_dat = here("1_IGT_PP", "Data", "1_Preprocessed", "Sess1_IGT.csv")
 write.csv(Sess1_IGT,Sess1_IGT_dat)
 
-Sess2_IGT_dat = here("Data", "1_Preprocessed", "Sess2_IGT.csv")
+Sess2_IGT_dat = here("1_IGT_PP", "Data", "1_Preprocessed", "Sess2_IGT.csv")
 write.csv(Sess2_IGT,Sess2_IGT_dat)
 
 
@@ -337,7 +338,7 @@ for (session in 1:2) {
   )
   
   # save Sess 1 or 2 lists as .rds
-  saveRDS(dataList, file = here("Data", "1_Preprocessed", paste0("Sess", session, ".rds")))
+  saveRDS(dataList, file = here("1_IGT_PP", "Data", "1_Preprocessed", paste0("Sess", session, ".rds")))
 }
 
 # I'm here, this is old code for preprocessing the raw data for running a joint ORL model
@@ -412,5 +413,5 @@ stan_dat <- list(
   subjIDs = subjList 
 )     
 
-saveRDS(stan_dat, file = here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_IGT_ORL.rds"))
+saveRDS(stan_dat, file = here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
 

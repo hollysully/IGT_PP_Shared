@@ -25,7 +25,6 @@ library(miscTools)
 ## Load Data
 ```{r}
 stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
-full_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Dataframe_Sess1&2.rds"))
 ```
 
 

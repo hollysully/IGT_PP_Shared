@@ -182,6 +182,7 @@ generated quantities {
   vector<lower=0,upper=5>[2] mu_K;
   vector[2] mu_betaF;
   vector[2] mu_betaP;
+  real log_lik[N];
   
   // For posterior predictive check
   real choice_pred[N,T,S];
@@ -224,6 +225,8 @@ generated quantities {
     real K_tr;
   
     for (i in 1:N) {        
+      log_lik[i] = 0;        // Initialize log_lik
+      
       for (s in 1:S) {      
         if (Tsubj[i,s] > 0) {
           
@@ -237,6 +240,9 @@ generated quantities {
           }
           
           for (t in 1:Tsubj[i,s]) {
+            // softmax choice
+            log_lik[i] += categorical_logit_lpmf(choice[i,t,s]|to_vector(utility[card[i,t,s], :]));
+            
             // generate choice as a function of utility
             choice_pred[i,t,s] = categorical_rng(softmax(to_vector(utility[card[i,t,s], :])));
             
