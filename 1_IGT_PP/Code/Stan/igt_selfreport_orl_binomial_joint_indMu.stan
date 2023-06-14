@@ -39,8 +39,13 @@ functions {
     matrix[N,M] Sigma = quad_form_diag(R, sigma);
     matrix[n_samples, M] X_sim;
     for (i in 1:n_samples) {
-      X_sim[i,] = Phi_approx(multi_normal_rng(mu, Sigma)');
+      X_sim[i,] = multi_normal_rng(mu, Sigma)';
     }
+    // apply transformation as needed
+    X_sim[,1] = Phi_approx(X_sim[,1]);
+    X_sim[,2] = Phi_approx(X_sim[,2]);
+    X_sim[,3] = Phi_approx(X_sim[,3]);
+    X_sim[,6] = Phi_approx(X_sim[,6]);
     return empirical_correlation(X_sim);
   }
 }
