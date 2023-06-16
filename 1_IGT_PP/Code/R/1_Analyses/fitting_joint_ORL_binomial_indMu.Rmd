@@ -67,14 +67,16 @@ for(scale in scales){
   
   
   #save the fitted model as an .rds file
-  saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", paste("igt_", scale, "_orl_binomial_joint_indMu.rds", sep = "")))
+  saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                        paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
 }
 ```
 
 
 
 ```{r}
-orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "igt_selfreport_orl_binomial_joint_indMu.rds"))
+orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                        paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -84,18 +86,24 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-orl_posteriors <- extract(orl_fit)
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+#                              paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                              paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
 
 focal_parameters <- c(
+  # group-level parameters
   "mu_Arew", "mu_Apun", "mu_K",
-  "mu_betaF", "mu_betaP", 
-  "sigma_Arew", "sigma_Apun", "sigma_K",
-  "sigma_betaF", "sigma_betaP", 
+  "mu_betaF", "mu_betaP", "mu_theta",
+  "sigma", "R",
+  # person-level parameters
   "Arew", "Apun",
-  "K", "betaF", "betaP"
+  "K", "betaF", "betaP",
+  "theta"
 )
 
-group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+group_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE)
 person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 ```
 
@@ -103,20 +111,21 @@ person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 
 ## Rhat
 ```{r}
-rhats <- rhat(
-  orl_fit,
-  # pars = focal_parameters
-) %>% 
-  as.data.frame() %>%
-  mutate(parameter = rownames(.))
+# rhats = rhat(orl_fit, pars = focal_parameters) %>%
+#   data.frame() %>% mutate(parameter = rownames(.))
+
+# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+#                     paste("igt_", scale, "_orl_binomial_joint_indMu_rhats.rds", sep = "")))
+rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                     paste("igt_", scale, "_orl_binomial_joint_indMu_rhats.rds", sep = "")))
 ```
 
 
 
 ## Traceplots
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
-          "orl_pp_binomial_joint_indMu_group_traceplots.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial", scale,
+          paste("igt_", scale, "_orl_binomial_joint_indMu_group_traceplots.tiff", sep = "")),
      width = 35, height = 25, units = "cm", res = 300)
   traceplot(
     orl_fit,
@@ -124,17 +133,15 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
 )
 dev.off()
 
-labels <- person_parameters
 
-for(i in labels){
-  tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
-            paste("orl_pp_binomial_joint_indMu_", i, "_traceplots.tiff", sep = "")),
+for(i in person_parameters){
+  tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial", scale,
+            paste("igt_", scale, "_orl_binomial_joint_indMu_", i, "_traceplots.tiff", sep = "")),
        width = 35, height = 25, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
               ) %>% print()
     dev.off()
-  
 }
 ```
 
@@ -144,8 +151,8 @@ for(i in labels){
 # Inspect Parameters
 ## Means +/- PI
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
-          "orl_pp_binomial_joint_indMu_posterior_means.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial", scale, 
+          paste("igt_", scale, "_orl_binomial_joint_indMu_posterior_means.tiff", sep = "")),
      width = 35, height = 25, units = "cm", res = 300)
   plot(orl_fit, pars = group_parameters)
 dev.off()
@@ -155,111 +162,35 @@ dev.off()
 
 ## Posterior Distributions
 ```{r}
-# Extract posterior distributions
-orl_parameters <- rstan::extract(orl_fit, pars = group_parameters) %>%
-  data.frame()
-
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
-          "orl_pp_binomial_joint_indMu_posterior_distributions.tiff"),
+labs = c("Arew", "Apun", "K", "betaF", "betaP", "theta")
+R_labs = matrix(nrow = 6, ncol = 6)
+for(i in 1:6){
+  for(k in seq(1, 6)){
+    R_labs[k,i] = paste(labs[i], " vs ", labs[k], sep = "")
+  }
+}
+tiff(here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial", scale,
+          paste("igt_", scale, "_orl_binomial_joint_indMu_posterior_distributions.tiff", sep = "")),
      width = 35, height = 25, units = "cm", res = 300)
-  par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
-  # Make a density plot of the posterior distributions for the focal parameters using a for loop
-  for(i in colnames(orl_parameters)){
-    plot(density(orl_parameters[ , i]), main = i)
-    abline(v = mean(orl_parameters[ , i]))
+  par(mfrow = c(4, 7))
+  for(i in grep("mu", group_parameters, value = T)){
+      plot(density(orl_posteriors[[i]]), main = i)
+      abline(v = mean(orl_posteriors[[i]]))
+  }
+  for(i in 1:6){
+      plot(density(orl_posteriors[["sigma"]][,i]), main = "sigma")
+      abline(v = mean(orl_posteriors[["sigma"]][,i]))
+  }
+  for(i in 1:5){
+    for(k in seq(i+1, 6)){
+      plot(density(orl_posteriors[["R"]][,k,i]),
+           main = paste(R_labs[k,i], "\nR = ", round(mean(orl_posteriors[["R"]][,k,i]), 2), sep = ""))
+      abline(v = mean(orl_posteriors[["R"]][,k,i]))
+    }
   }
 dev.off()
 ```
 
-
-
-# -------------------------------------------
-# Results
-## Self-Report Correlations
-```{r}
-selfreport_models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "self_report_models.RDS"))
-selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_selfreport.rds"))
-```
-
-
-
-```{r}
-scales = c(# Session 1 only
-           "prdep_tot", "masqGDA", "masqAA", "masqGDD",
-           # "masqAD", # Removed
-           # Both Sessions
-           "bastot", "basdrive", "basfunsk", "basrewres",
-           "bis", "panas_pa", "panas_na", "shaps_tot")
-
-
-selfreport_posteriors = list()
-sr_posterior_means = list()
-
-for(scale in scales){
-  selfreport_posteriors[[scale]] = extract(selfreport_models[[scale]], par = "theta")
-  sr_posterior_means[[scale]] = apply(selfreport_posteriors[[scale]]$theta*selfreport[[scale]]$M, 2, mean)
-}
-
-orl_posterior_means = list()
-
-for(parameter in person_parameters){
-  orl_posterior_means[[parameter]] = apply(orl_posteriors[[parameter]], 2, mean)
-}
-```
-
-
-
-```{r}
-for(parameter in person_parameters){
-  for(scale in scales){
-    print(paste(parameter, " vs ", scale, ": r = ",
-                round(cor(orl_posterior_means[[parameter]], sr_posterior_means[[scale]]), 2),
-                sep = ""))
-  }
-}
-```
-
-
-
-## Relations to Behavior
-```{r}
-choice = ifelse(stan_data$choice == 1, 1, ifelse(stan_data$choice == 2, 0, NA))
-
-card_proportions = matrix(data = NA, nrow = 49, ncol = 4)
-good_proportions = vector()
-
-for(i in 1:49){
-  good_proportions[i] = mean(choice[i,,][stan_data$card[i,,] == 3 | stan_data$card[i,,] == 4])
-  for(c in 1:4){
-    card_proportions[i,c] = mean(choice[i,,][stan_data$card[i,,] == c])
-  }
-}
-```
-
-
-
-```{r}
-for(parameter in person_parameters){
-  for(c in 1:4){
-    card = ifelse(c == 1, "Super bad",
-                  ifelse(c == 2, "Kinda bad",
-                         ifelse(c == 3, "Kinda good", "Super good")))
-    print(paste(parameter, " vs card", c, ": r = ",
-                round(cor(orl_posterior_means[[parameter]], card_proportions[,c]), 2),
-                sep = ""))
-  }
-}
-```
-
-
-
-```{r}
-for(parameter in person_parameters){
-    print(paste(parameter, " vs card", c, ": r = ",
-                round(cor(orl_posterior_means[[parameter]], good_proportions), 2),
-                sep = ""))
-}
-```
 
 
 # -------------------------------------------

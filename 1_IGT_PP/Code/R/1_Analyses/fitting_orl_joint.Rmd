@@ -40,20 +40,22 @@ orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint.stan"))
 orl_fit = sampling(orl_model, 
                    data   = stan_data, 
                    iter   = 5000, 
-                   warmup = 1000,
+                   warmup = 1000, 
                    chains = 4, 
                    cores  = 4,
                    seed   = 43210)
 
 
 #save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_fit.rds"))
 ```
 
 
 
 ```{r}
-orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_fit.rds"))
+
+iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
 
 
@@ -61,27 +63,56 @@ orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fi
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-focal_parameters = c("mu_p",
-                     "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP",
-                     "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]")
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_posteriors.rds"))
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_posteriors.rds"))
+
+
+focal_parameters <- c(
+  "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
+  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun", "K", "betaF", "betaP",
+  "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]"
+)
+
+group_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TRUE)
 ```
 
 
 
 ## Rhat
-```{r}
-rhats = rhat(orl_fit, pars = focal_parameters) %>% 
-  data.frame() %>% mutate(parameter = rownames(.))
+```{r, eval = F}
+# rhats = rhat(orl_fit, pars = focal_parameters) %>% 
+#   data.frame() %>% mutate(parameter = rownames(.))
+
+# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_rhats.rds"))
+rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_rhats.rds"))
 ```
 
 
 
 ## Traceplots
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "orl_pp_joint_trace_plots.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint",
+          "orl_pp_joint_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
-  traceplot(orl_fit, pars = focal_parameters)
+  traceplot(
+    orl_fit,
+    pars = group_parameters
+)
 dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint",
+            paste("orl_pp_joint_", i, "_traceplots.tiff", sep = "")),
+       width = 35, height = 25, units = "cm", res = 300)
+    traceplot(orl_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+}
 ```
 
 
@@ -90,9 +121,10 @@ dev.off()
 # Inspect Parameters
 ## Means +/- PI
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "orl_pp_joint_posterior_means.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint",
+          "orl_pp_joint_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
-  plot(orl_fit, pars = focal_parameters)
+  plot(orl_fit, pars = group_parameters)
 dev.off()
 ```
 
@@ -100,103 +132,173 @@ dev.off()
 
 ## Posterior Distributions
 ```{r}
-# Extract posterior distributions
-parameters = rstan::extract(orl_fit, pars = focal_parameters) %>% data.frame()
-
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "orl_pp_joint_posterior_distributions.tiff"),
-     width = 35, height = 25, units = "cm", res = 300)
-  par(mfrow = c(5, 5)) # Create 5 x 5 facetted plot
-  # Make a density plot of the posterior distributions for the focal parameters using a for loop
-  for(i in colnames(parameters)){
-    plot(density(parameters[ , i]), main = i)
-    abline(v = mean(parameters[ , i]))
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "orl_pp_joint_posterior_distributions.tiff"),
+     width = 30, height = 20, units = "cm", res = 300)
+  par(mfrow = c(5, 5))
+  # Mus & Sigmas
+  for(s in 1:2){
+    for(i in grep("mu|sigma", group_parameters, value = T)){
+      plot(density(orl_posteriors[[i]][,s]), main = paste(i, s))
+      abline(v = mean(orl_posteriors[[i]][,s]))
+    }
+  }
+  
+  for(i in grep("R_", group_parameters, value = T)){
+    plot(density(orl_posteriors[[str_remove(i, "\\[1,2\\]")]][,2,1]), main = i)
+    abline(v = mean(orl_posteriors[[i]][,2,1]))
   }
 dev.off()
 ```
 
 
 
-## Save Parameter Estimates
+# -------------------------------------------
+# Results
+## Self-Report Correlations
 ```{r}
-# Extract posterior samples for each parameter
-posterior = rstan::extract(orl_fit) %>% data.frame()
-
-# Get point estimates from the posterior for each parameter
-posterior_means = data.frame(estimate = colMeans(posterior)) %>% # Means
-# posterior_means = data.frame(estimate = colMedians(posterior)) %>% # Medians
-  mutate(col_name = rownames(.))
-
-
-# Bind posterior means for group mus
-  # Create dataframe with names of parameters of interest
-mus = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
-  # Create a column of sessions wherein there is a 1 & 2 for each parameter
-  group_by(parameter) %>% 
-  reframe(session = c(1, 2)) %>%
-  # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste("mu_", parameter, ".", session, sep = "")) %>%
-  # Join only the posterior means that have a matching row name in col_name, then remove col_name
-  left_join(posterior_means) %>% select(-col_name)
-
-
-
-ind_columns = full_data %>% 
-  # Create dataframe with original and ranked subject IDs
-  reframe(subject = unique(subject),
-          ID = unique(ID)) %>% 
-  # Create a column for parameter names containing the elements in reframe for each original and ranked subject ID
-  group_by(subject, ID) %>% 
-  reframe(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>%
-  # Create a column of sessions wherein there is a 1 & 2 for each parameter, and subject ID
-  group_by(subject, ID, parameter) %>% 
-  reframe(session = c(1, 2)) %>% 
-  # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste(parameter, ".", ID, ".", session, sep = ""))
-
-
-# Calculate overall BLUP for each participant
-posterior_blups = posterior %>% 
-  # Use the values of col_name in ind_columns to select columns in posterior dataframe
-  select(ind_columns$col_name) %>% 
-  # Create a column with iteration number for each parameter
-  mutate(iteration = rownames(.)) %>% 
-  # Pivot data longer so that it's easier to separate what is the parameter, subject, and session from the posterior columns
-  pivot_longer(cols = -iteration, names_to = "param_ID_sess", values_to = "estimate") %>% 
-  separate(col = param_ID_sess, into = c("parameter", "ID", "session"), sep = "\\.") %>%
-  # Pivot wider so that we can calculate the mean of session 1 and session 2 estimate on each iteration of the posterior
-  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>%
-  mutate(overall_estimate = (session_1 + session_2)/2,
-         ID = as.numeric(ID))
-
-blups = posterior_blups %>% 
-  # Calculate posterior means for individual subjects by session and overall
-  group_by(parameter, ID) %>% 
-  reframe(blup_session1 = mean(session_1),
-          blup_session2 = mean(session_2),
-          blup_overall = mean(overall_estimate)) %>% 
-  left_join(reframe(full_data, subject = unique(subject), ID = unique(ID)))
-
-
-# Bind posterior means for correlations
-  # Note, these are not population-corrected - We do this in joint_test_retest_plots.Rmd
-  # Create dataframe with names of correlations of interest
-correlations = data.frame(parameter = c("Arew", "Apun", "K", "betaF", "betaP")) %>% 
-  # Make a new column that has elements we can match to in the posterior_means dataframe
-  mutate(col_name = paste("R_", parameter, ".2.1", sep = "")) %>% 
-  # Join only the posterior means that have a matching row name in col_name, then remove col_name
-  left_join(posterior_means) %>% select(-col_name)
-
-
-# Save data
-write.csv(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_mus.csv"))
-write.csv(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.csv"))
-write.csv(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.csv"))
-
-saveRDS(mus, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_mus.rds"))
-saveRDS(blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_blups.rds"))
-saveRDS(posterior_blups, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_posterior_blups.rds"))
-saveRDS(correlations, here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_model_correlations.rds"))
+selfreport_models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "binomial_selfreport_indMu_fits.rds"))
+selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_selfreport.rds"))
 ```
+
+
+
+```{r}
+# Check that orl and self-report IDs are in same order between data fed to models
+for(scale in names(selfreport)){
+  data.frame(orl_IDs = stan_data$subjIDs,
+             selfreport_IDs = as.numeric(selfreport[[scale]]$IDs)) %>% 
+    mutate(not_equal = ifelse(orl_IDs == selfreport_IDs, 0, 1)) %>% 
+    reframe(ID_Check = ifelse(sum(not_equal) == 0, "EQUAL", "NOT EQUAL")) %>% 
+    print()
+}
+```
+
+
+
+```{r}
+scales = c(# Session 1 only
+           "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+           # "masqAD", # Removed
+           # Both Sessions
+           "bastot", "basdrive", "basfunsk", "basrewres",
+           "bis", "panas_pa", "panas_na", "shaps_tot")
+
+
+selfreport_posteriors = list()
+sr_posterior_means = list()
+
+for(scale in scales){
+  selfreport_posteriors[[scale]] = extract(selfreport_models[[scale]], par = "theta")
+  sr_posterior_means[[scale]] = apply(selfreport_posteriors[[scale]]$theta*selfreport[[scale]]$M, 2, mean)
+}
+
+orl_posterior_means = list()
+
+for(parameter in person_parameters){
+  orl_posterior_means[[parameter]] = apply(orl_posteriors[[parameter]], 2, mean)
+}
+```
+
+
+
+```{r}
+for(parameter in person_parameters){
+  for(scale in scales){
+    print(paste(parameter, " vs ", scale, ": r = ",
+                round(cor(orl_posterior_means[[parameter]], sr_posterior_means[[scale]]), 2),
+                sep = ""))
+  }
+}
+```
+
+
+
+## Relations to Behavior
+### Calculate Choice Proportions
+```{r}
+orl_posterior_means = list()
+
+for(parameter in person_parameters){
+  orl_posterior_means[[parameter]] = apply(orl_posteriors[[parameter]], c(2,3), mean)
+}
+
+choice = ifelse(stan_data$choice == 1, 1, ifelse(stan_data$choice == 2, 0, NA))
+
+card_proportions = array(data = NA, dim = c(49, 4, 2))
+good_proportions = matrix(data = NA, nrow = 49, ncol = 2)
+
+for(i in 1:49){
+  for(s in 1:2){
+    good_proportions[i,s] = mean(choice[i,,s][stan_data$card[i,,s] == 3 | stan_data$card[i,,s] == 4], na.rm = T)
+    for(c in 1:4){
+      card_proportions[i,c,s] = mean(choice[i,,s][stan_data$card[i,,s] == c], na.rm = T)
+    }
+  }
+}
+```
+
+
+
+### Correlations w/Card Proportions
+```{r}
+for(s in 1:2){
+  print(paste("Session", s))
+  for(parameter in person_parameters){
+    print(paste(" ", parameter))
+    for(c in 1:4){
+      card = ifelse(c == 1, "    Net = -750, Win Freq = 15, Lose Freq = 15",
+                    ifelse(c == 2, "    Net = -750, Win Freq = 27, Lose Freq = 3",
+                           ifelse(c == 3, "    Net = +600, Win Freq = 15, Lose Freq = 6",
+                                  "    Net = +750, Win Freq = 27, Lose Freq = 3")))
+      print(paste(card, ": r = ",
+                  round(cor(orl_posterior_means[[parameter]][,s], card_proportions[,c,s],
+                            use = "pairwise.complete.obs"), 2),
+                  sep = ""))
+    }
+  }
+}
+```
+
+
+
+### Correlations w/Good Proportions
+```{r}
+for(s in 1:2){
+  print(paste("Session", s))
+  for(parameter in person_parameters){
+      print(paste("  ", parameter, " vs Proportion Good Cards: r = ",
+                  round(cor(orl_posterior_means[[parameter]][,s], good_proportions[,s],
+                            use = "pairwise.complete.obs"), 2),
+                  sep = ""))
+  }
+}
+```
+
+
+
+### Correlations w/Net Gain
+```{r}
+net_gains = apply(stan_data$outcome, c(1,3), sum)
+
+for(s in 1:2){
+  print(paste("Session", s))
+  for(parameter in person_parameters){
+      print(paste("  ", parameter, " vs Net Gain: r = ",
+                  round(cor(orl_posterior_means[[parameter]][,s], net_gains[,s],
+                            use = "pairwise.complete.obs"), 2),
+                  sep = ""))
+  }
+}
+print("Change in Gain")
+for(parameter in person_parameters){
+    print(paste("  ", parameter, " vs Delta Net Gain: r = ",
+                round(cor(apply(orl_posteriors[[parameter]], 2, mean), (net_gains[,2]-net_gains[,1]),
+                          use = "pairwise.complete.obs"), 2),
+                sep = ""))
+}
+```
+
+
 
 # -------------------------------------------
 

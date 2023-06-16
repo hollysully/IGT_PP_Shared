@@ -28,7 +28,7 @@ fit_sep <- sampling(orl_pp_sep1,
                     data   = stan_dat, 
                     iter   = 5000, 
                     warmup = 1000,
-                    chains = 6, 
+                    chains = 4, 
                     cores  = 4,
                     seed   = 43210)
 
@@ -36,7 +36,7 @@ fit_sep <- sampling(orl_pp_sep1,
 
 
 #save the fitted model as an .rds file
-filename <- here("1_IGT_PP", "Data", "2_Fitted", "orl_pp_sess1.rds")
+filename <- here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "orl_pp_sess1.rds")
 saveRDS(fit_sep, filename)
 
 # to read the .rds file back into R later, you do:
@@ -75,7 +75,7 @@ Fit_sep_sess1_mu_betaP <- mean(pars$mu_betaP)  # 0.6657244
 
 
 #save the pars dataset
-write.csv(IGT_PP_sep_sess1, here("1_IGT_PP", "Data", "2_Fitted", "IGT_PP_sep_sess1_IndPars.csv"))
+write.csv(IGT_PP_sep_sess1, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "IGT_PP_sep_sess1_IndPars.csv"))
 
 
 
@@ -104,7 +104,7 @@ fit_sep <- sampling(orl_pp_sep2,
                     data   = stan_dat, 
                     iter   = 5000, 
                     warmup = 1000,
-                    chains = 6, 
+                    chains = 4, 
                     cores  = 4,
                     seed   = 43210)
 
@@ -112,7 +112,7 @@ fit_sep <- sampling(orl_pp_sep2,
 
 
 #save the fitted model as an .rds file
-filename = here("1_IGT_PP", "Data", "2_Fitted", "orl_pp_sess2.rds")
+filename = here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "orl_pp_sess2.rds")
 saveRDS(fit_sep, filename)
 
 # to read the .rds file back into R later, you do:
@@ -152,6 +152,6 @@ Fit_sep_sess2_mu_betaP = mean(pars$mu_betaP)  # 1.110543
 
 
 #save the pars dataset
-write.csv(IGT_PP_sep_sess2,here("1_IGT_PP", "Data", "2_Fitted", "IGT_PP_sep_sess2_IndPars.csv"))
+write.csv(IGT_PP_sep_sess2,here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "IGT_PP_sep_sess2_IndPars.csv"))
 
 

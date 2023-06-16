@@ -1,0 +1,60 @@
+---
+title: "Model-Comparison"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(loo)
+```
+
+
+
+# -------------------------------------------
+# Load Models
+```{r}
+joint = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_fit.rds"))
+indMu = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_indMu", "orl_pp_indMu_fit.rds"))
+```
+
+
+
+```{r}
+printFit(joint, indMu)
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

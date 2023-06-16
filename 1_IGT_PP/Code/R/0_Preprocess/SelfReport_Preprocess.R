@@ -115,12 +115,14 @@ full_data = both_sessions %>%
 
 
 # Create lists to store data in for each scale
+participants = list()
 scores = list()
 missingness = list()
 maxes = list()
 
 for(l in 1:length(scales$scale)){
   # Create matrices for the current scale in each list
+  participants[[scales$scale[l]]] = matrix(-999, nrow = N, ncol = scales$n_sessions[l])
   scores[[scales$scale[l]]] = matrix(data = -999, nrow = N, ncol = scales$n_sessions[l])
   missingness[[scales$scale[l]]] = matrix(data = 1, nrow = N, ncol = scales$n_sessions[l])
   
@@ -133,6 +135,7 @@ for(l in 1:length(scales$scale)){
     
     for(i in 1:N){
       cur_obs = filter(cur_session, ID == IDs[i]) # Subset score from person of interest
+      participants[[scales$scale[l]]][i,s] = IDs[i]
       
       if(length(cur_obs$scaled_score)){ # Check if data is missing, if not, then get data
         scores[[scales$scale[l]]][i,s] = cur_obs$scaled_score # Save score in element of matrix within the scale's score matrix
@@ -146,7 +149,8 @@ for(l in 1:length(scales$scale)){
 stan_datas = list()
 
 for(scale in unique(scales$scale)){
-  stan_datas[[scale]] = list(N = nrow(scores[[scale]]),       # Number of participants for current scale
+  stan_datas[[scale]] = list(IDs = participants[[scale]],
+                             N = nrow(scores[[scale]]),       # Number of participants for current scale
                              S = ncol(scores[[scale]]),       # Number of sessions for current scale
                              missing = missingness[[scale]],  # Matrix of missingness for current scale
                              score = scores[[scale]],         # Matrix of scores for current scale
