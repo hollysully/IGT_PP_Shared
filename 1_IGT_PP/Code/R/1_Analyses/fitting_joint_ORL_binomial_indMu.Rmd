@@ -32,11 +32,29 @@ selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_bino
 
 
 
-## Specify Scale
+## Prep Stan Data
 ```{r}
-# finished = "prdep_tot", "masqGDA", "masqAA"
-scale = "masqGDD" # "masqAD", "bastot", "basdrive", "basfunsk",
+# SPECIFY SCALE
+# finished = "prdep_tot", "masqGDA", "masqAA", "masqGDD"
+scale = "masqAD" # "bastot", "basdrive", "basfunsk",
         # "basrewres", "bis", "panas_pa", "panas_na", "shaps_tot"
+
+# Change name of ID variable to make it more clear for checking order of IDs in next chunk
+names(igt_data)[names(igt_data) == "subjIDs"] <- "igt_IDs"
+
+stan_data = igt_data
+stan_data$SR_sess = selfreport[[scale]]$S
+stan_data$missing = selfreport[[scale]]$missing
+stan_data$score = selfreport[[scale]]$score
+stan_data$M = selfreport[[scale]]$M
+stan_data$sr_IDs = selfreport[[scale]]$IDs
+```
+
+
+
+```{r}
+# Check that orl and self-report IDs are in same order between data fed to models
+ifelse(mean(stan_data$igt_IDs == stan_data$sr_IDs) == 1, "EQUAL", "NOT EQUAL")
 ```
 
 
@@ -45,12 +63,6 @@ scale = "masqGDD" # "masqAD", "bastot", "basdrive", "basfunsk",
 # Fit Model
 ```{r, eval = T}
 orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_selfreport_orl_binomial_joint_indMu.stan"))
-  
-stan_data = igt_data
-stan_data$SR_sess = selfreport[[scale]]$S
-stan_data$missing = selfreport[[scale]]$missing
-stan_data$score = selfreport[[scale]]$score
-stan_data$M = selfreport[[scale]]$M
 
 # Fit model
 orl_fit <- sampling(

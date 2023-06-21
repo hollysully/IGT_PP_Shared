@@ -379,7 +379,8 @@ maxTrials <- max(Tsubj)
 # Behavioral data arrays
 # this creates 3 identical arrays of [1:50, 1:100, 1:2]; the array is filled with -1 values
 # array names are RLmatrix, SRLmatrix, choice
-RLmatrix <- SRLmatrix <- choice <- card <- array(-1, c(numSubjs, maxTrials,2))
+RLmatrix <- SRLmatrix <- choice <- card <- IDs <- array(-1, c(numSubjs, maxTrials,2))
+
 
 # Loop through and format into 3 arrays: choice, RLmatrix, SRLmatrix
 for (i in 1:numSubjs) {
@@ -393,11 +394,14 @@ for (i in 1:numSubjs) {
       card[i,,s] <- tmp_dat$stim
       RLmatrix[i,,s]  <- tmp_dat$rewlos
       SRLmatrix[i,,s] <- tmp_dat$Srewlos
+      IDs[i,,s] <- tmp_dat$Subject
     }
   }
 }
 
-
+# Check that how the for loop above loops through the subject IDs is in the same order as subjList
+(condensedIDs = apply(IDs, c(1,3), mean)) # Visually check they are the same (-1 means missing data on that session)
+ifelse(mean(condensedIDs[,1] == subjList) == 1, "Equal", "Not Equal") # Check if IDs in for loop equal IDs in subjList
 
 # Put in stan-ready list
 stan_dat <- list(
