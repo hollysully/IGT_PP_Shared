@@ -32,51 +32,48 @@ selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_bino
 
 
 
+## Specify Scale
+```{r}
+# finished = "prdep_tot", "masqGDA", "masqAA"
+scale = "masqGDD" # "masqAD", "bastot", "basdrive", "basfunsk",
+        # "basrewres", "bis", "panas_pa", "panas_na", "shaps_tot"
+```
+
+
+
 # -------------------------------------------
 # Fit Model
-```{r, eval = F}
+```{r, eval = T}
 orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_selfreport_orl_binomial_joint_indMu.stan"))
+  
+stan_data = igt_data
+stan_data$SR_sess = selfreport[[scale]]$S
+stan_data$missing = selfreport[[scale]]$missing
+stan_data$score = selfreport[[scale]]$score
+stan_data$M = selfreport[[scale]]$M
 
-scales = "prdep_tot" # For testing
-# scales = c(# Session 1 only
-#            "prdep_tot", "masqGDA", "masqAA", "masqGDD",
-#            # "masqAD", # Removed
-#            # Both Sessions
-#            "bastot", "basdrive", "basfunsk", "basrewres",
-#            "bis", "panas_pa", "panas_na", "shaps_tot")
+# Fit model
+orl_fit <- sampling(
+  orl_model, 
+  data = stan_data,
+  iter = 5000,
+  warmup = 1000,
+  chains = 4,
+  cores = 4,
+  seed = 43210
+)
 
-for(scale in scales){
-  
-  stan_data = igt_data
-  stan_data$SR_sess = selfreport[[scale]]$S
-  stan_data$missing = selfreport[[scale]]$missing
-  stan_data$score = selfreport[[scale]]$score
-  stan_data$M = selfreport[[scale]]$M
-  
-  # Fit model
-  orl_fit <- sampling(
-    orl_model, 
-    data = stan_data,
-    iter = 5000,
-    warmup = 1000,
-    chains = 4,
-    cores = 4,
-    seed = 43210
-  )
-  
-  
-  
-  #save the fitted model as an .rds file
-  saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
-                        paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
-}
+
+
+#save the fitted model as an .rds file
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                      paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
 ```
 
 
 
 ```{r}
-orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
-                        paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
+orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial", paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -86,9 +83,9 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-# orl_posteriors <- extract(orl_fit)
-# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
-#                              paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
+orl_posteriors <- extract(orl_fit)
+saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                             paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
 orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
                               paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
 
@@ -111,11 +108,11 @@ person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 
 ## Rhat
 ```{r}
-# rhats = rhat(orl_fit, pars = focal_parameters) %>%
-#   data.frame() %>% mutate(parameter = rownames(.))
+rhats = rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
 
-# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
-#                     paste("igt_", scale, "_orl_binomial_joint_indMu_rhats.rds", sep = "")))
+saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                    paste("igt_", scale, "_orl_binomial_joint_indMu_rhats.rds", sep = "")))
 rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
                      paste("igt_", scale, "_orl_binomial_joint_indMu_rhats.rds", sep = "")))
 ```
