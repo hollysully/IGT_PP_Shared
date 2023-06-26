@@ -401,7 +401,7 @@ for (i in 1:numSubjs) {
 
 # Check that how the for loop above loops through the subject IDs is in the same order as subjList
 (condensedIDs = apply(IDs, c(1,3), mean)) # Visually check they are the same (-1 means missing data on that session)
-ifelse(mean(condensedIDs[,1] == subjList) == 1, "Equal", "Not Equal") # Check if IDs in for loop equal IDs in subjList
+ifelse(all(stan_data$igt_IDs == stan_data$sr_IDs), "Equal", "Not Equal") # Check if IDs in for loop equal IDs in subjList
 
 # Put in stan-ready list
 stan_dat <- list(
