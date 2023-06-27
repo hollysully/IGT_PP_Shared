@@ -35,9 +35,12 @@ selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_bino
 ## Prep Stan Data
 ```{r}
 # SPECIFY SCALE
-# finished = "prdep_tot", "masqGDA", "masqAA", "masqGDD"
-scale = "masqAD" # "bastot", "basdrive", "basfunsk",
-        # "basrewres", "bis", "panas_pa", "panas_na", "shaps_tot"
+# finished = "prdep_tot", "masqGDA", "masqAA", "masqGDD", "bastot", "basdrive"
+#            "basrewres","panas_pa", "panas_na", "shaps_tot"
+
+#            "bis" There was a problem with this one
+#            "masqAD" was removed
+scale = "basfunsk" # There was a problem with this one
 
 # Change name of ID variable to make it more clear for checking order of IDs in next chunk
 names(igt_data)[names(igt_data) == "subjIDs"] <- "igt_IDs"
@@ -61,7 +64,7 @@ ifelse(mean(stan_data$igt_IDs == stan_data$sr_IDs) == 1, "EQUAL", "NOT EQUAL")
 
 # -------------------------------------------
 # Fit Model
-```{r, eval = T}
+```{r, eval = F}
 orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_selfreport_orl_binomial_joint_indMu.stan"))
 
 # Fit model
@@ -85,7 +88,8 @@ saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
 
 
 ```{r}
-orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial", paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
+orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                        paste("igt_", scale, "_orl_binomial_joint_indMu_fit.rds", sep = "")))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -95,9 +99,9 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-orl_posteriors <- extract(orl_fit)
-saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
-                             paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+#                              paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
 orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
                               paste("igt_", scale, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
 
@@ -203,8 +207,49 @@ dev.off()
 
 
 # -------------------------------------------
+# Correlation Table
+```{r}
+scales = c("prdep_tot", "masqGDA", "masqAA", "masqGDD", "bastot", "basdrive",
+           "basrewres","panas_pa", "panas_na", "shaps_tot",
+           "bis", "basfunsk")
+
+correlations = data.frame()
+for(sc in scales){
+  
+  posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Binomial",
+                            paste("igt_", sc, "_orl_binomial_joint_indMu_posteriors.rds", sep = "")))
+  
+  for(i in 1:5){
+    for(k in seq(i+1, 6)){
+      correlations = data.frame(scale = sc,
+                                correlation = R_labs[k,i],
+                                r = mean(posteriors[["R"]][,k,i]),
+                                lower = HDIofMCMC(posteriors[["R"]][,k,i])[1],
+                                upper = HDIofMCMC(posteriors[["R"]][,k,i])[2]) %>% 
+        bind_rows(correlations)
+    }
+  }
+}
+View(filter(correlations, str_detect(correlation, "theta")), title = "thetas only")
+
+write.csv(correlations, here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
+                             "Joint_ORL_Binomial_correlations.csv"))
+
+write.csv(filter(correlations, str_detect(correlation, "theta")),
+          here("1_IGT_PP", "Figs_Tables", "Joint_ORL_Binomial",
+               "Joint_ORL_Binomial_correlations_thetas_only.csv"))
+```
 
 
+
+# -------------------------------------------
+
+
+```{r}
+for(sc in scales){
+  print(paste(sc, selfreport[[sc]]$M, sep = ": "))
+}
+```
 
 
 
