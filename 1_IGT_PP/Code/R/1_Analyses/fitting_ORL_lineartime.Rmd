@@ -66,8 +66,8 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-orl_posteriors <- extract(orl_fit)
-saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_posteriors.rds"))
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_posteriors.rds"))
 orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_posteriors.rds"))
 
 
@@ -86,10 +86,10 @@ person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TR
 
 ## Rhat
 ```{r}
-rhats = rhat(orl_fit, pars = focal_parameters) %>%
-  data.frame() %>% mutate(parameter = rownames(.))
-
-saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_rhats.rds"))
+# rhats = rhat(orl_fit, pars = focal_parameters) %>%
+#   data.frame() %>% mutate(parameter = rownames(.))
+# 
+# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_rhats.rds"))
 rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_rhats.rds"))
 ```
 
@@ -138,9 +138,17 @@ dev.off()
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_lineartime", "orl_pp_lineartime_posterior_distributions.tiff"),
      width = 30, height = 20, units = "cm", res = 300)
   par(mfrow = c(5, 5))
-  # Mus & Sigmas
+  # Mus
   for(s in 1:2){
-    for(i in grep("mu|sigma", group_parameters, value = T)){
+    for(i in 1:5){
+      plot(density(orl_posteriors$mu_pr[,s,i]), main = paste(i, s, sep = "."))
+      abline(v = mean(orl_posteriors$mu_pr[,s,i]))
+    }
+  }
+  
+  # Sigmas
+  for(s in 1:2){
+    for(i in grep("sigma", group_parameters, value = T)){
       plot(density(orl_posteriors[[i]][,s]), main = paste(i, s))
       abline(v = mean(orl_posteriors[[i]][,s]))
     }
@@ -156,8 +164,8 @@ dev.off()
 
 
 # -------------------------------------------
-## Results
-### Test-Retest Correlations
+# Results
+## Test-Retest Correlations - NOT DONE
 ```{r}
 source(here("1_IGT_PP", "Code", "R", "1_Analyses", "plausible_correlations.R"))
 ```
@@ -204,7 +212,7 @@ abline(v = mean(betaP_Rs))
 
 
 
-### Session 1/2 Differences
+## Session 1/2 Differences - NOT DONE
 ```{r}
 par(mfrow = c(2, 3))
 plot(density(posterior$mu_pr[,2,1]), main = "A+")
@@ -230,41 +238,94 @@ abline(v = HDIofMCMC(posterior$mu_pr[,2,5]), col = "red")
 
 
 
-### Self-Report Correlations
-#### Load SR Data
+## Self-Report Correlations
 ```{r}
-sr_sess1 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Session1.sav"),
-                    col_select = c("ID", "sex", "race", "Ethnicity",
-                                   "bastot", "basdrive", "basfunsk",
-                                   "basrewres", "bis", "panas_pa",
-                                   "panas_na", "masqGDA", "masqAA", "masqGDD",
-                                   "masqAD", "shaps_tot", "prdep_tot")) %>% 
-  mutate(session = 1) %>%
-  filter(ID >= 2049,                          # Subset PP participants
-         ID != 2059,                          # Remove participant that played old IFT
-         ID != 2083)                          # Remove participant that had no task data
-scale_sess1 = c("bastot", "basdrive", "basfunsk", "basrewres", "bis",
-                "panas_pa", "panas_na", "masqGDA", "masqAA", "masqGDD",
-                "masqAD", "shaps_tot", "prdep_tot")
-
-sr_sess2 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Session2.sav"),
-                    col_select = c("ID", "bastot", "basdrive", "basfunsk",
-                                   "basrewres", "bis", "panas_pa",
-                                   "panas_na", "shaps_tot")) %>% 
-  mutate(session = 2) %>%
-  filter(ID >= 2049,                          # Subset PP participants
-         ID != 2059,                          # Remove participant that played old IFT
-         ID != 2083,                          # Remove participant that had no task data
-         !ID %in% c(2057, 2063, 2064,         # Remove participants that didn't do session 2
-                    2067, 2086, 2090,
-                    2093, 2094, 2096, 2098))
-scale_sess2 = c("bastot", "basdrive", "basfunsk", "basrewres", "bis",
-                "panas_pa", "panas_na", "shaps_tot")
+selfreport_models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "binomial_selfreport_indMu_fits.rds"))
+selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_selfreport.rds"))
 ```
 
 
 
-#### Correlation Function
+```{r}
+# Check that orl and self-report IDs are in same order between data fed to models
+for(scale in names(selfreport)){
+  data.frame(orl_IDs = stan_data$subjIDs,
+             selfreport_IDs = as.numeric(selfreport[[scale]]$IDs)) %>% 
+    mutate(not_equal = ifelse(orl_IDs == selfreport_IDs, 0, 1)) %>% 
+    reframe(ID_Check = ifelse(sum(not_equal) == 0, "EQUAL", "NOT EQUAL")) %>% 
+    print()
+}
+```
+
+
+
+```{r}
+scales = c(# Session 1 only
+           "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+           # "masqAD", # Removed
+           # Both Sessions
+           "bastot", "basdrive", "basfunsk", "basrewres",
+           "bis", "panas_pa", "panas_na", "shaps_tot")
+
+
+selfreport_posteriors = list()
+sr_posterior_means = list()
+
+for(scale in scales){
+  dimensions = c(2,3)
+  if(length(dim(selfreport_posteriors[[scale]]$theta)) == 2) dimensions = 2
+  
+  selfreport_posteriors[[scale]] = extract(selfreport_models[[scale]], par = "theta")
+  sr_posterior_means[[scale]] = apply(selfreport_posteriors[[scale]]$theta*selfreport[[scale]]$M, 2, mean)
+}
+```
+
+
+
+```{r}
+Arew_posterior_means = apply(orl_posteriors$mu_pr[,2,1] + orl_posteriors$Arew_tilde[,2,], 2, mean)
+Apun_posterior_means = apply(orl_posteriors$mu_pr[,2,2] + orl_posteriors$Apun_tilde[,2,], 2, mean)
+K_posterior_means = apply(orl_posteriors$mu_pr[,2,3] + orl_posteriors$K_tilde[,2,], 2, mean)
+betaF_posterior_means = apply(orl_posteriors$mu_pr[,2,4] + orl_posteriors$betaF_tilde[,2,], 2, mean)
+betaP_posterior_means = apply(orl_posteriors$mu_pr[,2,5] + orl_posteriors$betaP_tilde[,2,], 2, mean)
+
+orl_posterior_means = data.frame(ID = 1:49, Arew = Arew_posterior_means, Apun = Apun_posterior_means,
+                                 K = K_posterior_means, betaF = betaF_posterior_means,
+                                 betaP = betaP_posterior_means)
+```
+
+
+
+```{r}
+correlations = data.frame()
+
+for(orl_p in c("Arew", "Apun", "K", "betaF", "betaP")){
+  for(scale in c("prdep_tot", "masqGDA", "masqAA", "masqGDD", "bastot", "basdrive",
+                 "basrewres","panas_pa", "panas_na", "shaps_tot",
+                 "bis", "basfunsk")){
+    
+        correlation = boot.cor.bca(x = orl_posterior_means[[orl_p]],
+                                   y = sr_posterior_means[[scale]],
+                                   null.hyp = NULL,
+                                   alternative = c("two.sided", "less", "greater"),
+                                   conf.level = 0.95, type = NULL, R = 9999)
+        
+        correlations = data.frame(parameter = orl_p,
+                                  scale = scale,
+                                  r = correlation$Observed,
+                                  CI = correlation$Confidence.interval) %>%
+          bind_rows(correlations)
+  }
+}
+correlations = correlations %>% 
+  separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+  mutate(lower = as.numeric(str_remove(lower, "\\(")), upper = as.numeric(str_remove(upper, "\\)")),
+         sig = case_when(lower < 0 & upper < 0 | lower > 0 & upper > 0 ~ "*", T ~ ""))
+```
+
+
+
+### Correlation Function
 ```{r}
 get_SR_corrs = function(post, p_session, parameter, p_name, scale, scale_names){
   post = post[[p_name]]
@@ -284,7 +345,7 @@ get_SR_corrs = function(post, p_session, parameter, p_name, scale, scale_names){
 
 
 
-#### ORL 1 vs SR 1
+### ORL 1 vs SR 1
 ```{r}
 print("Arew")
 Arew1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Arew,
@@ -314,7 +375,7 @@ apply(betaP1_SR1_Rs, 2, mean)
 
 
 
-#### ORL 1 vs SR 2
+### ORL 1 vs SR 2
 ```{r, eval}
 print("Arew")
 Arew1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Arew,
@@ -344,7 +405,7 @@ apply(betaP1_SR2_Rs, 2, mean)
 
 
 
-#### ORL 2 vs SR 1
+### ORL 2 vs SR 1
 ```{r, eval}
 print("Arew")
 Arew2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Arew,
@@ -374,7 +435,7 @@ apply(betaP2_SR1_Rs, 2, mean)
 
 
 
-#### ORL 2 vs SR 2
+### ORL 2 vs SR 2
 ```{r}
 print("Arew")
 Arew2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Arew,
