@@ -204,13 +204,18 @@ generated quantities {
   }
   
   // Group-level means
-  for (s in 1:S) {
-    mu_Arew[s] = Phi_approx_group_mean_rng(mu_pr[s, 1], sigma_Arew[s], 10000);
-    mu_Apun[s] = Phi_approx_group_mean_rng(mu_pr[s, 2], sigma_Apun[s], 10000);
-    mu_K[s] = Phi_approx_group_mean_rng(mu_pr[s, 3], sigma_K[s], 10000)*5;
-    mu_betaF[s] = mu_pr[s, 4];
-    mu_betaP[s] = mu_pr[s, 5];
-  }
+  mu_Arew[1] = Phi_approx_group_mean_rng(mu_pr[1, 1], sigma_Arew[1], 10000);
+  mu_Apun[1] = Phi_approx_group_mean_rng(mu_pr[1, 2], sigma_Apun[1], 10000);
+  mu_K[1] = Phi_approx_group_mean_rng(mu_pr[1, 3], sigma_K[1], 10000)*5;
+  mu_betaF[1] = mu_pr[1, 4];
+  mu_betaP[1] = mu_pr[1, 5];
+  
+  mu_Arew[2] = Phi_approx_group_mean_rng(mu_pr[1, 1] + mu_pr[2, 1], sigma_Arew[1], 10000);
+  mu_Apun[2] = Phi_approx_group_mean_rng(mu_pr[1, 2] + mu_pr[2, 2], sigma_Apun[1], 10000);
+  mu_K[2] = Phi_approx_group_mean_rng(mu_pr[1, 3] + mu_pr[2, 3], sigma_K[1], 10000)*5;
+  mu_betaF[2] = mu_pr[1, 4] + mu_pr[2, 4];
+  mu_betaP[2] = mu_pr[1, 5] + mu_pr[2, 5];
+    
   
   { // local section, this saves time and space
     // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
