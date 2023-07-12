@@ -101,10 +101,10 @@ combined_data = bind_rows(session1_data, session2_data) %>%
   mutate(trial = 1,
          trial = cumsum(trial),
          stim = recode(stim, "1" = "A", "2" = "B", "3" = "C", "4" = "D")) %>% 
-  filter(stim == "D" | stim == "C") %>% 
-  group_by(Subject, session) %>% 
-  reframe(prop_good = mean(play)) %>% 
-  pivot_wider(names_from = "session", values_from = "prop_good", names_prefix = "session_") %>% 
+  mutate(type = case_when(stim %in% c("C", "D") ~ "good", T ~ "bad")) %>% 
+  group_by(Subject, session, type) %>% 
+  reframe(choice_proportion = mean(play)) %>% 
+  pivot_wider(names_from = c("type", "session"), values_from = "choice_proportion") %>% 
   select(ID = Subject, everything())
 
 card_proportions = bind_rows(session1_data, session2_data) %>% 
@@ -124,11 +124,11 @@ card_proportions = bind_rows(session1_data, session2_data) %>%
 
 
 # -----------------------------------------------
-# Proportion Good
+# Choice Proportions
 ## Test-Retest
 ```{r}
-cor(combined_data$session_1, combined_data$session_2,
-    use = "pairwise.complete.obs")
+cor.test(combined_data$good_1, combined_data$good_2)
+cor.test(combined_data$bad_1, combined_data$bad_2)
 ```
 
 
@@ -475,7 +475,7 @@ for(card in c("A", "B", "C", "D")){
         na.omit()                                  # Remove rows with NAs
       
       curr_scale = curr_data[[scale]]              # Subset scale data
-      curr_estimate = curr_data[["session_1"]] # Subset estimate for parameter
+      curr_estimate = curr_data$session_1  # Subset estimate for parameter
       # Run the boot-strapped correlation between the current scale and the current parameter
       curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
                               null.hyp = NULL,
@@ -506,7 +506,9 @@ for(card in c("A", "B", "C", "D")){
         na.omit()                                  # Remove rows with NAs
       
       curr_scale = curr_data[[scale]]              # Subset scale data
-      curr_estimate = curr_data[["session_2"]] # Subset estimate for parameter
+      curr_estimate = ifelse(is.na(curr_data$session_2),
+                           curr_data$session_1,
+                           (curr_data$session_1 + curr_data$session_2) / 2)  # Subset estimate for parameter
       # Run the boot-strapped correlation between the current scale and the current parameter
       curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
                               null.hyp = NULL,

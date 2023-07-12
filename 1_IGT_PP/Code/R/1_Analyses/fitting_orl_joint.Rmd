@@ -278,7 +278,7 @@ for(parameter in person_parameters){
   for(scale in scales){
     for(s in 1:ncol(selfreport[[scale]]$score)){
         
-        correlation = boot.cor.bca(x = orl_posterior_means[[parameter]][,s],
+        correlation = boot.cor.bca(x = session_orl_posterior_means[[parameter]][,s],
                                    y = selfreport[[scale]]$score[,s],
                                    null.hyp = NULL,
                                    alternative = c("two.sided", "less", "greater"),
