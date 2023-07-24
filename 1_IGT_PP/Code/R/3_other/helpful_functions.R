@@ -1,0 +1,136 @@
+
+
+
+make_PPCs = function(model, stan_data, theme){
+  library(rstan)
+  library(hBayesDM)
+  library(bayesplot)
+  library(dplyr)
+  library(ggplot2)
+  library(foreach)
+  library(tidybayes)
+  library(patchwork)
+  library(abind)
+  library(zoo)
+  library(here)
+  library(ggpubr)
+  library(egg)
+  library(grid)
+  
+  # Card matrix
+  cards = stan_data$card
+  
+  
+  # Recode choice data
+  choices = ifelse(stan_data$choice == 2, 0, 1)
+  
+  
+  # Trial matrix (to skip when participant wasn't there)
+  trials = stan_data$Tsubj
+  
+  
+  # Extract parameters
+  model_parameters = extract(fit)
+  predicted_values = ifelse(model_parameters$choice_pred == 2, 0, 1)
+  
+  
+  # For binding together posterior predictions
+  acomb = function(...) abind(..., along=3)
+  bcomb = function(...) abind(..., along=4)
+  
+  
+  # Calculates group-level choice proportions into a 30 (trial) x 4 (card) x 2 (session) matrix
+  choice_proportions = foreach(s = 1:2, .combine = "acomb") %do% {
+    foreach(c = 1:4, .combine = "cbind") %do% {
+      temp = foreach(i = 1:49, .combine = "rbind") %do% {
+        choices[i, cards[i, , s] == c, s]
+      } %>% colMeans()
+    }
+  }
+  
+  
+  predicted_proportions = foreach(s = 1:2, .combine = "bcomb") %do% {
+    foreach(c = 1:4, .combine = "acomb") %do% {
+      foreach(i = 1:49, .combine = "acomb") %do% {
+        if(trials[i, s] > 0){
+          predicted_values[ , i, cards[i, , s] == c, s]
+        }
+      } %>% 
+        apply(., c(1,2), mean)
+    }
+  }
+  
+  
+  # Set color scheme for bayesplot (it is a global setting)
+  color_scheme_set(theme)
+  
+  
+  make_plot = function(y_data, yrep_data, top, right,
+                       x_axis_txt, y_axis_txt, deck){
+    if(top){
+      custom_margin = margin(t = 1, r = -.5, b = -.5, l = -.5, unit = "lines")
+    } else {
+      custom_margin = margin(t = -.5, r = -.5, b = 1, l = -.5, unit = "lines")
+    }
+    if(right == 1 | right == 2){
+      session_text = paste("Session", right)
+    } else {
+      session_text = ""
+    }
+    
+    ppc_intervals(x = 1:length(y_data),
+                  y = y_data,
+                  yrep = yrep_data,
+                  prob = 0.50, 
+                  prob_outer = .80) +
+      geom_text(aes(x = 30, y = .05, label = session_text),
+                color = "black", hjust = 1, vjust = 0, check_overlap = T) +
+      scale_x_continuous(expand = c(0, 0), limits = c(0, 31), breaks = seq(0, 30, 5)) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 1), breaks = seq(0, 1, .25)) +
+      theme_classic() +
+      labs(x = "Trial", y = "Proportion/Probability of Playing", title = deck) +
+      theme(legend.position = "none",
+            axis.title = element_blank(),
+            axis.text.x = element_text(color = x_axis_txt, size = 12),
+            axis.text.y = element_text(color = y_axis_txt, size = 12),
+            plot.title = element_text(hjust = .5, size = 12),
+            plot.margin = custom_margin,
+            plot.background = element_rect(fill = "transparent", colour = "transparent"))
+  }
+  
+  plots = ggarrange(make_plot(choice_proportions[, 1, 1], predicted_proportions[,, 1, 1],
+                              T, 0, "transparent", "black", "Deck A"),
+                    make_plot(choice_proportions[, 2, 1], predicted_proportions[,, 2, 1],
+                              T, 0, "transparent", "transparent", "Deck B"),
+                    make_plot(choice_proportions[, 3, 1], predicted_proportions[,, 3, 1],
+                              T, 0, "transparent", "transparent", "Deck C"),
+                    make_plot(choice_proportions[, 4, 1], predicted_proportions[,, 4, 1],
+                              T, 1, "transparent", "transparent", "Deck D"),
+                    
+                    make_plot(choice_proportions[, 1, 2], predicted_proportions[,, 1, 2],
+                              F, 0, "black", "black", ""),
+                    make_plot(choice_proportions[, 2, 2], predicted_proportions[,, 2, 2],
+                              F, 0, "black", "transparent", ""),
+                    make_plot(choice_proportions[, 3, 2], predicted_proportions[,, 3, 2],
+                              F, 0, "black", "transparent", ""),
+                    make_plot(choice_proportions[, 4, 2], predicted_proportions[,, 4, 2],
+                              F, 2, "black", "transparent", ""),
+                    nrow = 2, ncol = 4)
+  
+  return(plots)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
