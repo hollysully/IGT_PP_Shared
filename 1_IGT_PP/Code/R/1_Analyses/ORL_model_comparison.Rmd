@@ -24,21 +24,52 @@ library(loo)
 
 
 # -------------------------------------------
-# Load Models
+# IGT
 ```{r}
-joint = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_fit.rds"))
-indMu = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_indMu", "orl_pp_indMu_fit.rds"))
+orl_joint_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint",
+                             "orl_pp_joint_fit.rds"))
+# orl_joint_playfic_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playupdate",
+#                                      "orl_pp_joint_playupdate_fit.rds"))
+orl_joint_playfic_playupdate_modifiedK_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
+                                                          "orl_pp_joint_playfic_playupdate_modifiedK_fit.rds"))
+orl_superjoint_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Superjoint",
+                                  "igt_orl_superjoint_fit.rds"))
 ```
 
 
 
 ```{r}
-printFit(joint, indMu)
+log_lik_orl_joint_fit = extract_log_lik(orl_joint_fit)
+# log_lik_orl_joint_playupdate = extract_log_lik(orl_joint_playupdate_fit)
+log_lik_orl_joint_playfic_playupdate_modifiedK = extract_log_lik(orl_joint_playfic_playupdate_modifiedK_fit)
+log_lik_orl_superjoint_fit = extract_log_lik(orl_superjoint_fit)
 ```
 
 
+
+```{r}
+loo_orl_joint = loo(log_lik_orl_joint_fit)
+# loo_orl_orl_joint_playupdate = loo(log_lik_orl_joint_playupdate)
+loo_orl_joint_playfic_playupdate_modifiedK = loo(log_lik_orl_joint_playfic_playupdate_modifiedK)
+loo_orl_superjoint = loo(log_lik_orl_superjoint_fit)
+```
+
+
+
+```{r}
+comparison = loo_compare(list("Joint" = loo_orl_joint,
+                              # "Joint Playupdate" = loo_orl_orl_joint_playupdate,
+                              "Joint Playfic Playupdate Modified K" = loo_orl_joint_playfic_playupdate_modifiedK
+                              # "Superjoint" = loo_orl_superjoint
+                              ))
+
+print(comparison)
+```
 
 # -------------------------------------------
+```{r}
+
+```
 
 
 

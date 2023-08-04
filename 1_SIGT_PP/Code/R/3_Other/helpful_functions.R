@@ -1,21 +1,10 @@
 
 
 
-make_PPCs = function(model, stan_data, theme){
-  library(rstan)
-  library(hBayesDM)
-  library(bayesplot)
+calculate_proportions = function(posteriors, stan_data, data_type = "list_of_matrices"){
   library(dplyr)
-  library(ggplot2)
   library(foreach)
-  library(tidybayes)
-  library(patchwork)
   library(abind)
-  library(zoo)
-  library(here)
-  library(ggpubr)
-  library(egg)
-  library(grid)
   
   # Card matrix
   cards = stan_data$card
@@ -23,15 +12,11 @@ make_PPCs = function(model, stan_data, theme){
   
   # Recode choice data
   choices = ifelse(stan_data$choice == 2, 0, 1)
+  predicted_values = ifelse(posteriors$choice_pred == 2, 0, 1)
   
   
   # Trial matrix (to skip when participant wasn't there)
   trials = stan_data$Tsubj
-  
-  
-  # Extract parameters
-  model_parameters = extract(fit)
-  predicted_values = ifelse(model_parameters$choice_pred == 2, 0, 1)
   
   
   # For binding together posterior predictions
@@ -47,6 +32,7 @@ make_PPCs = function(model, stan_data, theme){
   }
   
   
+  # Calculate group-level predicted proportions into a 30 (trial) x 4 (card) matrix
   predicted_proportions = foreach(c = 1:4, .combine = "acomb") %do% {
     foreach(i = 1:49, .combine = "acomb") %do% {
       if(trials[i] > 0){
@@ -55,51 +41,36 @@ make_PPCs = function(model, stan_data, theme){
     } %>% 
       apply(., c(1,2), mean)
   }
-  
-  
-  # Set color scheme for bayesplot (it is a global setting)
-  color_scheme_set(theme)
-  
-  
-  make_plot = function(y_data, yrep_data, top,
-                       x_axis_txt, y_axis_txt, deck){
-    if(top){
-      custom_margin = margin(t = 1, r = -.5, b = -.5, l = -.5, unit = "lines")
-    } else {
-      custom_margin = margin(t = -.5, r = -.5, b = 1, l = -.5, unit = "lines")
-    }
+  if(data_type == "data.frame"){
+    observed = data.frame(choice_proportions)
+    names(observed) = c("A", "B", "C", "D")
+    observed = observed %>%
+      mutate(trial = 1:30) %>% 
+      pivot_longer(c("A", "B", "C", "D"), names_to = "deck", values_to = "observed")
     
-    ppc_intervals(x = 1:length(y_data),
-                  y = y_data,
-                  yrep = yrep_data,
-                  prob = 0.50, 
-                  prob_outer = .80) +
-      geom_text(aes(x = 30, y = .05, label = session_text),
-                color = "black", hjust = 1, vjust = 0, check_overlap = T) +
-      scale_x_continuous(expand = c(0, 0), limits = c(0, 31), breaks = seq(0, 30, 5)) +
-      scale_y_continuous(expand = c(0, 0), limits = c(0, 1), breaks = seq(0, 1, .25)) +
-      theme_classic() +
-      labs(x = "Trial", y = "Proportion/Probability of Playing", title = deck) +
-      theme(legend.position = "none",
-            axis.title = element_blank(),
-            axis.text.x = element_text(color = x_axis_txt, size = 12),
-            axis.text.y = element_text(color = y_axis_txt, size = 12),
-            plot.title = element_text(hjust = .5, size = 12),
-            plot.margin = custom_margin,
-            plot.background = element_rect(fill = "transparent", colour = "transparent"))
+    predicted = foreach(c = 1:4, .combine = "rbind") %do% {
+      foreach(t = 1:30, .combine = "rbind") %do% {
+        data.frame(predicted = predicted_proportions[,t,c]) %>% 
+          mutate(iteration = 1:iterations,
+                 deck = c,
+                 trial = t,
+                 mu = mean(predicted),
+                 lower50 = HDIofMCMC(predicted, credMass = .5)[1],
+                 lower50 = case_when(lower50 < 0 ~ 0, T ~ lower50),
+                 upper50 = HDIofMCMC(predicted, credMass = .5)[2],
+                 upper50 = case_when(upper50 > 1 ~ 1, T ~ upper50),
+                 lower95 = HDIofMCMC(predicted)[1],
+                 lower95 = case_when(lower95 < 0 ~ 0, T ~ lower95),
+                 upper95 = HDIofMCMC(predicted)[2],
+                 upper95 = case_when(upper95 > 1 ~ 1, T ~ upper95))
+      }
+    }
+    return(left_join(observed,
+                     mutate(predicted, deck = case_when(deck == 1 ~ "A", deck == 2 ~ "B",
+                                                        deck == 3 ~ "C", deck == 4 ~ "D"))))
+  } else {
+    return(list("observed" = choice_proportions, "predicted" = predicted_proportions))
   }
-  
-  plots = ggarrange(make_plot(choice_proportions[, 1, 1], predicted_proportions[,, 1],
-                              T, "transparent", "black", "Deck A"),
-                    make_plot(choice_proportions[, 2, 1], predicted_proportions[,, 2],
-                              T, "transparent", "transparent", "Deck B"),
-                    make_plot(choice_proportions[, 3, 1], predicted_proportions[,, 3],
-                              F, "black", "black", "Deck C"),
-                    make_plot(choice_proportions[, 4, 1], predicted_proportions[,, 4],
-                              F, "black", "transparent", "Deck D"),
-                    nrow = 2, ncol = 2)
-  
-  return(plots)
 }
 
 
