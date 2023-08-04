@@ -49,13 +49,23 @@ orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_updatedfi
 
 
 # Fit model
-orl_fit = sampling(orl_model, 
-                   data   = stan_data, 
-                   iter   = 5000, 
-                   warmup = 1000, 
-                   chains = 4, 
-                   cores  = 4,
-                   seed   = 43210)
+orl_fit = sampling(
+  orl_model, 
+  data   = stan_data, 
+  iter   = 5000, 
+  warmup = 1000, 
+  chains = 4, 
+  cores  = 4,
+  seed   = 43210,
+  init   = function() {
+    list(
+      mu_p = rbind(
+        rnorm(5, c(-.5, -.5, 0, 1, 1), .2),
+        rnorm(5, c(-.5, -.5, 0, 1, 1), .2)
+      )
+    )
+  }
+)
 
 
 #save the fitted model as an .rds file
