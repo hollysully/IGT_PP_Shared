@@ -147,14 +147,16 @@ model {
   R_chol_betaF  ~ lkj_corr_cholesky(1);
   R_chol_betaP  ~ lkj_corr_cholesky(1);
   
-  // Hyperparameters for RL learning algorithm
-  mu_p[1,:]   ~ normal(0, 1);
-  mu_p[2,:]   ~ normal(0, 1);
-  sigma_Arew  ~ normal(0, 0.2);
-  sigma_Apun  ~ normal(0, 0.2);
-  sigma_K     ~ normal(0, 0.2);
-  sigma_betaF ~ cauchy(0, 1);
-  sigma_betaP ~ cauchy(0, 1);
+// Hyperparameters for RL learning algorithm
+  for (s in 1:S) {
+    mu_p[s,1:3] ~ normal(0, .75);
+    mu_p[s,4:5] ~ normal(1, .5);
+  }
+  sigma_Arew  ~ normal(0, 0.5);
+  sigma_Apun  ~ normal(0, 0.5);
+  sigma_K     ~ normal(0, 0.5);
+  sigma_betaF ~ normal(0, 1);
+  sigma_betaP ~ normal(0, 1);
   
   // Subject-level parameters
   to_vector(Arew_pr)  ~ normal(0, 1.0);
