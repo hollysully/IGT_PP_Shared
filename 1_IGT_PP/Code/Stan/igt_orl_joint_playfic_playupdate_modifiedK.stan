@@ -208,6 +208,12 @@ model {
             
             // Calculate expected value of card
             utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
+          } else { // else pass
+          // Update perseverance for plays
+          pers[:,1] = pers[:,1] / (1 + K_tr);
+          
+          // Calculate expected value of playing on cards
+          utility[:,1] = ev[:,1] + ef[:,1] * betaF[i,s] + pers[:,1] * betaP[i,s];
           }
         }
       }

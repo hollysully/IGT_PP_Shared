@@ -32,10 +32,10 @@ orl_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
                        "orl_pp_fit.rds"))
 orl_playfic_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL_updatedfic",
                                "orl_pp_updatedfic_fit.rds"))
-orl_playupdate_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL_playupdate",
-                                  "orl_playupdate_pp_fit.rds"))
-orl_playupdate_modifiedK_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL_playupdate_modifiedK",
-                                            "orl_playupdate_modifiedK_pp_fit.rds"))
+orl_playfic_playupdate_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "orl_playfic_playupdate",
+                               "orl_playfic_playupdate_pp_fit.rds"))
+orl_playfic_playupdate_modifiedK_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL_playfic_playupdate_modifiedK",
+                                                    "orl_playfic_playupdate_modifiedK_pp_fit.rds"))
 ```
 
 
@@ -43,8 +43,8 @@ orl_playupdate_modifiedK_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "OR
 ```{r}
 log_lik_orl = extract_log_lik(orl_fit)
 log_lik_orl_playfic = extract_log_lik(orl_playfic_fit)
-log_lik_orl_playupdate = extract_log_lik(orl_playupdate_fit)
-log_lik_orl_playupdate_modifiedK = extract_log_lik(orl_playupdate_modifiedK_fit)
+log_lik_orl_playfic_playupdate = extract_log_lik(orl_playfic_playupdate_fit)
+log_lik_orl_playfic_playupdate_modifiedK_fit = extract_log_lik(orl_playfic_playupdate_modifiedK_fit)
 ```
 
 
@@ -52,19 +52,19 @@ log_lik_orl_playupdate_modifiedK = extract_log_lik(orl_playupdate_modifiedK_fit)
 ```{r}
 loo_orl = loo(log_lik_orl)
 loo_orl_playfic = loo(log_lik_orl_playfic)
-loo_orl_playupdate = loo(log_lik_orl_playupdate)
-loo_orl_playupdate_modifiedK = loo(log_lik_orl_playupdate_modifiedK)
+loo_orl_playfic_playupdate = loo(log_lik_orl_playfic_playupdate)
+loo_orl_playfic_playupdate_modifiedK_fit = loo(log_lik_orl_playfic_playupdate_modifiedK_fit)
 ```
 
 
 
 ```{r}
-comparison = loo_compare(list("orl" = loo_orl,
-                              "orl_playfic" = loo_orl_playfic,
-                              "orl_playupdate" = loo_orl_playupdate,
-                              "orl_playupdate_modifiedK" = loo_orl_playupdate_modifiedK))
+comparison = loo_compare(list("ORL" = loo_orl,
+                              # "orl_playfic" = loo_orl_playfic,
+                              # "orl_playfic_playupdate" = loo_orl_playfic_playupdate,
+                              "ORL Playfic Playupdate Modified K" = loo_orl_playfic_playupdate_modifiedK_fit))
 
-print(comparison, simplify = F)
+print(comparison, simplify = T)
 ```
 
 

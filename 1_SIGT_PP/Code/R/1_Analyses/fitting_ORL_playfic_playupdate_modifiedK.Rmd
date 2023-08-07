@@ -217,13 +217,6 @@ dev.off()
 
 
 
-```{r}
-tiff(here("1_SIGT_PP", "Figs_Tables", "ORL_playfic_playupdate_modifiedK",
-          "orl_playfic_playupdate_modifiedK_pp_posterior_distributions.tiff"),
-     width = 10, height = 6, units = "cm", res = 300)
-  print(PPC_plot)
-dev.off()
-```
 
 
 
