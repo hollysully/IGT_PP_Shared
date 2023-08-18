@@ -35,7 +35,7 @@ stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
 
 # -------------------------------------------
 # Check Model
-```{r, eval = F}
+```{r, eval = T}
 model_code = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", 
                                 "igt_orl_playfic_playupdate_modifiedK.stan"), compile = F)
 
@@ -47,7 +47,8 @@ model_code$check_syntax(quiet = T)
 # Fit Model
 ```{r, eval = T}
 # Compile model
-orl_model = stan_model(here("1_SIGT_PP", "Code", "Stan", "igt_orl_playfic_playupdate_modifiedK.stan"))
+orl_model = stan_model(here("1_SIGT_PP", "Code", "Stan",
+                            "igt_orl_playfic_playupdate_modifiedK.stan"))
 
 
 # Fit model

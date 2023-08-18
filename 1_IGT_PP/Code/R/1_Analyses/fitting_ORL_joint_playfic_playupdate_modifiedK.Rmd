@@ -37,7 +37,7 @@ stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_I
 
 # -------------------------------------------
 # Check Model
-```{r, eval = T}
+```{r, eval = F}
 model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", 
                                 "igt_orl_joint_playfic_playupdate_modifiedK.stan"), compile = F)
 
@@ -47,7 +47,7 @@ model_code$check_syntax(quiet = T)
 
 
 # Fit Model
-```{r, eval = T}
+```{r, eval = F}
 # Compile model
 orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK.stan"))
 
@@ -55,7 +55,7 @@ orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_p
 # Fit model
 orl_fit = sampling(orl_model, 
                    data   = stan_data, 
-                   iter   = 2000, 
+                   iter   = 5000, 
                    warmup = 1000, 
                    chains = 4, 
                    cores  = 4,
@@ -81,9 +81,9 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-orl_posteriors <- extract(orl_fit)
-saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                             "orl_pp_joint_playfic_playupdate_modifiedK_posteriors.rds"))
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
+#                              "orl_pp_joint_playfic_playupdate_modifiedK_posteriors.rds"))
 orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
                               "orl_pp_joint_playfic_playupdate_modifiedK_posteriors.rds"))
 
@@ -102,11 +102,11 @@ person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TR
 
 
 ## Rhat
-```{r, eval = T}
-rhats = rhat(orl_fit, pars = focal_parameters) %>%
-  data.frame() %>% mutate(parameter = rownames(.))
-saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                    "orl_pp_joint_playfic_playupdate_modifiedK_rhats.rds"))
+```{r, eval = F}
+# rhats = rhat(orl_fit, pars = focal_parameters) %>%
+#   data.frame() %>% mutate(parameter = rownames(.))
+# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
+#                     "orl_pp_joint_playfic_playupdate_modifiedK_rhats.rds"))
 rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
                      "orl_pp_joint_playfic_playupdate_modifiedK_rhats.rds"))
 ```
@@ -114,7 +114,7 @@ rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupda
 
 
 ## Traceplots
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
           "orl_pp_joint_playfic_playupdate_modifiedK_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
@@ -141,7 +141,7 @@ for(i in person_parameters){
 # -------------------------------------------
 # Inspect Parameters
 ## Means +/- PI
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
           "orl_pp_joint_playfic_playupdate_modifiedK_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
@@ -350,21 +350,28 @@ for(parameter in person_parameters){
   overall_orl_posterior_means[[parameter]] = apply(orl_posteriors[[parameter]], 2, mean)
 }
 
+overall_orl_posterior_means[["RewPun_ratio"]] =
+  apply(log(apply(orl_posteriors$Arew, c(1,2), mean)/apply(orl_posteriors$Apun, c(1,2), mean)), 2, mean)
+
 
 session_orl_posterior_means = list()
 
 for(parameter in person_parameters){
   session_orl_posterior_means[[parameter]] = apply(orl_posteriors[[parameter]], c(2,3), mean)
 }
-```
 
+session_orl_posterior_means[["RewPun_ratio"]] =
+  matrix(c(apply(log(orl_posteriors$Arew[,,1]/orl_posteriors$Apun[,,1]), 2, mean),
+         apply(log(orl_posteriors$Arew[,,2]/orl_posteriors$Apun[,,2]), 2, mean)),
+         nrow = 49, ncol = 2, byrow = F)
+```
 
 
 
 ```{r}
 correlations = data.frame()
 
-for(parameter in person_parameters){
+for(parameter in c(person_parameters,"RewPun_ratio")){
   for(scale in scales){
     for(s in 1:ncol(selfreport[[scale]]$score)){
         
@@ -395,7 +402,7 @@ correlations %>%
 
 correlations = data.frame()
 
-for(parameter in person_parameters){
+for(parameter in c(person_parameters,"RewPun_ratio")){
   for(scale in scales){
     orl = overall_orl_posterior_means[[parameter]]
     
@@ -430,7 +437,7 @@ write.csv(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modified
 ```{r}
 session_correlations = data.frame()
 
-for(parameter in person_parameters){
+for(parameter in c(person_parameters,"RewPun_ratio")){
   for(scale in scales){
     for(s in 1:ncol(selfreport[[scale]]$score)){
         
