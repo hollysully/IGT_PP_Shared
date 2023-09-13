@@ -60,7 +60,7 @@ loo_orl_playfic_playupdate_modifiedK_fit = loo(log_lik_orl_playfic_playupdate_mo
 
 ```{r}
 comparison = loo_compare(list("ORL" = loo_orl,
-                              # "orl_playfic" = loo_orl_playfic,
+                              "ORL Updatedfic" = loo_orl_playfic,
                               # "orl_playfic_playupdate" = loo_orl_playfic_playupdate,
                               "ORL Playfic Playupdate Modified K" = loo_orl_playfic_playupdate_modifiedK_fit))
 

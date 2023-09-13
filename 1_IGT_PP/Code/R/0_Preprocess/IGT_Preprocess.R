@@ -419,3 +419,17 @@ stan_dat <- list(
 
 saveRDS(stan_dat, file = here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
 
+# Binomial stan data
+binomial_stan_dat <- list(
+  N = numSubjs,   
+  T = maxTrials,  
+  S = numSessions,
+  Tsubj = Tsubj,  
+  choice = ifelse(choice == 1, 1, ifelse(choice == 2, 0, -1)),
+  good = ifelse(card == 1 | card == 2, 0, 1),
+  day = day,
+  subjIDs = subjList 
+)     
+
+saveRDS(binomial_stan_dat, file = here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_IGT.rds"))
+
