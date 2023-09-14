@@ -1,0 +1,487 @@
+---
+title: "Fitting Linear Time ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(wBoot)
+library(haven)
+```
+
+
+
+## Load Data
+```{r}
+stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+```
+
+
+
+# -------------------------------------------
+# Fit Model
+```{r, eval = F}
+orl_model <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_lineartime.stan"))
+
+# Fit model
+orl_fit <- sampling(
+  orl_model, 
+  data = stan_data,
+  iter = 5000,
+  warmup = 1000,
+  chains = 4,
+  cores = 4,
+  seed = 43210
+)
+
+
+
+#save the fitted model as an .rds file
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime.rds"))
+```
+
+
+
+```{r}
+orl_fit <- readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime.rds"))
+
+iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+```{r}
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_posteriors.rds"))
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_posteriors.rds"))
+
+
+focal_parameters <- c(
+  "mu_pr",
+  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun", "K", "betaF", "betaP",
+  "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]"
+)
+
+group_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Rhat
+```{r}
+# rhats = rhat(orl_fit, pars = focal_parameters) %>%
+#   data.frame() %>% mutate(parameter = rownames(.))
+# 
+# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_rhats.rds"))
+rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_lineartime", "orl_pp_lineartime_rhats.rds"))
+```
+
+
+
+## Traceplots
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_lineartime",
+          "orl_pp_lineartime_group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(
+    orl_fit,
+    pars = group_parameters
+)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_IGT_PP", "Figs_Tables", "ORL_lineartime",
+            paste("orl_pp_lineartime_", i, "_traceplots.tiff", sep = "")),
+       width = 35, height = 25, units = "cm", res = 300)
+    traceplot(orl_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Inspect Parameters
+## Means +/- PI
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_lineartime",
+          "orl_pp_lineartime_posterior_means.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  plot(orl_fit, pars = group_parameters)
+dev.off()
+```
+
+
+
+## Posterior Distributions
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_lineartime", "orl_pp_lineartime_posterior_distributions.tiff"),
+     width = 30, height = 20, units = "cm", res = 300)
+  par(mfrow = c(5, 5))
+  # Mus
+  for(s in 1:2){
+    for(i in 1:5){
+      plot(density(orl_posteriors$mu_pr[,s,i]), main = paste(i, s, sep = "."))
+      abline(v = mean(orl_posteriors$mu_pr[,s,i]))
+    }
+  }
+  
+  # Sigmas
+  for(s in 1:2){
+    for(i in grep("sigma", group_parameters, value = T)){
+      plot(density(orl_posteriors[[i]][,s]), main = paste(i, s))
+      abline(v = mean(orl_posteriors[[i]][,s]))
+    }
+  }
+  
+  for(i in grep("R_", group_parameters, value = T)){
+    plot(density(orl_posteriors[[str_remove(i, "\\[1,2\\]")]][,2,1]), main = i)
+    abline(v = mean(orl_posteriors[[i]][,2,1]))
+  }
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Results
+## Test-Retest Correlations - NOT DONE
+```{r}
+source(here("1_IGT_PP", "Code", "R", "1_Analyses", "plausible_correlations.R"))
+```
+
+
+
+```{r}
+set.seed(20230525)
+UT_Arew_Rs = matrix(data = NA, nrow = iterations)
+UT_Apun_Rs = matrix(data = NA, nrow = iterations)
+UT_K_Rs = matrix(data = NA, nrow = iterations)
+betaF_Rs = matrix(data = NA, nrow = iterations)
+betaP_Rs = matrix(data = NA, nrow = iterations)
+
+for(i in 1:iterations){
+  UT_Arew_Rs[i] = cor(posterior$Arew[i,,1], posterior$Arew[i,,2])
+  UT_Apun_Rs[i] = cor(posterior$Apun[i,,1], posterior$Apun[i,,2])
+  UT_K_Rs[i] = cor(posterior$K[i,,1], posterior$K[i,,2])
+  betaF_Rs[i] = cor(posterior$betaF[i,,1], posterior$betaF[i,,2]) 
+  betaP_Rs[i] = cor(posterior$betaP[i,,1], posterior$betaP[i,,2]) 
+}
+Arew_Rs = pop_correct_MCMC(UT_Arew_Rs, n_subj = 49, kappa = 1)
+Apun_Rs = pop_correct_MCMC(UT_Apun_Rs, n_subj = 49, kappa = 1)
+K_Rs = pop_correct_MCMC(UT_K_Rs, n_subj = 49, kappa = 1)
+
+mean(Arew_Rs)
+mean(Apun_Rs)
+mean(K_Rs)
+mean(betaF_Rs)
+mean(betaP_Rs)
+
+par(mfrow = c(2, 3))
+plot(density(Arew_Rs), main = "A+")
+abline(v = mean(Arew_Rs))
+plot(density(Apun_Rs), main = "A-")
+abline(v = mean(Apun_Rs))
+plot(density(K_Rs), main = "K")
+abline(v = mean(K_Rs))
+plot(density(betaF_Rs), main = expression(paste(beta, italic(f), sep = "")))
+abline(v = mean(betaF_Rs))
+plot(density(betaP_Rs), main = expression(paste(beta, italic(p), sep = "")))
+abline(v = mean(betaP_Rs))
+```
+
+
+
+## Session 1/2 Differences - NOT DONE
+```{r}
+par(mfrow = c(2, 3))
+plot(density(posterior$mu_pr[,2,1]), main = "A+")
+abline(v = mean(posterior$mu_pr[,2,1]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,1]), col = "red")
+
+plot(density(posterior$mu_pr[,2,2]), main = "A-")
+abline(v = mean(posterior$mu_pr[,2,2]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,2]), col = "red")
+
+plot(density(posterior$mu_pr[,2,3]), main = "K")
+abline(v = mean(posterior$mu_pr[,2,3]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,3]), col = "red")
+
+plot(density(posterior$mu_pr[,2,4]), main = expression(paste(beta, italic(f), sep = "")))
+abline(v = mean(posterior$mu_pr[,2,4]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,4]), col = "red")
+
+plot(density(posterior$mu_pr[,2,5]), main = expression(paste(beta, italic(p), sep = "")))
+abline(v = mean(posterior$mu_pr[,2,5]))
+abline(v = HDIofMCMC(posterior$mu_pr[,2,5]), col = "red")
+```
+
+
+
+## Self-Report Correlations
+```{r}
+selfreport_models = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "binomial_selfreport_indMu_fits.rds"))
+selfreport = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_binomial_selfreport.rds"))
+```
+
+
+
+```{r}
+# Check that orl and self-report IDs are in same order between data fed to models
+for(scale in names(selfreport)){
+  data.frame(orl_IDs = stan_data$subjIDs,
+             selfreport_IDs = as.numeric(selfreport[[scale]]$IDs)) %>% 
+    mutate(not_equal = ifelse(orl_IDs == selfreport_IDs, 0, 1)) %>% 
+    reframe(ID_Check = ifelse(sum(not_equal) == 0, "EQUAL", "NOT EQUAL")) %>% 
+    print()
+}
+```
+
+
+
+```{r}
+scales = c(# Session 1 only
+           "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+           # "masqAD", # Removed
+           # Both Sessions
+           "bastot", "basdrive", "basfunsk", "basrewres",
+           "bis", "panas_pa", "panas_na", "shaps_tot")
+
+
+selfreport_posteriors = list()
+sr_posterior_means = list()
+
+for(scale in scales){
+  dimensions = c(2,3)
+  if(length(dim(selfreport_posteriors[[scale]]$theta)) == 2) dimensions = 2
+  
+  selfreport_posteriors[[scale]] = extract(selfreport_models[[scale]], par = "theta")
+  sr_posterior_means[[scale]] = apply(selfreport_posteriors[[scale]]$theta*selfreport[[scale]]$M, 2, mean)
+}
+```
+
+
+
+```{r}
+Arew_posterior_means = apply(orl_posteriors$mu_pr[,2,1] + orl_posteriors$Arew_tilde[,2,], 2, mean)
+Apun_posterior_means = apply(orl_posteriors$mu_pr[,2,2] + orl_posteriors$Apun_tilde[,2,], 2, mean)
+K_posterior_means = apply(orl_posteriors$mu_pr[,2,3] + orl_posteriors$K_tilde[,2,], 2, mean)
+betaF_posterior_means = apply(orl_posteriors$mu_pr[,2,4] + orl_posteriors$betaF_tilde[,2,], 2, mean)
+betaP_posterior_means = apply(orl_posteriors$mu_pr[,2,5] + orl_posteriors$betaP_tilde[,2,], 2, mean)
+
+orl_posterior_means = data.frame(ID = 1:49, Arew = Arew_posterior_means, Apun = Apun_posterior_means,
+                                 K = K_posterior_means, betaF = betaF_posterior_means,
+                                 betaP = betaP_posterior_means)
+```
+
+
+
+```{r}
+correlations = data.frame()
+
+for(orl_p in c("Arew", "Apun", "K", "betaF", "betaP")){
+  for(scale in c("prdep_tot", "masqGDA", "masqAA", "masqGDD", "bastot", "basdrive",
+                 "basrewres","panas_pa", "panas_na", "shaps_tot",
+                 "bis", "basfunsk")){
+    
+        correlation = boot.cor.bca(x = orl_posterior_means[[orl_p]],
+                                   y = sr_posterior_means[[scale]],
+                                   null.hyp = NULL,
+                                   alternative = c("two.sided", "less", "greater"),
+                                   conf.level = 0.95, type = NULL, R = 9999)
+        
+        correlations = data.frame(parameter = orl_p,
+                                  scale = scale,
+                                  r = correlation$Observed,
+                                  CI = correlation$Confidence.interval) %>%
+          bind_rows(correlations)
+  }
+}
+correlations = correlations %>% 
+  separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+  mutate(lower = as.numeric(str_remove(lower, "\\(")), upper = as.numeric(str_remove(upper, "\\)")),
+         sig = case_when(lower < 0 & upper < 0 | lower > 0 & upper > 0 ~ "*", T ~ ""))
+```
+
+
+
+### Correlation Function
+```{r}
+get_SR_corrs = function(post, p_session, parameter, p_name, scale, scale_names){
+  post = post[[p_name]]
+  if(length(unique(scale$ID)) == 39) post = post[,stan_data$Tsubj[,2]==120,]
+  
+  corrs = matrix(data = NA, nrow = iterations, ncol = length(scale_names),
+                 dimnames = list(c(1:iterations), c(unique(scale_names))))
+  
+  for(scale_name in scale_names){
+    for(i in 1:iterations){
+      corrs[i, scale_name] = cor(post[i,,p_session], scale[[scale_name]])
+    }
+  }
+  return(corrs)
+}
+```
+
+
+
+### ORL 1 vs SR 1
+```{r}
+print("Arew")
+Arew1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Arew,
+                            p_name = "Arew", scale = sr_sess1, scale_names = scale_sess1)
+apply(Arew1_SR1_Rs, 2, mean)
+
+print("Apun")
+Apun1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Apun,
+                            p_name = "Apun", scale = sr_sess1, scale_names = scale_sess1)
+apply(Apun1_SR1_Rs, 2, mean)
+
+print("K")
+K1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$K,
+                         p_name = "K", scale = sr_sess1, scale_names = scale_sess1)
+apply(K1_SR1_Rs, 2, mean)
+
+print("BetaF")
+betaF1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaF,
+                             p_name = "betaF", scale = sr_sess1, scale_names = scale_sess1)
+apply(betaF1_SR1_Rs, 2, mean)
+
+print("BetaP")
+betaP1_SR1_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaP,
+                             p_name = "betaP", scale = sr_sess1, scale_names = scale_sess1)
+apply(betaP1_SR1_Rs, 2, mean)
+```
+
+
+
+### ORL 1 vs SR 2
+```{r, eval}
+print("Arew")
+Arew1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Arew,
+                            p_name = "Arew", scale = sr_sess2, scale_names = scale_sess2)
+apply(Arew1_SR2_Rs, 2, mean)
+
+print("Apun")
+Apun1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$Apun,
+                            p_name = "Apun", scale = sr_sess2, scale_names = scale_sess2)
+apply(Apun1_SR2_Rs, 2, mean)
+
+print("K")
+K1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$K,
+                         p_name = "K", scale = sr_sess2, scale_names = scale_sess2)
+apply(K1_SR2_Rs, 2, mean)
+
+print("BetaF")
+betaF1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaF,
+                             p_name = "betaF", scale = sr_sess2, scale_names = scale_sess2)
+apply(betaF1_SR2_Rs, 2, mean)
+
+print("BetaP")
+betaP1_SR2_Rs = get_SR_corrs(post = posterior, p_session = 1, parameter = posterior$betaP,
+                             p_name = "betaP", scale = sr_sess2, scale_names = scale_sess2)
+apply(betaP1_SR2_Rs, 2, mean)
+```
+
+
+
+### ORL 2 vs SR 1
+```{r, eval}
+print("Arew")
+Arew2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Arew,
+                            p_name = "Arew", scale = sr_sess1, scale_names = scale_sess1)
+apply(Arew2_SR1_Rs, 2, mean)
+
+print("Apun")
+Apun2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Apun,
+                            p_name = "Apun", scale = sr_sess1, scale_names = scale_sess1)
+apply(Apun2_SR1_Rs, 2, mean)
+
+print("K")
+K2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$K,
+                         p_name = "K", scale = sr_sess1, scale_names = scale_sess1)
+apply(K2_SR1_Rs, 2, mean)
+
+print("BetaF")
+betaF2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaF,
+                             p_name = "betaF", scale = sr_sess1, scale_names = scale_sess1)
+apply(betaF2_SR1_Rs, 2, mean)
+
+print("BetaP")
+betaP2_SR1_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaP,
+                             p_name = "betaP", scale = sr_sess1, scale_names = scale_sess1)
+apply(betaP2_SR1_Rs, 2, mean)
+```
+
+
+
+### ORL 2 vs SR 2
+```{r}
+print("Arew")
+Arew2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Arew,
+                            p_name = "Arew", scale = sr_sess2, scale_names = scale_sess2)
+apply(Arew2_SR2_Rs, 2, mean)
+
+print("Apun")
+Apun2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$Apun,
+                            p_name = "Apun", scale = sr_sess2, scale_names = scale_sess2)
+apply(Apun2_SR2_Rs, 2, mean)
+
+print("K")
+K2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$K,
+                         p_name = "K", scale = sr_sess2, scale_names = scale_sess2)
+apply(K2_SR2_Rs, 2, mean)
+
+print("BetaF")
+betaF2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaF,
+                             p_name = "betaF", scale = sr_sess2, scale_names = scale_sess2)
+apply(betaF2_SR2_Rs, 2, mean)
+
+print("BetaP")
+betaP2_SR2_Rs = get_SR_corrs(post = posterior, p_session = 2, parameter = posterior$betaP,
+                             p_name = "betaP", scale = sr_sess2, scale_names = scale_sess2)
+apply(betaP2_SR2_Rs, 2, mean)
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

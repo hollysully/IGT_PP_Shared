@@ -1,0 +1,94 @@
+---
+title: "Model Comparison"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(wBoot)
+library(cmdstanr)
+library(loo)
+```
+
+
+
+# -------------------------------------------
+# S-IGT
+```{r}
+orl_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
+                       "orl_pp_fit.rds"))
+orl_playfic_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL_updatedfic",
+                               "orl_pp_updatedfic_fit.rds"))
+orl_playfic_playupdate_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "orl_playfic_playupdate",
+                               "orl_playfic_playupdate_pp_fit.rds"))
+orl_playfic_playupdate_modifiedK_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL_playfic_playupdate_modifiedK",
+                                                    "orl_playfic_playupdate_modifiedK_pp_fit.rds"))
+```
+
+
+
+```{r}
+log_lik_orl = extract_log_lik(orl_fit)
+log_lik_orl_playfic = extract_log_lik(orl_playfic_fit)
+log_lik_orl_playfic_playupdate = extract_log_lik(orl_playfic_playupdate_fit)
+log_lik_orl_playfic_playupdate_modifiedK_fit = extract_log_lik(orl_playfic_playupdate_modifiedK_fit)
+```
+
+
+
+```{r}
+loo_orl = loo(log_lik_orl)
+loo_orl_playfic = loo(log_lik_orl_playfic)
+loo_orl_playfic_playupdate = loo(log_lik_orl_playfic_playupdate)
+loo_orl_playfic_playupdate_modifiedK_fit = loo(log_lik_orl_playfic_playupdate_modifiedK_fit)
+```
+
+
+
+```{r}
+comparison = loo_compare(list("ORL" = loo_orl,
+                              "ORL Updatedfic" = loo_orl_playfic,
+                              # "orl_playfic_playupdate" = loo_orl_playfic_playupdate,
+                              "ORL Playfic Playupdate Modified K" = loo_orl_playfic_playupdate_modifiedK_fit))
+
+print(comparison, simplify = T)
+```
+
+
+
+# -------------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

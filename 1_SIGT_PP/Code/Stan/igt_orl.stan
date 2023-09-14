@@ -1,209 +1,250 @@
-
-
-// use an R script to preprocess the data into stan-ready list
-data {
-  int<lower=1> N; //numSubjs; the number of subjects
-  int<lower=1> T; //maxTrials
-  int<lower=1, upper=T> Tsubj[N];  // for each sub, a list of the trial nums, 1:T
-  int stim[N, T];  // a value of 1-4, representing the deck presented on a given trial
-  real rewlos[N, T]; // absolute value of outcome, 0 for pass & NA outcomes
-  real Srewlos[N, T]; // the sign of the outcome: values of 1, 0, or -1
-  int ydata[N, T]; // a value of 1 for play or 2 for pass
-}
-transformed data {
-  real sign[N, T];
-  
-  for (i in 1:N) {   // i is the individual subject
-    for (t in 1:T) {  // t is the individual trial
-      if (Srewlos[i,t]>0) {
-        sign[i,t] = 1;
-      } else if (Srewlos[i,t]==0) {
-        sign[i,t] = 0;
-      } else {
-        sign[i,t] = -1;
-      }
+functions {
+  real Phi_approx_group_mean_rng(real mu, real sigma, int n_samples) {
+    vector[n_samples] par;
+    for (i in 1:n_samples) {
+      par[i] = Phi_approx(normal_rng(mu, sigma));
     }
+    return mean(par);
   }
 }
+
+data {
+  int<lower=1> N;                    // Number of participants
+  int<lower=1> T;                    // Total possile number of trials
+  int card[N,T];                     // Cards presented on each trial
+  int Tsubj[N];                      // Total number of trials presented to each subject on each session
+  int choice[N,T];                   // Choices on each trial
+  real outcome[N,T];                 // Outcomes received on each trial
+  real sign[N,T];                    // Signs of the outcome received on each trial
+}
+
 parameters {
-// Declare all parameters as vectors for vectorizing
-  // Hyper(group)-parameters  
-  vector[5] mu_p;  
-  vector<lower=0>[5] sigma;
-    
-  // Subject-level raw parameters (for Matt trick)
-  vector[N] Arew_pr;
-  vector[N] Apun_pr;
-  vector[N] K_pr;
+// Declare parameters
+  // Hyper(group)-parameters
+  vector[5] mu_p;   // 5 (number of parameters) length vector of mus
+  real<lower=0> sigma_Arew;
+  real<lower=0> sigma_Apun;
+  real<lower=0> sigma_K;
+  real<lower=0> sigma_betaF;
+  real<lower=0> sigma_betaP;
+
+  // Subject-level "raw" parameters - i.e., independent/uncorrelated & normally distributed person-level (random-)effects
+    // Note, these are S (number of sessions) x N (number of subjects) matrices
+  vector[N] Arew_pr;  
+  vector[N] Apun_pr;  
+  vector[N] K_pr;   
   vector[N] betaF_pr;
   vector[N] betaP_pr;
 }
-transformed parameters {
-  // Transform subject-level raw parameters
-  vector<lower=0, upper=1>[N] Arew;
-  vector<lower=0, upper=1>[N] Apun;
-  vector<lower=0, upper=5>[N] K;
-  vector[N]                   betaF;
-  vector[N]                   betaP;
 
-  for (i in 1:N) {
-    Arew[i]  = Phi_approx( mu_p[1] + sigma[1] * Arew_pr[i] );
-    Apun[i]  = Phi_approx( mu_p[2] + sigma[2] * Apun_pr[i] );
-    K[i] = Phi_approx(mu_p[3] + sigma[3] * K_pr[i]) * 5;
-  }
-  betaF = mu_p[4] + sigma[4] * betaF_pr;
-  betaP = mu_p[5] + sigma[5] * betaP_pr;
-}
-model {
-  // Hyperparameters
-  mu_p  ~ normal(0, 1);
-  sigma[1:3] ~ normal(0, 0.2);
-  sigma[4:5] ~ cauchy(0, 1);
+transformed parameters {
+// Declare transformed parameters
+  // Parameters to use in the reinforcement-learning algorithm
+    // Note, for each of these, we include the mus and the subject-level parameters (see below), allowing for shrinkage and subject-to-subject variability
+  vector<lower=0,upper=1>[N] Arew; 
+  vector<lower=0,upper=1>[N] Apun; 
+  vector<lower=0,upper=5>[N] K;    
+  vector[N] betaF;
+  vector[N] betaP;
   
-  // individual parameters
+  // Untransformed subject-level parameters incorporating correlation between sessions
+  vector[N] Arew_tilde;
+  vector[N] Apun_tilde;
+  vector[N] K_tilde;
+  vector[N] betaF_tilde;
+  vector[N] betaP_tilde;
+  
+  // Calculate transformed parameters
+  
+  // Untransformed subject-level parameters incorporating correlation between sessions
+  Arew_tilde  = sigma_Arew * Arew_pr;  
+  Apun_tilde  = sigma_Apun * Apun_pr;  
+  K_tilde     = sigma_K * K_pr;  
+  betaF_tilde = sigma_betaF * betaF_pr;  
+  betaP_tilde = sigma_betaP * betaP_pr;
+  
+  // Calculate & transform Arew, Apun, & K to use in RL algorithm
+  for(i in 1:N){  // Loop over subjects - This is structured the same as the OG joint retest model such that Arew,
+                      // Apun, & K are looped over for individual subjects whereas betaF & betaP are vectorized for
+                      // individual subjects.
+                      // Maybe to avoid nesting a function within a function - e.g., to_vector(Phi_approx... 
+    Arew[i] = Phi_approx(mu_p[1] + Arew_tilde[i]);
+    Apun[i] = Phi_approx(mu_p[2] + Apun_tilde[i]);
+    K[i]    = Phi_approx(mu_p[3] + K_tilde[i]) * 5;
+    // Calculate betaF & betaP to use in RL algorithm
+    betaF[i] = mu_p[4] + betaF_tilde[i];
+    betaP[i] = mu_p[5] + betaP_tilde[i];
+  }
+}
+
+model {
+  // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
+  matrix[4,2] ef;
+  matrix[4,2] ev;
+  matrix[4,2] pers;
+  matrix[4,2] utility;
+    
+  real PEval;
+  real PEfreq;
+  real PEfreq_fic;
+  real K_tr;
+  
+  // Priors
+  // Hyperparameters for RL learning algorithm
+  mu_p        ~ normal(0, 1);
+  mu_p        ~ normal(0, 1);
+  sigma_Arew  ~ normal(0, 0.2);
+  sigma_Apun  ~ normal(0, 0.2);
+  sigma_K     ~ normal(0, 0.2);
+  sigma_betaF ~ cauchy(0, 1);
+  sigma_betaP ~ cauchy(0, 1);
+  
+  // Subject-level parameters
   Arew_pr  ~ normal(0, 1.0);
   Apun_pr  ~ normal(0, 1.0);
   K_pr     ~ normal(0, 1.0);
   betaF_pr ~ normal(0, 1.0);
   betaP_pr ~ normal(0, 1.0);
-
-  for (i in 1:N) {
-    // Define values
-    matrix[4,2] ef;
-    matrix[4,2] ev;
-    matrix[4,2] pers;
-    matrix[4,2] util;
-    
-    real util_tr[2];
-
-    real PEval;
-    real PEfreq;
-    real PEfreq_fic;
-    real PEval_fic;
-    real K_tr;
-    
-    // Initialize values
-    K_tr = pow(3, K[i]) - 1;
-    for (j in 1:2) {
-      ef[:,j] = rep_vector(0,4);
-      ev[:,j] = rep_vector(0,4);
-      util[:,j] = rep_vector(0,4);
-      pers[:,j] = rep_vector(0,4);
-    }
-
-    for (t in 1:Tsubj[i]) {
-      // softmax choice
-      ydata[i, t] ~ categorical_logit(to_vector(util[stim[i,t],:]));
+  
+  for (i in 1:N) {         // Loop through individual participants
+    if (Tsubj[i] > 0) {    // If we have data for participant i on session s, run through RL algorithm
       
-      // Prediction error
-      PEval  = rewlos[i,t] - ev[stim[i,t], ydata[i,t]];
-      PEfreq = sign[i,t] - ef[stim[i,t], ydata[i,t]];
-      PEfreq_fic = -sign[i,t]/1 - ef[stim[i,t], (3-ydata[i,t])];
-
-      if (rewlos[i,t] >= 0) {
-        // Update foregone deck
-        ef[stim[i,t], (3-ydata[i,t])] = ef[stim[i,t], (3-ydata[i,t])] + Apun[i] * PEfreq_fic;
-        // Update chosen deck
-        ef[stim[i,t], ydata[i,t]] = ef[stim[i,t], ydata[i,t]] + Arew[i] * PEfreq;
-        ev[stim[i,t], ydata[i,t]] = ev[stim[i,t], ydata[i,t]] + Arew[i] * PEval;
-      } else {
-        // Update ev for all decks 
-        ef[stim[i,t], (3-ydata[i,t])] = ef[stim[i,t], (3-ydata[i,t])] + Arew[i] * PEfreq_fic;
-        // Update chosendeck with stored value
-        ef[stim[i,t], ydata[i,t]] = ef[stim[i,t], ydata[i,t]] + Apun[i] * PEfreq;
-        ev[stim[i,t], ydata[i,t]] = ev[stim[i,t], ydata[i,t]] + Apun[i] * PEval;
+      // Initialize starting values
+      K_tr = pow(3, K[i]) - 1;
+      for (pp in 1:2) {  // Looping over play/pass columns and assigning each 0 to each card
+        ev[:,pp] = rep_vector(0,4);
+        ef[:,pp] = rep_vector(0,4);
+        pers[:,pp] = rep_vector(0,4);
+        utility[:,pp] = rep_vector(0,4);
       }
       
-      // Perseverance updating
-      pers[stim[i,t], ydata[i,t]] = 1;   
-      pers = pers / (1 + K_tr); 
+      for (t in 1:Tsubj[i]) { // Run through RL algorithm trial-by-trial
+        
+      // Likelihood - predict choice as a function of utility
+      choice[i,t] ~ categorical_logit(to_vector(utility[card[i,t], :]));
       
-      // Utility of expected value and perseverance
-      util = ev + ef * betaF[i] + pers * betaP[i];
+      // After choice, calculate prediction error
+      PEval      = outcome[i,t] - ev[card[i,t], choice[i,t]];     // Value prediction error
+      PEfreq     = sign[i,t] - ef[card[i,t], choice[i,t]];        // Win-frequency prediction error
+      PEfreq_fic = -sign[i,t]/1 - ef[card[i,t], (3-choice[i,t])]; // Lose-frequency prediction error?
+      
+      if (outcome[i,t] >= 0) {  // If participant DID NOT lose
+        // Update expected win-frequency of what participant DID NOT chose to do
+        ef[card[i,t], (3-choice[i,t])] = ef[card[i,t], (3-choice[i,t])] + Apun[i] * PEfreq_fic;
+        // Update what participant chose
+        ef[card[i,t], choice[i,t]] = ef[card[i,t], choice[i,t]] + Arew[i] * PEfreq;
+        ev[card[i,t], choice[i,t]] = ev[card[i,t], choice[i,t]] + Arew[i] * PEval;
+      } else { // If participant DID lose
+        // Update expected win-frequency of what participant DID NOT choose to do
+        ef[card[i,t], (3-choice[i,t])] = ef[card[i,t], (3-choice[i,t])] + Arew[i] * PEfreq_fic;
+        // Update what participant chose
+        ef[card[i,t], choice[i,t]] = ef[card[i,t], choice[i,t]] + Apun[i] * PEfreq;
+        ev[card[i,t], choice[i,t]] = ev[card[i,t], choice[i,t]] + Apun[i] * PEval;
+      }
+      
+      // Update perseverance
+      pers[card[i,t], choice[i,t]] = 1;
+      pers = pers / (1 + K_tr);
+      
+      // Calculate expected value of card
+      utility = ev + ef * betaF[i] + pers * betaP[i];
+      }
     }
   }
 }
 
 generated quantities {
-  // For group level parameters
+  // Hyper(group)-parameters - these are 5 (number of parameters) of mus, respectively, for each parameter
   real<lower=0,upper=1> mu_Arew;
   real<lower=0,upper=1> mu_Apun;
   real<lower=0,upper=5> mu_K;
-  real                  mu_betaF;
-  real                  mu_betaP;
-  
-  // For log likelihood calculation
+  real mu_betaF;
+  real mu_betaP;
   real log_lik[N];
-  
-  // For log likelihood calculation
-  int y_pred[N,T];
 
-  mu_Arew   = Phi_approx(mu_p[1]);
-  mu_Apun   = Phi_approx(mu_p[2]);
-  mu_K      = Phi_approx(mu_p[3]) * 5;
-  mu_betaF  = mu_p[4];
-  mu_betaP  = mu_p[5];
+  // For posterior predictive check
+  real choice_pred[N,T];
+  
+  // Set all posterior predictions to -1 (avoids NULL values)
+  for (i in 1:N) {
+    for (t in 1:T) {
+      choice_pred[i,t] = -1;
+    }
+  }
+  
+  // Compute group-level means
+  mu_Arew = Phi_approx_group_mean_rng(mu_p[1], sigma_Arew, 10000);
+  mu_Apun = Phi_approx_group_mean_rng(mu_p[2], sigma_Apun, 10000);
+  mu_K = Phi_approx_group_mean_rng(mu_p[3], sigma_K, 10000) * 5; 
+  mu_betaF = mu_p[4];
+  mu_betaP = mu_p[5];
   
   { // local section, this saves time and space
-    for (i in 1:N) {
-      // Define values
-      matrix[4,2] ef;
-      matrix[4,2] ev;
-      matrix[4,2] pers;
-      matrix[4,2] util;
+    // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
+    matrix[4,2] ef;
+    matrix[4,2] ev;
+    matrix[4,2] pers;
+    matrix[4,2] utility;
       
-      real util_tr[2];
+    real PEval;
+    real PEfreq;
+    real PEfreq_fic;
+    real K_tr;
   
-      real PEval;
-      real PEfreq;
-      real PEfreq_fic;
-      real PEval_fic;
-      real K_tr;
+    for (i in 1:N) {         // Loop through individual participants
+      log_lik[i] = 0;        // Initialize log_lik
       
-      // Initialize values
-      log_lik[i] = 0;
-      K_tr = pow(3, K[i]) - 1;
-      for (j in 1:2) {
-        ef[:,j] = rep_vector(0,4);
-        ev[:,j] = rep_vector(0,4);
-        util[:,j] = rep_vector(0,4);
-        pers[:,j] = rep_vector(0,4);
-      }
-      
-      for (t in 1:Tsubj[i]) {
-        // softmax choice
-        log_lik[i] += categorical_logit_lpmf( ydata[i,t] | to_vector(util[stim[i,t],:]) );
+      if (Tsubj[i] > 0) {    // If we have data for participant i on session s, run through RL algorithm
         
-        // softmax choice
-        // generate posterior prediction for current trial
-        y_pred[i,t] = categorical_rng(softmax(to_vector(util[stim[i,t],:])));
-        
-        // Prediction error
-        PEval  = rewlos[i,t] - ev[stim[i,t], ydata[i,t]];
-        PEfreq = sign[i,t] - ef[stim[i,t], ydata[i,t]];
-        PEfreq_fic = -sign[i,t]/1 - ef[stim[i,t], (3-ydata[i,t])];
-  
-        if (rewlos[i,t] >= 0) {
-          // Update foregone deck
-          ef[stim[i,t], (3-ydata[i,t])] = ef[stim[i,t], (3-ydata[i,t])] + Apun[i] * PEfreq_fic;
-          // Update chosen deck
-          ef[stim[i,t], ydata[i,t]] = ef[stim[i,t], ydata[i,t]] + Arew[i] * PEfreq;
-          ev[stim[i,t], ydata[i,t]] = ev[stim[i,t], ydata[i,t]] + Arew[i] * PEval;
-        } else {
-          // Update ev for all decks 
-          ef[stim[i,t], (3-ydata[i,t])] = ef[stim[i,t], (3-ydata[i,t])] + Arew[i] * PEfreq_fic;
-          // Update chosendeck with stored value
-          ef[stim[i,t], ydata[i,t]] = ef[stim[i,t], ydata[i,t]] + Apun[i] * PEfreq;
-          ev[stim[i,t], ydata[i,t]] = ev[stim[i,t], ydata[i,t]] + Apun[i] * PEval;
+        // Initialize starting values
+        K_tr = pow(3, K[i]) - 1;
+        for (pp in 1:2) {  // Looping over play/pass columns and assigning each 0 to each card
+          ev[:,pp] = rep_vector(0,4);
+          ef[:,pp] = rep_vector(0,4);
+          pers[:,pp] = rep_vector(0,4);
+          utility[:,pp] = rep_vector(0,4);
         }
         
-        // Perseverance updating
-        pers[stim[i,t], ydata[i,t]] = 1;   
-        pers = pers / (1 + K_tr); 
-        
-        // Utility of expected value and perseverance
-        util = ev + ef * betaF[i] + pers * betaP[i];
+        for (t in 1:Tsubj[i]) { // Run through RL algorithm trial-by-trial
+          // softmax choice
+          log_lik[i] += categorical_logit_lpmf(choice[i,t]|to_vector(utility[card[i,t], :]));
+          
+          // Likelihood - predict choice as a function of utility
+          choice_pred[i,t] = categorical_rng(softmax(to_vector(utility[card[i,t], :])));
+          
+          // After choice, calculate prediction error
+          PEval      = outcome[i,t] - ev[card[i,t], choice[i,t]];     // Value prediction error
+          PEfreq     = sign[i,t] - ef[card[i,t], choice[i,t]];        // Win-frequency prediction error
+          PEfreq_fic = -sign[i,t]/1 - ef[card[i,t], (3-choice[i,t])]; // Lose-frequency prediction error?
+          
+          if (outcome[i,t] >= 0) {  // If participant DID NOT lose
+            // Update expected win-frequency of what participant DID NOT chose to do
+            ef[card[i,t], (3-choice[i,t])] = ef[card[i,t], (3-choice[i,t])] + Apun[i] * PEfreq_fic;
+            // Update what participant chose
+            ef[card[i,t], choice[i,t]] = ef[card[i,t], choice[i,t]] + Arew[i] * PEfreq;
+            ev[card[i,t], choice[i,t]] = ev[card[i,t], choice[i,t]] + Arew[i] * PEval;
+          } else { // If participant DID lose
+            // Update expected win-frequency of what participant DID NOT choose to do
+            ef[card[i,t], (3-choice[i,t])] = ef[card[i,t], (3-choice[i,t])] + Arew[i] * PEfreq_fic;
+            // Update what participant chose
+            ef[card[i,t], choice[i,t]] = ef[card[i,t], choice[i,t]] + Apun[i] * PEfreq;
+            ev[card[i,t], choice[i,t]] = ev[card[i,t], choice[i,t]] + Apun[i] * PEval;
+          }
+          
+          // Update perseverance
+          pers[card[i,t], choice[i,t]] = 1;
+          pers = pers / (1 + K_tr);
+          
+          // Calculate expected value of card
+          utility = ev + ef * betaF[i] + pers * betaP[i];
+        }
       }
     }
-  }  
+  }
 }
+
+
+
+
+
+

@@ -1,0 +1,1112 @@
+---
+title: "Manuscript Plots"
+output: html_document
+date: "2023-03-09"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages & Data
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(foreach)
+library(tidybayes)
+library(patchwork)
+library(abind)
+library(zoo)
+library(here)
+library(ggpubr)
+library(egg)
+library(grid)
+library(tidyverse)
+library(lemon)
+library(ggpp)
+library(wBoot)
+library(stringi)
+library(ggh4x)
+
+stan_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted",
+                              "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                              "orl_pp_joint_playfic_playupdate_modifiedK_simplified_posteriors.rds"))
+
+trial_choice_proportions = readRDS(here("1_IGT_PP", "Data", "2_Fitted",
+                                        "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                                        "orl_pp_joint_playfic_playupdate_modifiedK_simplified_ppcs.rds"))
+```
+
+
+
+## Functions
+```{r}
+estimate_CI_label = function(estimate, lower, upper){
+  
+  estimate = round(estimate,2)
+  estimate_lab = paste(ifelse(sign(estimate)==1," ","-"), stri_pad_right(str_remove(abs(estimate), "^0+"),
+                                                           width = 3, pad = "0"),sep="")
+  lower = round(as.numeric(str_remove(lower, "\\(")),2)
+  upper = round(as.numeric(str_remove(upper, "\\)")),2)
+  
+  lower_lab = paste(ifelse(sign(lower)==1,"","-"), stri_pad_right(str_remove(abs(lower), "^0+"),
+                                                                  width = 3, pad = "0"),sep="")
+  
+  upper_lab = paste(ifelse(sign(upper)==1,"","-"), stri_pad_right(str_remove(abs(upper), "^0+"),
+                                                                  width = 3, pad = "0"),sep="")
+  estimate_CI = paste("=",estimate_lab," [",lower_lab,",",upper_lab,"]",sep="")
+  
+  return(estimate_CI)
+}
+```
+
+
+
+# ---------------------------------------
+# Good/Bad Play Proportions
+## Prep Data
+```{r, eval = T}
+# Recode choice data
+choices = ifelse(stan_data$choice == 2, 0, ifelse(stan_data$choice == 1, 1, NA))
+
+# Empty matrices
+good_proportions = matrix(data = NA, nrow = 49, ncol = 2)
+bad_proportions = matrix(data = NA, nrow = 49, ncol = 2)
+
+# Calculate proportions
+for(i in 1:49){
+  for(s in 1:2){
+    good_proportions[i,s] = mean(choices[i,,s][stan_data$card[i,,s] == 3 | stan_data$card[i,,s] == 4], na.rm = T)
+    bad_proportions[i,s] = mean(choices[i,,s][stan_data$card[i,,s] == 1 | stan_data$card[i,,s] == 2], na.rm = T)
+  }
+}
+
+choice_proportions = data.frame(good_1 = good_proportions[,1], good_2 = good_proportions[,2],
+                                bad_1 = bad_proportions[,1], bad_2 = bad_proportions[,2]) %>% 
+  mutate(id = 1:n()) %>% 
+  pivot_longer(c("good_1", "good_2", "bad_1", "bad_2"), names_sep = "_",
+               names_to = c("type", "session"),
+               values_to = "choice_proportion") %>% 
+  mutate(type = factor(type, levels = c("good", "bad"), labels = c("Good", "Bad"), ordered = T),
+         session = factor(session, levels = c("1", "2"), labels = c("1", "2"), ordered = T))
+
+(good_t = t.test(good_proportions[,1], good_proportions[,2], paired = T, alternative = "two.sided"))
+(good_r = boot.cor.bca(x = good_proportions[,1][!is.na(good_proportions[,2])],
+                       y = good_proportions[,2][!is.na(good_proportions[,2])],
+                       null.hyp = NULL,
+                       alternative = c("two.sided", "less", "greater"),
+                       conf.level = 0.95, type = NULL, R = 9999))
+good_r_info = data.frame(r = good_r$Observed,
+                         CI = good_r$Confidence.interval) %>% 
+  separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+  mutate(lower = as.numeric(str_remove(lower, "\\(")), upper = as.numeric(str_remove(upper, "\\)")))
+
+(bad_t = t.test(bad_proportions[,1], bad_proportions[,2], paired = T, alternative = "two.sided"))
+(bad_r = boot.cor.bca(x = bad_proportions[,1][!is.na(bad_proportions[,2])],
+                      y = bad_proportions[,2][!is.na(bad_proportions[,2])],
+                      null.hyp = NULL,
+                      alternative = c("two.sided", "less", "greater"),
+                      conf.level = 0.95, type = NULL, R = 9999))
+bad_r_info = data.frame(r = bad_r$Observed,
+                         CI = bad_r$Confidence.interval) %>% 
+  separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+  mutate(lower = as.numeric(str_remove(lower, "\\(")), upper = as.numeric(str_remove(upper, "\\)")))
+
+prop_rCIs = data.frame(type = factor(c("good", "bad"), levels = c("good", "bad"), labels = c("Good", "Bad"), ordered = T),
+                       rCI = c(estimate_CI_label(good_r_info$r, good_r_info$lower, good_r_info$upper),
+                               estimate_CI_label(bad_r_info$r, bad_r_info$lower, bad_r_info$upper)))
+
+
+boot.cor.bca(x = as.numeric(good_proportions[,1]),
+             y = as.numeric(bad_proportions[,1]),
+             null.hyp = NULL,
+             alternative = c("two.sided", "less", "greater"),
+             conf.level = 0.95, type = NULL, R = 9999)
+
+boot.cor.bca(x = as.numeric(good_proportions[,2][!is.na(good_proportions[,2])]),
+             y = as.numeric(bad_proportions[,2][!is.na(bad_proportions[,2])]),
+             null.hyp = NULL,
+             alternative = c("two.sided", "less", "greater"),
+             conf.level = 0.95, type = NULL, R = 9999)
+
+boot.cor.bca(x = apply(good_proportions, 1, mean, na.rm = T),
+             y = apply(bad_proportions, 1, mean, na.rm = T),
+             null.hyp = NULL,
+             alternative = c("two.sided", "less", "greater"),
+             conf.level = 0.95, type = NULL, R = 9999)
+```
+
+
+
+## Absolute Reliability Plots
+```{r, eval = T}
+prop_abs_plot = 
+  choice_proportions %>% 
+    group_by(type) %>% 
+    mutate(mu = mean(choice_proportion, na.rm = T),
+           sd = sd(choice_proportion, na.rm = T)) %>% 
+    # plot
+    ggplot(aes(x = type, y = choice_proportion, fill = session)) +
+      # geoms
+      geom_crossbar(aes(y = mu, ymin = mu, ymax = mu), size = .5, fatten = 0) +
+      geom_dotplot(binaxis = "y", stackdir = "center",
+                   position = position_dodge(width = .8)) +
+      stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), 
+                   geom = "pointrange", color = "red", size = .1,
+                   position = position_dodge(width = .8)) + 
+      # scales
+      scale_y_continuous(limits = c(0, 1), expand = c(.01, .01), breaks = seq(0, 1, .25)) +
+      scale_fill_manual(values = c("gray25", "gray75"),
+                        labels = c("Session 1", "Session 2")) +
+      # themes
+      labs(x = "Session", y = "Proportion of Plays") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 10),
+            axis.text.y = element_text(color = "black", size = 9),
+            axis.title.x = element_blank(),
+            axis.title.y = element_text(size = 10),
+            plot.margin = unit(c(1.5,0,0,0), "lines"),
+            legend.position = "none")
+
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Summary_Abs_Reliability.tiff"),
+     width = 7, height = 4, units = "cm", res = 300)
+
+  grid.newpage()
+  pushViewport(viewport(x = .5, y = .5, width = .9, height = .9))
+  grid.draw(prop_abs_plot)
+  
+  # text
+  grid.text(c("1", "2", "1", "2"),
+            x = c(.3225, .475, .6975, .85), y = .85,
+            gp = gpar(fontsize = 9.5))
+  grid.text("Session",
+            x = .59, y = .94,
+            gp = gpar(fontsize = 9.5))
+  grid.lines(x = c(.5,.68), y = .9)
+  
+dev.off()
+```
+
+
+
+## Relative Reliability Plots
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Summary_Rel_Reliability.tiff"),
+     width = 7, height = 3.5, units = "cm", res = 300)
+  
+  (prop_rel_plot = 
+    choice_proportions %>% 
+      pivot_wider(names_from = "session", values_from = "choice_proportion", names_prefix = "session_") %>% 
+      ggplot(aes(x = session_1, y = session_2)) +
+        # geoms
+        geom_point(size = 1, shape = 21, color = "black", fill = "gray50") +
+        geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F, size = .5,
+                    fullrange = T) +
+        geom_text_npc(data = prop_rCIs, aes(npcx = "right", npcy = "bottom",
+                                            label = rCI), size = 2.25, vjust = 0) +
+        geom_text_npc(aes(npcx = "right", npcy = "bottom"), label = expression(italic(r)),
+                      size = 2.25, hjust = 21.25, vjust = 0) +
+        # scales
+        scale_x_continuous(limits = c(0, 1), expand = c(.01, .01), breaks = seq(0, 1, .25),
+                           labels = c("0", ".25", ".50", ".75", "1")) +
+        scale_y_continuous(limits = c(0, 1), expand = c(.01, .01), breaks = seq(0, 1, .25),
+                           labels = c("0", ".25", ".50", ".75", "1")) +
+        # themes
+        labs(x = "Session 1", y = "Session 2") +
+        coord_cartesian(clip = "off") +
+        theme_classic() +
+        theme(axis.text = element_text(color = "black"),
+              text = element_text(color = "black", size = 10),
+              panel.spacing.y = unit(-1, "lines"),
+              strip.background = element_rect(color = "transparent", fill = NA),
+              strip.text = element_text(vjust = -2),
+              plot.margin = unit(c(-.5,0.1,0.1,0.1), "lines"),
+              aspect.ratio = 1) +
+        facet_rep_wrap(.~type, ncol = 2))
+  
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# PPC Plot
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "PPC.tiff"),
+     width = 15, height = 7, units = "cm", res = 300)
+
+  # simplify data
+  trial_choice_proportions %>% 
+    group_by(trial, deck, session) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    # plotting
+    ggplot(aes(x = trial,
+               group = trial)) +
+    # geoms
+    geom_linerange(aes(ymin = lower95, ymax = upper95),
+                   linewidth = .35, color = "goldenrod3", alpha = .35) +
+    geom_linerange(aes(ymin = lower50, ymax = upper50),
+                   linewidth = .35, color = "goldenrod3") +
+    geom_point(aes(y = mu, color = "Predicted", fill = "Predicted"),
+               shape = 21, size = .75) +
+    geom_point(aes(y = observed, color = "Observed", fill = "Observed"),
+               shape = 21, size = .75) +
+    # scales
+    scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                       breaks = seq(0,1,.25)) +
+    scale_color_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "goldenrod3")) +
+    scale_fill_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "white")) +
+    # theme
+    labs(x = "Trial", y = "Proportion Play") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          legend.title = element_blank(),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.position = c(.84,.59), 
+          legend.spacing.x = unit(0, 'cm'),
+          legend.spacing.y = unit(-.25, 'cm'),
+          legend.text = element_text(size = 8),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(-.5,"lines"),
+          legend.key.size = unit(.25, "cm"),
+          panel.spacing.y = unit(0,"lines")) +
+    guides(color = guide_legend(override.aes = list(size = 1.25))) +
+    facet_rep_grid(session~deck,
+                   labeller = labeller(session = c("1" = "Session 1", "2" = "Session 2"),
+                                       deck = c("A" = "Deck A", "B" = "Deck B",
+                                                "C" = "Deck C", "D" = "Deck D")))
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# ORL Parameters
+## Absolute Reliability
+```{r}
+orl_abs_data = bind_rows(data.frame(parameter = "Arew", session = orl_posteriors$mu_Arew),
+                         data.frame(parameter = "Apun", session = orl_posteriors$mu_Apun),
+                         data.frame(parameter = "betaF", session = orl_posteriors$mu_betaF),
+                         data.frame(parameter = "betaP", session = orl_posteriors$mu_betaP),
+                         data.frame(parameter = "K", session = orl_posteriors$mu_K)) %>% 
+  mutate(session.diff = session.1 - session.2) %>% 
+  pivot_longer(starts_with("session"),
+               names_to = "session", values_to = "estimate", names_prefix = "session.") %>% 
+  group_by(parameter, session) %>% 
+  mutate(mu = mean(estimate),
+         lower50 = HDIofMCMC(estimate, credMass = .5)[1],
+         upper50 = HDIofMCMC(estimate, credMass = .5)[2],
+         lower95 = HDIofMCMC(estimate)[1],
+         upper95 = HDIofMCMC(estimate)[2],
+         parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaP", "K")),
+         parameter_lab = factor(parameter,
+                                levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                                labels = c(expression(paste(italic(A),"+",sep="")),
+                                           expression(paste(italic(A),"-",sep="")),
+                                           expression(paste("\u03B2",italic(f),sep="")),
+                                           expression(paste("\u03B2",italic(p),sep="")),
+                                           expression(italic(K)))),
+         parameter_lab = case_when(session == "diff" ~ parameter_lab, T ~ NA))
+
+orl_abs_scales =
+  list(parameter == "Arew" & session != "diff" ~
+         scale_x_continuous(limits = c(0, .3), expand = expansion(add = c(0, 0)),
+                            breaks = seq(0, .3, .15), labels = c("0", ".15", ".3")),
+       parameter == "Arew" & session == "diff" ~
+         scale_x_continuous(limits = c(-.3, .3), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-.3, .3, .3), labels = c("-.3", "0", ".3")),
+       
+       parameter == "Apun" & session != "diff" ~
+         scale_x_continuous(limits = c(.05, .15), expand = expansion(add = c(0, 0)),
+                            breaks = seq(.05, .15, .05), labels = c(".05", ".1", ".15")),
+       parameter == "Apun" & session == "diff" ~
+         scale_x_continuous(limits = c(-.05, .05), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-.05, .05, .05), labels = c("-.05", "0", ".05")),
+       
+       parameter == "betaF" & session != "diff" ~
+         scale_x_continuous(limits = c(0, 6), expand = expansion(add = c(0, 0)),
+                            breaks = seq(0, 6, 3), labels = c(".05", ".1", ".15")),
+       parameter == "betaF" & session == "diff" ~
+         scale_x_continuous(limits = c(-3, 3), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-3, 3, 3), labels = c("-3", "0", "3")),
+       
+       parameter == "betaP" & session != "diff" ~
+         scale_x_continuous(limits = c(0, 3), expand = expansion(add = c(0, 0)),
+                            breaks = seq(0, 3, 1.5), labels = c("0", "1.5", "3")),
+       parameter == "betaP" & session == "diff" ~
+         scale_x_continuous(limits = c(-2, 2), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-2, 2, 2), labels = c("-2", "0", "2")),
+       
+       parameter == "K" & session != "diff" ~
+         scale_x_continuous(limits = c(0, .3), expand = expansion(add = c(0, 0)),
+                            breaks = seq(0, .3, .15), labels = c("0", ".15", ".3")),
+       parameter == "K" & session == "diff" ~
+         scale_x_continuous(limits = c(-.1, .1), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-.1, .1, .1), labels = c("-.1", "0", ".1")))
+```
+
+
+
+```{r}
+orl_abs_plot = orl_abs_data %>% 
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                   linewidth = .1, bins = 50) +
+  
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower95), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper95), color = "red", linetype = "dashed", linewidth = .25) +
+    # scales
+    scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.5, .5, .3, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(parameter~session, scales = "free",
+                   nrow = 5, ncol = 3) +
+    facetted_pos_scales(x = orl_abs_scales)
+```
+
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "ORL_Abs_Reliability.tiff"),
+     width = 7, height = 10, units = "cm", res = 300)
+
+  grid.newpage()
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(orl_abs_plot)
+  
+  # text
+  grid.text(c("Session 1", "Session 2", " Session 1-2"),
+            x = c(.2, .515, .81), y = .98,
+            gp = gpar(fontsize = 9.5))
+  grid.text(c(expression(paste(italic(A),"+",sep="")),
+                                           expression(paste(italic(A),"-",sep="")),
+                                           expression(paste("\u03B2",italic(f),sep="")),
+                                           expression(paste("\u03B2",italic(p),sep="")),
+                                           expression(italic(K))),
+            x = rep(.93, 5), y = c(.89, .725, .55, .37, .195),
+            gp = gpar(fontsize = 9.5))
+  
+dev.off()
+```
+
+
+## Relative Reliability
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "ORL_Rel_Reliability.tiff"),
+     width = 14.6, height = 4, units = "cm", res = 300)
+
+  bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
+            data.frame(parameter = "Apun", r = orl_posteriors$R_Apun[,2,1]),
+            data.frame(parameter = "betaF", r = orl_posteriors$R_betaF[,2,1]),
+            data.frame(parameter = "betaP", r = orl_posteriors$R_betaP[,2,1]),
+            data.frame(parameter = "K", r = orl_posteriors$R_K[,2,1])) %>% 
+    mutate(parameter = factor(parameter,
+                              levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                              labels = c(expression(paste(italic(A),"+",sep="")),
+                                         expression(paste(italic(A),"-",sep="")),
+                                         expression(paste("\u03B2",italic(f),sep="")),
+                                         expression(paste("\u03B2",italic(p),sep="")),
+                                         expression(italic(K))))) %>% 
+    group_by(parameter) %>% 
+    mutate(mu_r = mean(r), lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
+           rCI_lab = estimate_CI_label(mu_r, lower, upper)) %>% 
+    ggplot(aes(x = r)) +
+      # geoms
+      geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                     linewidth = .1, bins = 50) +
+      geom_text_npc(aes(npcx = "left", npcy = "top"), label = expression(italic(r)),
+                    size = 2, hjust = -3, vjust = -1.43) +
+      geom_text_npc(aes(npcx = "middle", npcy = "top",
+                        label = rCI_lab), size = 2, vjust = -1.05) +
+      geom_hline(yintercept = 0) +
+      geom_vline(aes(xintercept = mu_r), color = "red2", linewidth = .25) +
+      geom_vline(aes(xintercept = lower), color = "red", linetype = "dashed", linewidth = .25) +
+      geom_vline(aes(xintercept = upper), color = "red", linetype = "dashed", linewidth = .25) +
+      # scales
+      scale_x_continuous(limits = c(-1,1), expand = c(0,0), breaks = seq(-1,1,.5),
+                         labels = c("-1","-.5","0",".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+      # themes
+      labs(x = "Reliability Coefficient", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black"),
+            axis.ticks.x = element_line(color = "black"),
+            axis.line.x = element_line(color = "transparent"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.x = element_text(size = 12, vjust = 1.5),
+            strip.text.y = element_blank(),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(.~parameter, scales = "free",
+                     labeller = label_parsed)
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# ---------------------------------------
+
+## Prep Data
+```{r}
+# Card matrix
+cards = stan_data$card
+
+
+# Recode choice data
+choices = ifelse(stan_data$choice == 2, 0, ifelse(stan_data$choice == 1, 1, NA))
+
+
+# Trial matrix (to skip when participant wasn't there)
+trials = stan_data$Tsubj
+
+
+# Extract parameters
+predicted_values = ifelse(orl_posteriors$choice_pred == 2, 0, 1)
+
+
+# For binding together posterior predictions
+acomb = function(...) abind(..., along=3)
+bcomb = function(...) abind(..., along=4)
+```
+
+
+
+### Choice Data
+```{r}
+# Calculates group-level choice proportions into a 30 (trial) x 4 (card) x 2 (session) matrix
+choice_proportions = foreach(s = 1:2, .combine = "acomb") %do% {
+  foreach(c = 1:4, .combine = "cbind") %do% {
+    temp = foreach(i = 1:49, .combine = "rbind") %do% {
+        choices[i, cards[i, , s] == c, s]
+    } %>% colMeans(na.rm = T)
+  }
+}
+```
+
+
+
+### Predicted Values
+```{r}
+predicted_proportions = foreach(s = 1:2, .combine = "bcomb") %do% {
+  foreach(c = 1:4, .combine = "acomb") %do% {
+    foreach(i = 1:49, .combine = "acomb") %do% {
+      if(trials[i, s] > 0){
+        predicted_values[ , i, cards[i, , s] == c, s]
+      }
+    } %>% 
+      apply(., c(1,2), mean)
+  }
+}
+```
+
+
+
+
+## Plot Function
+```{r}
+make_plot = function(y_data, yrep_data, top, right,
+                     x_axis_txt, y_axis_txt, deck){
+  if(top){
+    custom_margin = margin(t = 1, r = -.5, b = -.5, l = -.5, unit = "lines")
+  } else {
+    custom_margin = margin(t = -.5, r = -.5, b = 1, l = -.5, unit = "lines")
+  }
+  if(right == 1 | right == 2){
+    session_text = paste("Session", right)
+  } else {
+    session_text = ""
+  }
+  
+  ppc_intervals(x = 1:length(y_data),
+                y = y_data*100,
+                yrep = yrep_data*100,
+                prob = 0.50, 
+                prob_outer = .80) +
+    geom_text(aes(x = 30, y = 5, label = session_text),
+              color = "black", hjust = 1, vjust = 0, check_overlap = T) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 31), breaks = seq(0, 30, 5)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 100), breaks = seq(0, 100, 25)) +
+    theme_classic() +
+    labs(x = "Trial", y = "Proportion Played", title = deck) +
+    theme(legend.position = "none",
+          axis.title = element_blank(),
+          axis.text.x = element_text(color = x_axis_txt, size = 12),
+          axis.text.y = element_text(color = y_axis_txt, size = 12),
+          plot.title = element_text(hjust = .5, size = 12),
+          plot.margin = custom_margin,
+          plot.background = element_rect(fill = "transparent", colour = "transparent"))
+}
+```
+
+
+
+## Make Plot
+```{r}
+# Set color scheme for bayesplot (it is a global setting)
+color_scheme_set("viridisC")
+
+plots = ggarrange(make_plot(choice_proportions[, 1, 1], predicted_proportions[,, 1, 1],
+                            T, 0, "transparent", "black", "Deck A"),
+                  make_plot(choice_proportions[, 2, 1], predicted_proportions[,, 2, 1],
+                            T, 0, "transparent", "transparent", "Deck B"),
+                  make_plot(choice_proportions[, 3, 1], predicted_proportions[,, 3, 1],
+                            T, 0, "transparent", "transparent", "Deck C"),
+                  make_plot(choice_proportions[, 4, 1], predicted_proportions[,, 4, 1],
+                            T, 1, "transparent", "transparent", "Deck D"),
+                  
+                  make_plot(choice_proportions[, 1, 2], predicted_proportions[,, 1, 2],
+                            F, 0, "black", "black", ""),
+                  make_plot(choice_proportions[, 2, 2], predicted_proportions[,, 2, 2],
+                            F, 0, "black", "transparent", ""),
+                  make_plot(choice_proportions[, 3, 2], predicted_proportions[,, 3, 2],
+                            F, 0, "black", "transparent", ""),
+                  make_plot(choice_proportions[, 4, 2], predicted_proportions[,, 4, 2],
+                            F, 2, "black", "transparent", ""),
+                  nrow = 2, ncol = 4)
+```
+
+
+
+## Save Plot
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots", "PPC.tiff"),
+     width = 25, height = 10, units = "cm", res = 300)
+
+  grid.newpage()
+  pushViewport(viewport(x = .5, y = .5, width = .9, height = .9))
+  grid.draw(plots)
+  popViewport()
+  
+  
+  # x axis
+  grid.text("Trial",
+            x = .5125, y = .05,
+            gp = gpar(fontsize = 16))
+  # y axis
+  grid.text("% Played",
+            x = .0225, y = .5,
+            gp = gpar(fontsize = 16),
+            rot = 90)
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# Correlations with Behavior
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Calculate Person-Level Choice Proportions
+```{r}
+card_proportions = array(data = NA, dim = c(49, 4, 2))
+good_proportions = matrix(data = NA, nrow = 49, ncol = 2)
+bad_proportions = matrix(data = NA, nrow = 49, ncol = 2)
+play_proportions = matrix(data = NA, nrow = 49, ncol = 2)
+
+for(i in 1:49){
+  for(s in 1:2){
+    good_proportions[i,s] = mean(choices[i,,s][stan_data$card[i,,s] == 3 | stan_data$card[i,,s] == 4], na.rm = T)
+    bad_proportions[i,s] = mean(choices[i,,s][stan_data$card[i,,s] == 1 | stan_data$card[i,,s] == 2], na.rm = T)
+    play_proportions[i,s] = mean(choices[i,,s] == 1, na.rm = T)
+    for(c in 1:4){
+      card_proportions[i,c,s] = mean(choices[i,,s][stan_data$card[i,,s] == c], na.rm = T)
+    }
+  }
+}
+dimnames(card_proportions) = list(c(1:49), c(1:4), c(1:2))
+```
+
+
+
+## Calculate Person-Level Estimates
+```{r}
+orl_posterior_means = list()
+
+for(parameter in c("Arew", "Apun", "K", "betaF", "betaP")){
+  orl_posterior_means[[parameter]] = apply(orl_posteriors[[parameter]], c(2,3), mean)
+}
+```
+
+
+
+## Calculate Correlations
+```{r, eval = F}
+set.seed(20230630)
+correlations = data.frame()
+
+for(s in 1:2){
+  for(parameter in c("Arew", "Apun", "K", "betaF", "betaP")){
+    
+    # good proportions
+    curr_orl = orl_posterior_means[[parameter]][,s][!is.na(good_proportions[,s])]
+    curr_bx = good_proportions[,s][!is.na(good_proportions[,s])]
+    corr = boot.cor.bca(x = curr_orl,
+                        y = curr_bx,
+                        null.hyp = NULL,
+                        alternative = c("two.sided", "less", "greater"),
+                        conf.level = 0.95, type = NULL, R = 9999)
+    
+    correlations = data.frame(proportion = "good",
+                              session = s,
+                              card = NA,
+                              parameter = parameter,
+                              r = corr$Observed,
+                              CI = corr$Confidence.interval) %>%
+      bind_rows(correlations)
+    
+    # bad proportions
+    curr_orl = orl_posterior_means[[parameter]][,s][!is.na(bad_proportions[,s])]
+    curr_bx = bad_proportions[,s][!is.na(bad_proportions[,s])]
+    corr = boot.cor.bca(x = curr_orl,
+                        y = curr_bx,
+                        null.hyp = NULL,
+                        alternative = c("two.sided", "less", "greater"),
+                        conf.level = 0.95, type = NULL, R = 9999)
+    
+    correlations = data.frame(proportion = "bad",
+                              session = s,
+                              card = NA,
+                              parameter = parameter,
+                              r = corr$Observed,
+                              CI = corr$Confidence.interval) %>%
+      bind_rows(correlations)
+    
+    # play proportions
+    curr_orl = orl_posterior_means[[parameter]][,s][!is.na(play_proportions[,s])]
+    curr_bx = abs(play_proportions[,s][!is.na(play_proportions[,s])]-.5)
+    corr = boot.cor.bca(x = curr_orl,
+                        y = curr_bx,
+                        null.hyp = NULL,
+                        alternative = c("two.sided", "less", "greater"),
+                        conf.level = 0.95, type = NULL, R = 9999)
+    
+    correlations = data.frame(proportion = "play",
+                              session = s,
+                              card = NA,
+                              parameter = parameter,
+                              r = corr$Observed,
+                              CI = corr$Confidence.interval) %>%
+      bind_rows(correlations)
+      
+    for(c in 1:4){
+      # card proportions
+      curr_orl = orl_posterior_means[[parameter]][,s][!is.na(card_proportions[,c,s])]
+      curr_bx = card_proportions[,c,s][!is.na(card_proportions[,c,s])]
+      corr = boot.cor.bca(x = curr_orl,
+                          y = curr_bx,
+                          null.hyp = NULL,
+                          alternative = c("two.sided", "less", "greater"),
+                          conf.level = 0.95, type = NULL, R = 9999)
+      
+      correlations = data.frame(proportion = "card",
+                                session = s,
+                                card = c,
+                                parameter = parameter,
+                                r = corr$Observed,
+                                CI = corr$Confidence.interval) %>%
+        bind_rows(correlations)
+    }
+  }
+}
+saveRDS(correlations, here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots", "bx_correlations.RDS"))
+```
+
+
+
+## Plot
+```{r}
+correlations = readRDS(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots", "bx_correlations.RDS")) %>% 
+    # label parameters with specific text %>% 
+    separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+    mutate(card_lab = recode(card, "1" = "A", "2" = "B", "3" = "C", "4" = "D"),
+           card_lab = case_when(parameter == "K" ~ card_lab),
+           r = round(r,2),
+           r_lab = paste(ifelse(sign(r)==1," ","-"), stri_pad_right(str_remove(abs(r), "^0+"),
+                                                                     width = 3, pad = "0"),sep=""), 
+           lower = round(as.numeric(str_remove(lower, "\\(")),2),
+           upper = round(as.numeric(str_remove(upper, "\\)")),2),
+           
+           lower_lab = paste(ifelse(sign(lower)==1,"","-"), stri_pad_right(str_remove(abs(lower), "^0+"),
+                                                                     width = 3, pad = "0"),sep=""), 
+           
+           upper_lab = paste(ifelse(sign(upper)==1,"","-"), stri_pad_right(str_remove(abs(upper), "^0+"),
+                                                                     width = 3, pad = "0"),sep=""),
+           rCI = paste("=",r_lab," (",lower_lab,",",upper_lab,")",sep=""))
+```
+
+
+
+```{r}
+orl_df = data.frame(orl_posterior_means) %>%
+  mutate(ID = rownames(.)) %>%
+  pivot_longer(cols = c(everything(), -ID),
+               names_to = c("parameter", "session"),
+               names_sep = "\\.",
+               names_transform = list(parameter = as.character,
+                                      session = as.numeric),
+               values_to = "estimate")
+```
+
+
+
+### Card Proportion
+```{r}
+# labels = function(x) round(x, 2),
+card_df = 
+  data.frame(card_proportions[,,]) %>% 
+  mutate(ID = rownames(.)) %>% 
+  pivot_longer(cols = c(everything(), -ID),
+               names_to = c("card", "session"),
+               names_sep = "\\.", names_prefix = "X",
+               names_transform = list(card = as.numeric,
+                                      session = as.numeric),
+               values_to = "proportion")
+
+
+for(sess in 1:2){
+  tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+            paste0("Card_Proportions_Session", sess, ".tiff")),
+       width = 15, height = 12.5, units = "cm", res = 300)
+    # display plot in tiff
+    print(
+      # data
+      # temp =
+        filter(correlations, proportion == "card") %>% 
+        select(-proportion) %>% 
+        left_join(orl_df) %>% left_join(card_df) %>% 
+        filter(session == sess) %>% 
+        # label parameters with specific text
+        mutate(card_lab = recode(card, "1" = "A", "2" = "B", "3" = "C", "4" = "D"),
+               card_lab = case_when(parameter == "K" ~ card_lab),
+               parameter = factor(parameter,
+                                  levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                                  labels = c(expression(paste(italic(A),"+",sep="")),
+                                             expression(paste(italic(A),"-",sep="")),
+                                             expression(paste("\u03B2",italic(f),sep="")),
+                                             expression(paste("\u03B2",italic(p),sep="")),
+                                             expression(italic(K))))) %>% 
+        # plot
+        ggplot(aes(x = estimate, y = (proportion*100))) +
+          # geoms
+          geom_point(size = 1, color = "gray25") +
+          geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F, size = .5,
+                    fullrange = T) +
+          # scales
+          scale_x_continuous(labels = function(x) sprintf("%.2f", round(x, 2)),
+                             n.breaks = 3) +
+          scale_y_continuous(breaks = c(25, 50, 75, 100), limits = c(25, 100)) +
+          # themes
+          geom_text_npc(aes(npcx = "right", npcy = "top", label = card_lab), hjust = 0) +
+          geom_text_npc(aes(npcx = "middle", npcy = "top",
+                            label = rCI), size = 2, vjust = -1) +
+          geom_text_npc(aes(npcx = "left", npcy = "top"), label = expression(italic(r)),
+                        size = 2, hjust = -1.25, vjust = -1.425) +
+          labs(x = "Estimate", y = "% Played") +
+          coord_cartesian(clip = "off") +
+          theme_classic() +
+          theme(axis.text.x = element_text(color = "black"),
+                axis.text.y = element_text(color = "black"),
+                plot.margin = unit(c(.3, .3, .3, .3), "cm"),
+                panel.spacing = unit(0, "cm"),
+                strip.background = element_rect(fill = "transparent", colour = "transparent"),
+                strip.text.x = element_text(size = 12, vjust = 1.5),
+                strip.text.y = element_blank(),
+                panel.background = element_rect(fill = "transparent", colour = "transparent"),
+                plot.background = element_rect(fill = "transparent", color = "transparent"),
+                aspect.ratio = 1) +
+          facet_rep_grid(card~parameter, scales = "free",
+                         labeller = label_parsed)
+    )
+  dev.off()
+}
+```
+
+
+
+### Good Proportion
+```{r}
+# labels = function(x) round(x, 2),
+good_df = 
+  data.frame(good_proportions) %>% 
+  mutate(ID = rownames(.)) %>% 
+  pivot_longer(cols = c(everything(), -ID),
+               names_to = "session",
+               names_prefix = "X",
+               names_transform = list(session = as.numeric),
+               values_to = "proportion")
+
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots", "Good_Proportions.tiff"),
+     width = 15, height = 6.25, units = "cm", res = 300)
+  # display plot in tiff
+  print(
+    # data
+    # temp =
+      filter(correlations, proportion == "good") %>% 
+      select(-proportion) %>% 
+      left_join(orl_df) %>% left_join(good_df) %>% 
+      # label parameters with specific text
+      mutate(sess_lab = case_when(parameter == "K" ~ session),
+             parameter = factor(parameter,
+                                levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                                labels = c(expression(paste(italic(A),"+",sep="")),
+                                           expression(paste(italic(A),"-",sep="")),
+                                           expression(paste("\u03B2",italic(f),sep="")),
+                                           expression(paste("\u03B2",italic(p),sep="")),
+                                           expression(italic(K))))) %>% 
+      # plot
+      ggplot(aes(x = estimate, y = (proportion*100))) +
+        # geoms
+        geom_point(size = 1, color = "gray25") +
+        geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F, size = .5,
+                    fullrange = T) +
+        # scales
+        scale_x_continuous(labels = function(x) sprintf("%.1f", round(x, 1)),
+                           n.breaks = 3) +
+        scale_y_continuous(breaks = c(25, 50, 75, 100), limits = c(25, 100)) +
+        # themes
+        geom_text_npc(aes(npcx = "right", npcy = "top", label = sess_lab), hjust = 0) +
+        geom_text_npc(aes(npcx = "middle", npcy = "top",
+                          label = rCI), size = 2, vjust = -1) +
+        geom_text_npc(aes(npcx = "left", npcy = "top"), label = expression(italic(r)),
+                      size = 2, hjust = 0, vjust = -1.425) +
+        labs(x = "Estimate", y = "% Good Deck Played") +
+        coord_cartesian(clip = "off") +
+        theme_classic() +
+        theme(axis.text.x = element_text(color = "black"),
+              axis.text.y = element_text(color = "black"),
+              plot.margin = unit(c(.3, .3, .3, .3), "cm"),
+              panel.spacing = unit(0, "cm"),
+              strip.background = element_rect(fill = "transparent", colour = "transparent"),
+              strip.text.x = element_text(size = 12, vjust = 1.5),
+              strip.text.y = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = "transparent"),
+              plot.background = element_rect(fill = "transparent", color = "transparent"),
+              aspect.ratio = 1) +
+        facet_rep_grid(session~parameter, scales = "free",
+                       labeller = label_parsed)
+  )
+dev.off()
+```
+
+
+
+### Bad Proportion
+```{r}
+# labels = function(x) round(x, 2),
+bad_df = 
+  data.frame(bad_proportions) %>% 
+  mutate(ID = rownames(.)) %>% 
+  pivot_longer(cols = c(everything(), -ID),
+               names_to = "session",
+               names_prefix = "X",
+               names_transform = list(session = as.numeric),
+               values_to = "proportion")
+
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots", "Bad_Proportions.tiff"),
+     width = 15, height = 6.25, units = "cm", res = 300)
+  # display plot in tiff
+  print(
+    # data
+    # temp =
+      filter(correlations, proportion == "bad") %>% 
+      select(-proportion) %>% 
+      left_join(orl_df) %>% left_join(bad_df) %>% 
+      # label parameters with specific text
+      mutate(sess_lab = case_when(parameter == "K" ~ session),
+             parameter = factor(parameter,
+                                levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                                labels = c(expression(paste(italic(A),"+",sep="")),
+                                           expression(paste(italic(A),"-",sep="")),
+                                           expression(paste("\u03B2",italic(f),sep="")),
+                                           expression(paste("\u03B2",italic(p),sep="")),
+                                           expression(italic(K))))) %>% 
+      # plot
+      ggplot(aes(x = estimate, y = (proportion*100))) +
+        # geoms
+        geom_point(size = 1, color = "gray25") +
+        geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F, size = .5,
+                    fullrange = T) +
+        # scales
+        scale_x_continuous(labels = function(x) sprintf("%.1f", round(x, 1)),
+                           n.breaks = 3) +
+        scale_y_continuous(breaks = c(25, 50, 75, 100), limits = c(25, 100)) +
+        # themes
+        geom_text_npc(aes(npcx = "right", npcy = "top", label = sess_lab), hjust = 0) +
+        geom_text_npc(aes(npcx = "middle", npcy = "top",
+                          label = rCI), size = 2, vjust = -1) +
+        geom_text_npc(aes(npcx = "left", npcy = "top"), label = expression(italic(r)),
+                      size = 2, hjust = 0, vjust = -1.425) +
+        labs(x = "Estimate", y = "% Bad Deck Played") +
+        coord_cartesian(clip = "off") +
+        theme_classic() +
+        theme(axis.text.x = element_text(color = "black"),
+              axis.text.y = element_text(color = "black"),
+              plot.margin = unit(c(.3, .3, .3, .3), "cm"),
+              panel.spacing = unit(0, "cm"),
+              strip.background = element_rect(fill = "transparent", colour = "transparent"),
+              strip.text.x = element_text(size = 12, vjust = 1.5),
+              strip.text.y = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = "transparent"),
+              plot.background = element_rect(fill = "transparent", color = "transparent"),
+              aspect.ratio = 1) +
+        facet_rep_grid(session~parameter, scales = "free",
+                       labeller = label_parsed)
+  )
+dev.off()
+```
+
+
+# ---------------------------------------
+# Test-Retest Reliability
+```{r}
+  tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots", "reliability_coefficients.tiff"),
+       width = 15, height = 6.25, units = "cm", res = 300)
+  bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
+            data.frame(parameter = "Apun", r = orl_posteriors$R_Apun[,2,1]),
+            data.frame(parameter = "betaF", r = orl_posteriors$R_betaF[,2,1]),
+            data.frame(parameter = "betaP", r = orl_posteriors$R_betaP[,2,1]),
+            data.frame(parameter = "K", r = orl_posteriors$R_K[,2,1])) %>% 
+    mutate(parameter = factor(parameter,
+                              levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                              labels = c(expression(paste(italic(A),"+",sep="")),
+                                         expression(paste(italic(A),"-",sep="")),
+                                         expression(paste("\u03B2",italic(f),sep="")),
+                                         expression(paste("\u03B2",italic(p),sep="")),
+                                         expression(italic(K))))) %>% 
+    group_by(parameter) %>% 
+    mutate(mu_r = mean(r), lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
+           mu_r_lab = paste(ifelse(sign(round(mu_r,2))==1," ","-"),
+                            stri_pad_right(str_remove(abs(round(mu_r,2)), "^0+"),
+                                           width = 3, pad = "0"),sep=""), 
+           lower = as.numeric(str_remove(lower, "\\(")),
+           upper = as.numeric(str_remove(upper, "\\(")),
+           
+           lower_lab = paste(ifelse(sign(round(lower,2))==1,"","-"),
+                             stri_pad_right(str_remove(abs(round(lower,2)), "^0+"),
+                                            width = 3, pad = "0"),sep=""), 
+           upper_lab = paste(ifelse(sign(round(upper,2))==1,"","-"),
+                             stri_pad_right(str_remove(abs(round(upper,2)), "^0+"),
+                                            width = 3, pad = "0"),sep=""),
+           upper_lab = case_when(round(upper,2) == 1 ~ "1.00", T ~ upper_lab),
+           mu_rCI = paste("=",mu_r_lab," (",lower_lab,",",upper_lab,")",sep="")) %>% 
+    ggplot(aes(x = r)) +
+      # geoms
+      geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                     linewidth = .1, bins = 50) +
+      geom_text_npc(aes(npcx = "left", npcy = "top"), label = expression(italic(r)),
+                    size = 2, hjust = -3, vjust = -1.425) +
+      geom_text_npc(aes(npcx = "middle", npcy = "top",
+                        label = mu_rCI), size = 2, vjust = -1) +
+      geom_hline(yintercept = 0) +
+      geom_vline(aes(xintercept = mu_r), color = "red2") +
+      # scales
+      scale_x_continuous(limits = c(-1,1), expand = c(0,0), breaks = seq(-1,1,.5),
+                         labels = c("-1","-.5","0",".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+      # themes
+      labs(x = "Reliability Coefficient", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black"),
+            axis.text.y = element_text(color = "black"),
+            axis.ticks = element_line(color = "black"),
+            axis.line.x = element_line(color = "transparent"),
+            plot.margin = unit(c(.3, .3, .3, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.x = element_text(size = 12, vjust = 1.5),
+            strip.text.y = element_blank(),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent"),
+            aspect.ratio = 1) +
+      facet_rep_grid(.~parameter, scales = "free",
+                     labeller = label_parsed) +
+      geom_segment(aes(x = lower, xend = upper, y = .025, yend = .025), size = 1, color = "red2", linewidth = .5)
+dev.off()
+```
+
+
+
+# ---------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

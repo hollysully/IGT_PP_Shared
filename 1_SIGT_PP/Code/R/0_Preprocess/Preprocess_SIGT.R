@@ -567,10 +567,10 @@ for (df in 1:4) {
     N       = numSubjs,
     T       = maxTrials,
     Tsubj   = Tsubj,
-    stim    = stim,
-    Srewlos = SRLmatrix,     
-    rewlos  = RLmatrix,
-    ydata   = Ydata,
+    card    = stim,
+    sign = SRLmatrix,     
+    outcome  = RLmatrix,
+    choice   = Ydata,
     subjID  = subjList
   )
   

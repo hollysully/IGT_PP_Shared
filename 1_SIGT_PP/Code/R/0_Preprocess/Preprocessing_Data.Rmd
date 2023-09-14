@@ -1,0 +1,232 @@
+---
+title: "IGT Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Setup
+## Load Packages
+```{r}
+library(tidyverse)
+library(here)
+library(haven)
+library(lubridate)
+library(readxl)
+```
+
+
+
+# --------------------------------------
+# Questionnaire Data
+## Import Data
+```{r}
+raw_questionnaire_data = read_sav(here("1_SIGT_PP", "Data", "0_Raw",
+                                       "FINAL Questionnaire Data- Item Level 9.11.18.sav")) %>% 
+  filter(Subject != 7156, # 7156 completed IGT version 2 & SIGT on the same day, but then 
+                            # has data for IGT version 1 a week later, so I am deleting
+                            # task data for sub 7156 from the IGT_AB dataframe (IGT version 1) 
+         Subject != 7034, # 7034 played IGT version 2 at 7:39pm & IGT version 1 at 8:20pm,
+                            # so I am removing their IGT version 1 data
+         Subject != 7081) # Something is wrong with this datafile - incomplete and always
+```
+
+
+
+## Prep Data
+```{r}
+questionnaire_data = raw_questionnaire_data %>% 
+  select(ID = Subject, complete, sex,
+         beer_freq = DUFM6,          # How often did you drink BEER during the last three months?
+         beer_amt = DUFM7,           # What was the USUAL amount of BEER you had on any typical day
+                                       # when you drank beer during the past three months?
+         beer_type = DUFM8,          # Do you like lite beer or regular beer?
+         liquor_freq = DUFM9,        # About how often did you drink LIQUOR during the past three months?
+         liquor_amt1 = DUFM10,       # What was the USUAL amount of LIQUOR you had on any typical day
+                                       # when you drank liquor during the last three months?
+         liquor_amt2 = DUFM11,       # When you drink liquor, how many ounces do you mix in each drink?
+         wine_freq = DUFM12,         # About how often did you drink WINE during the past three months?
+         wine_amt = DUFM13,          # What was the USUAL amount of WINE you had on a typical day
+                                       # when you drank wine during the past three months?
+         # How often did you use the following drugs or medications during the PAST 3 MONTHS?
+         stimulant_freq = DUFM14_a,  # Amphetamines/ Stimulants (e.g. speed, meth)
+         psychostim_freq = DUFM14_b, # Psychostimulants (e.g. Ritalin, diet pills)
+         coke_freq = DUFM14_c,       # Cocaine
+         barb_freq = DUFM14_d,       # Barbiturates/Tranquilizers (e.g. Librium, Valium)
+         pot_freq = DUFM14_e,        # Marijuana or Hashish
+         opiates_freq = DUFM14_f,    # Heroin, Opium, Morphine, Opioids
+         hall_freq = DUFM14_g,       # Hallucinogens
+         pcp_freq = DUFM14_h,        # PCP (e.g. angel dust, Ketamine)
+         inh_freq = DUFM14_i,        # Inhalants (e.g., nitrous oxide, whippets)
+         other_freq = DUFM14_j,      # Other drugs (Robitussin AC, steroids, sleep pills)
+         ) %>% 
+  mutate(sex = case_when(sex == 1 ~ "male", sex == 2 ~ "female"),
+         binge_drinking = case_when(sex == "male" & beer_amt >= 4 ~ 1,
+                                    sex == "male" & liquor_amt1 >= 4 ~ 1,
+                                    sex == "male" & wine_amt >= 4 ~ 1,
+                                    sex == "female" & beer_amt >= 4 ~ 1,
+                                    sex == "female" & liquor_amt1 >= 4 ~ 1,
+                                    sex == "female" & wine_amt >= 3 ~ 1,
+                                    T ~ 0),
+         heavy_drinking = case_when(binge_drinking == 1 & beer_freq >= 7 ~ 1,
+                                    binge_drinking == 1 & liquor_freq >= 7 ~ 1,
+                                    binge_drinking == 1 & wine_freq >= 7 ~ 1,
+                                    T ~ 0),
+         hard_drugs = case_when(stimulant_freq > 1 ~ 1,
+                                psychostim_freq > 1 ~ 1,
+                                coke_freq > 1 ~ 1,
+                                barb_freq > 1 ~ 1,
+                                opiates_freq > 1 ~ 1,
+                                hall_freq > 1 ~ 1,
+                                pcp_freq > 1 ~ 1,
+                                inh_freq > 1 ~ 1,
+                                other_freq > 1 ~ 1,
+                                T ~ 0),
+         chronic_pot = case_when(pot_freq >= 4 ~ 1, T ~ 0),
+         drug_drink = case_when(hard_drugs == 1 | binge_drinking == 1 ~ 1, T ~ 0),
+         nothing = case_when(binge_drinking != 1 & hard_drugs != 1 & chronic_pot != 1 ~ 1,
+                             T ~ 0))
+```
+
+
+
+# --------------------------------------
+# IGT Data
+## Import Data
+```{r}
+raw_AB = read_excel(here("1_SIGT_PP", "Data", "0_Raw", "IGT_AB_Merged.xlsx")) %>% 
+  filter(Subject != 7156, # 7156 completed IGT version 2 & SIGT on the same day, but then 
+                            # has data for IGT version 1 a week later, so I am deleting
+                            # task data for sub 7156 from the IGT_AB dataframe (IGT version 1) 
+         Subject != 7034) # 7034 played IGT version 2 at 7:39pm & IGT version 1 at 8:20pm,
+                            # so I am removing their IGT version 1 data
+raw_BD = read_excel(here("1_SIGT_PP", "Data", "0_Raw", "IGT_BD_Merged.xlsx")) %>% 
+  filter(Subject != 7081) # Something is wrong with this datafile - incomplete and always played
+```
+
+
+
+## Prep Data
+```{r}
+IGT_data = bind_rows(raw_AB, raw_BD) %>% 
+  filter(Procedure != "Knowledge") %>%  # remove knowledge checks
+  select(ID = Subject, version = ExperimentName, date = SessionDate, 
+         trial = Block, cardname, outcome = absmoney1, choice = card.RESP) %>% 
+  mutate(version = case_when(str_detect(version, "Version 1") ~ "AB", T ~ "BD"),
+         trial = case_when(trial <= 40 ~ trial,
+                           trial <= 80 ~ trial - 1,
+                           T ~ trial - 2),
+         card = case_when(version == "AB" & cardname == "A" ~ 1, version == "AB" & cardname == "B" ~ 2,
+                          version == "AB" & cardname == "C" ~ 3, version == "AB" & cardname == "D" ~ 4,
+                          version == "BD" & cardname == "A" ~ 3, version == "BD" & cardname == "B" ~ 1,
+                          version == "BD" & cardname == "C" ~ 4, version == "BD" & cardname == "D" ~ 2),
+         outcome = case_when(is.na(outcome) ~ 0, T ~ outcome / 100),
+         sign = case_when(is.na(outcome) ~ 0, T ~ sign(outcome)),
+         choice = case_when(choice == 1 ~ 1, # plays
+                            T ~ 2))          # passes (including skipped trials)
+```
+
+
+
+# --------------------------------------
+# Stan Data
+## Join Data
+```{r}
+combined_data = inner_join(questionnaire_data, IGT_data) %>% 
+  select(ID, drug_drink, binge_drinking, hard_drugs, chronic_pot, nothing, trial, card, outcome, sign, choice)
+# 7 participants do not have complete data after filtering others out above:
+  # No IGT data: 7047 7108, 7165
+  # No questionnaire data: 4074, 7034, 7136, 7156")
+```
+
+
+
+## Check N of SUD
+```{r}
+combined_data %>% 
+  group_by(ID) %>% 
+  summarise(binge_drinking = mean(binge_drinking),
+            hard_drugs = mean(hard_drugs),
+            chronic_pot = mean(chronic_pot),
+            drug_drink = mean(drug_drink),
+            nothing = mean(nothing)) %>% 
+  ungroup() %>% 
+  # filter(chronic_pot == 0) %>% 
+  summarise(binge_drinking = sum(binge_drinking),
+            hard_drugs = sum(hard_drugs),
+            chronic_pot = sum(chronic_pot),
+            drug_drink = sum(drug_drink),
+            nothing = sum(nothing))
+```
+
+
+
+## Create IGT Stan Data
+```{r, eval = T}
+create_data = function(data){
+
+  IDs = unique(data$ID)
+  N = length(IDs)
+  T = max(data$trial)
+  
+  card = matrix(data = -1, nrow = N, ncol = T)
+  Tsubj = vector(length = N)
+  choice = matrix(data = -1, nrow = N, ncol = T)
+  outcome = matrix(data = -1, nrow = N, ncol = T)
+  sign = matrix(data = -1, nrow = N, ncol = T)
+  for(i in 1:N){
+    card[i,] = data$card[data$ID == IDs[i]]
+    Tsubj[i] = length(data$trial[data$ID == IDs[i]])
+    choice[i,] = data$choice[data$ID == IDs[i]]
+    outcome[i,] = data$outcome[data$ID == IDs[i]]
+    sign[i,] = data$sign[data$ID == IDs[i]]
+  }
+  
+  stan_data = list(IDs = IDs,
+                   N = N,
+                   T = T,
+                   card = card,
+                   Tsubj = Tsubj,
+                   choice = choice,
+                   outcome = outcome,
+                   sign = sign)
+}
+```
+
+
+
+## Save Data
+```{r, eval = T}
+orl_stan_data = create_data(combined_data)
+
+saveRDS(orl_stan_data, here("1_SIGT_PP", "Data", "1_Preprocessed",
+                            "IGT_stan_data.RDS"))
+```
+
+
+
+# --------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

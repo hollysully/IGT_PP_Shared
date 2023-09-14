@@ -101,8 +101,21 @@ combined_data = bind_rows(session1_data, session2_data) %>%
   mutate(trial = 1,
          trial = cumsum(trial),
          stim = recode(stim, "1" = "A", "2" = "B", "3" = "C", "4" = "D")) %>% 
-  filter(stim == "D" | stim == "C") %>% 
+  mutate(type = case_when(stim %in% c("C", "D") ~ "good", T ~ "bad")) %>% 
+  group_by(Subject, session, type) %>% 
+  reframe(choice_proportion = mean(play)) %>% 
+  pivot_wider(names_from = c("type", "session"), values_from = "choice_proportion") %>% 
+  select(ID = Subject, everything())
+
+card_proportions = bind_rows(session1_data, session2_data) %>% 
+  mutate(play = recode(ydata, "2" = 0, "1" = 1),
+         version = case_when(str_detect(ExperimentName, "1") ~ 1,
+                             str_detect(ExperimentName, "2") ~ 2)) %>% 
   group_by(Subject, session) %>% 
+  mutate(trial = 1,
+         trial = cumsum(trial),
+         stim = recode(stim, "1" = "A", "2" = "B", "3" = "C", "4" = "D")) %>% 
+  group_by(Subject, session, stim) %>% 
   reframe(prop_good = mean(play)) %>% 
   pivot_wider(names_from = "session", values_from = "prop_good", names_prefix = "session_") %>% 
   select(ID = Subject, everything())
@@ -111,23 +124,23 @@ combined_data = bind_rows(session1_data, session2_data) %>%
 
 
 # -----------------------------------------------
-# Test-Retest
+# Choice Proportions
+## Test-Retest
 ```{r}
-cor(combined_data$session_1, combined_data$session_2,
-    use = "pairwise.complete.obs")
+cor.test(combined_data$good_1, combined_data$good_2)
+cor.test(combined_data$bad_1, combined_data$bad_2)
 ```
 
 
 
-# -----------------------------------------------
-# Correlations
+## Self-Report Correlations
 ```{r}
 correlations = data.frame()
 ```
 
 
 
-## Individual-Subject Mus
+### Individual-Subject Mus
 ```{r}
 overall_correlations = data.frame()
 
@@ -149,7 +162,9 @@ for(curr_scale in unique(sr_prop$scale)){
       filter(scale == curr_scale) # Subset data
     
     curr_score = curr_data$score            # Subset scale data
-    curr_estimate = curr_data$session_1  # Subset estimate for parameter
+    curr_estimate = ifelse(is.na(curr_data$session_2),
+                           curr_data$session_1,
+                           (curr_data$session_1 + curr_data$session_2) / 2)  # Subset estimate for parameter
     # Run the boot-strapped correlation between the current scale and the current parameter
     curr_cor = boot.cor.bca(x = curr_score, y = curr_estimate,
                             null.hyp = NULL,
@@ -174,7 +189,7 @@ for(curr_scale in unique(sr_prop$scale)){
 
 
 
-## Session 1 Self-Report w/ Session 1 & 2 ORL Parameters
+### Session 1 Self-Report w/ Session 1 & 2 ORL Parameters
 ```{r}
 # Loop through each scale from session 1
 for(scale in c("bastot", "basdrive", "basfunsk",
@@ -244,7 +259,7 @@ for(scale in c("bastot", "basdrive", "basfunsk",
 
 
 
-## Session 2 Self-Report w/ Session 1 & 2 ORL Parameters
+### Session 2 Self-Report w/ Session 1 & 2 ORL Parameters
 ```{r}
 # Loop through each scale from session 2
 for(scale in c("bastot", "basdrive", "basfunsk",
@@ -311,9 +326,8 @@ for(scale in c("bastot", "basdrive", "basfunsk",
 
 
 
-# -----------------------------------------------
-# Format Correlations
-## By Session
+## Format Correlations
+### By Session
 ```{r}
 formatted_correlations = correlations %>% 
   # Identify CIs that DO NOT overlap with 0
@@ -331,12 +345,12 @@ formatted_correlations = correlations %>%
   pivot_wider(names_from = c("parameter", "parameter_session", "scale_session"), values_from = estimate,
               values_fill = "")
 
-write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "proportion_formatted_correlations.csv"))
+write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "Summary_Score_Correlations", "proportion_formatted_correlations.csv"))
 ```
 
 
 
-## Overall
+### Overall
 ```{r}
 formatted_correlations = overall_correlations %>% 
   # Identify CIs that DO NOT overlap with 0
@@ -354,12 +368,12 @@ formatted_correlations = overall_correlations %>%
   pivot_wider(names_from = "parameter", values_from = estimate,
               values_fill = "")
 
-write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "proportion_formatted_overall_correlations.csv"))
+write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "Summary_Score_Correlations", "proportion_formatted_overall_correlations.csv"))
 ```
 
 
 
-# Unformatted Correlations
+## Unformatted Correlations
 ```{r}
 unformatted_correlations = correlations %>% 
   # format correlations
@@ -368,8 +382,296 @@ unformatted_correlations = correlations %>%
   pivot_wider(names_from = c("parameter", "parameter_session", "scale_session"), values_from = r,
               values_fill = "")
 
-write.csv(unformatted_correlations, here("1_IGT_PP", "Figs_Tables", "proportion_unformatted_correlations.csv"))
+write.csv(unformatted_correlations, here("1_IGT_PP", "Figs_Tables", "Summary_Score_Correlations", "proportion_unformatted_correlations.csv"))
 ```
+
+
+
+# -----------------------------------------------
+# Card Proportions
+## Test-Retest
+```{r}
+for(card in c("A", "B", "C", "D")){
+  print(paste(card, ": ", round(cor(filter(card_proportions, stim == card)$session_1, 
+                                    filter(card_proportions, stim == card)$session_2,
+                                    use = "pairwise.complete.obs"), 2), sep = ""))
+}
+```
+
+
+
+## Self-Report Correlations
+```{r}
+correlations = data.frame()
+```
+
+
+
+### Individual-Subject Mus
+```{r}
+overall_correlations = data.frame()
+
+sr_prop = bind_rows(sr_sess1, sr_sess2) %>% 
+  select(-c(sex, race, Ethnicity)) %>%   # Remove columns that we don't need
+  pivot_longer(c("bastot", "basdrive", "basfunsk",
+               "basrewres", "bis", "panas_pa",
+               "panas_na", "masqGDA", "masqAA", "masqGDD",
+               "masqAD", "shaps_tot", "prdep_tot"),
+               names_to = "scale", values_to = "score") %>% 
+  group_by(ID, scale) %>% 
+  reframe(score = mean(score, na.rm = T)) %>% 
+  left_join(card_proportions)
+
+for(card in c("A", "B", "C", "D")){
+  # Loop through each scale from session 2
+  for(curr_scale in unique(sr_prop$scale)){
+      
+      curr_data = sr_prop %>%
+        filter(scale == curr_scale & stim == card) # Subset data
+      
+      curr_score = curr_data$score            # Subset scale data
+      curr_estimate = ifelse(is.na(curr_data$session_2),
+                           curr_data$session_1,
+                           (curr_data$session_1 + curr_data$session_2) / 2)  # Subset estimate for parameter
+      # Run the boot-strapped correlation between the current scale and the current parameter
+      curr_cor = boot.cor.bca(x = curr_score, y = curr_estimate,
+                              null.hyp = NULL,
+                              alternative = c("two.sided", "less", "greater"),
+                              conf.level = 0.95, type = NULL, R = 9999)
+      
+      curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
+        separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
+        # Remove parentheses and turn CIs into numerics
+        mutate(lower = as.numeric(str_remove(lower, "[(]")),
+               upper = as.numeric(str_remove(upper, "[)]")))
+      
+      # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
+      overall_correlations = bind_rows(overall_correlations,
+                               data.frame(parameter = "proportion_good",
+                                          card = card,
+                                          scale = curr_scale,
+                                          r = curr_cor$Observed,
+                                          lower_ci = curr_ci$lower[1],
+                                          upper_ci = curr_ci$upper[1]))
+  }
+}
+```
+
+
+
+### Session 1 Self-Report w/ Session 1 & 2 ORL Parameters
+```{r}
+for(card in c("A", "B", "C", "D")){
+  # Loop through each scale from session 1
+  for(scale in c("bastot", "basdrive", "basfunsk",
+                 "basrewres", "bis", "panas_pa",
+                 "panas_na", "masqGDA", "masqAA", "masqGDD",
+                 "masqAD", "shaps_tot", "prdep_tot")){
+      
+      curr_data = card_proportions %>%
+        filter(stim == card) %>% 
+        left_join(sr_sess1) %>%                    # Join scales to orl parameter
+        select(-c(sex, race, Ethnicity)) %>%       # Remove columns that we don't need
+        na.omit()                                  # Remove rows with NAs
+      
+      curr_scale = curr_data[[scale]]              # Subset scale data
+      curr_estimate = curr_data$session_1  # Subset estimate for parameter
+      # Run the boot-strapped correlation between the current scale and the current parameter
+      curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
+                              null.hyp = NULL,
+                              alternative = c("two.sided", "less", "greater"),
+                              conf.level = 0.95, type = NULL, R = 9999)
+      
+      curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
+        separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
+        # Remove parentheses and turn CIs into numerics
+        mutate(lower = as.numeric(str_remove(lower, "[(]")),
+               upper = as.numeric(str_remove(upper, "[)]")))
+      
+      # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
+      correlations = bind_rows(correlations,
+                               data.frame(card = card,
+                                          parameter_session = 1,
+                                          scale_session = 1,
+                                          parameter = "proportion_good",
+                                          scale = scale,
+                                          r = curr_cor$Observed,
+                                          lower_ci = curr_ci$lower[1],
+                                          upper_ci = curr_ci$upper[1]))
+      
+      curr_data = card_proportions %>%
+        filter(stim == card) %>% 
+        left_join(sr_sess1) %>%                    # Join scales to orl parameter
+        select(-c(sex, race, Ethnicity)) %>%       # Remove columns that we don't need
+        na.omit()                                  # Remove rows with NAs
+      
+      curr_scale = curr_data[[scale]]              # Subset scale data
+      curr_estimate = ifelse(is.na(curr_data$session_2),
+                           curr_data$session_1,
+                           (curr_data$session_1 + curr_data$session_2) / 2)  # Subset estimate for parameter
+      # Run the boot-strapped correlation between the current scale and the current parameter
+      curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
+                              null.hyp = NULL,
+                              alternative = c("two.sided", "less", "greater"),
+                              conf.level = 0.95, type = NULL, R = 9999)
+      
+      curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
+        separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
+        # Remove parentheses and turn CIs into numerics
+        mutate(lower = as.numeric(str_remove(lower, "[(]")),
+               upper = as.numeric(str_remove(upper, "[)]")))
+      
+      # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
+      correlations = bind_rows(correlations,
+                               data.frame(card = card,
+                                          parameter_session = 2,
+                                          scale_session = 1,
+                                          parameter = "proportion_good",
+                                          scale = scale,
+                                          r = curr_cor$Observed,
+                                          lower_ci = curr_ci$lower[1],
+                                          upper_ci = curr_ci$upper[1]))
+  }
+}
+```
+
+
+
+### Session 2 Self-Report w/ Session 1 & 2 ORL Parameters
+```{r}
+for(card in c("A", "B", "C", "D")){
+  # Loop through each scale from session 2
+  for(scale in c("bastot", "basdrive", "basfunsk",
+                 "basrewres", "bis", "panas_pa",
+                 "panas_na", "shaps_tot")){
+      
+      curr_data = card_proportions %>% 
+        filter(stim == card) %>% 
+        left_join(sr_sess2) %>%                    # Join scales to orl parameter
+        na.omit()                                  # Remove rows with NAs
+      
+      curr_scale = curr_data[[scale]]              # Subset scale data
+      curr_estimate = curr_data[["session_1"]] # Subset estimate for parameter
+      # Run the boot-strapped correlation between the current scale and the current parameter
+      curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
+                              null.hyp = NULL,
+                              alternative = c("two.sided", "less", "greater"),
+                              conf.level = 0.95, type = NULL, R = 9999)
+      
+      curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
+        separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
+        # Remove parentheses and turn CIs into numerics
+        mutate(lower = as.numeric(str_remove(lower, "[(]")),
+               upper = as.numeric(str_remove(upper, "[)]")))
+      
+      # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
+      correlations = bind_rows(correlations,
+                               data.frame(card = card,
+                                          parameter_session = 1,
+                                          scale_session = 2,
+                                          parameter = "proportion_good",
+                                          scale = scale,
+                                          r = curr_cor$Observed,
+                                          lower_ci = curr_ci$lower[1],
+                                          upper_ci = curr_ci$upper[1]))
+      
+      curr_data = card_proportions %>%             # Subset orl parameter
+        filter(stim == card) %>% 
+        left_join(sr_sess2) %>%                    # Join scales to orl parameter
+        na.omit()                                  # Remove rows with NAs
+      
+      curr_scale = curr_data[[scale]]              # Subset scale data
+      curr_estimate = curr_data[["session_2"]] # Subset estimate for parameter
+      # Run the boot-strapped correlation between the current scale and the current parameter
+      curr_cor = boot.cor.bca(x = curr_scale, y = curr_estimate,
+                              null.hyp = NULL,
+                              alternative = c("two.sided", "less", "greater"),
+                              conf.level = 0.95, type = NULL, R = 9999)
+      
+      curr_ci = data.frame(data = curr_cor$Confidence.interval) %>%       # Get the confidence interval of the current correlation (this is a string)
+        separate(col = data, sep = ",", into = c("lower", "upper")) %>%   # Separate confidence interval string into lower and upper CI columns
+        # Remove parentheses and turn CIs into numerics
+        mutate(lower = as.numeric(str_remove(lower, "[(]")),
+               upper = as.numeric(str_remove(upper, "[)]")))
+      
+      # Bind the current correlation to the correlations dataframe while also detailing what the correlation is from (e.g., session, parameter, etc.)
+      correlations = bind_rows(correlations,
+                               data.frame(card = card,
+                                          parameter_session = 2,
+                                          scale_session = 2,
+                                          parameter = "proportion_good",
+                                          scale = scale,
+                                          r = curr_cor$Observed,
+                                          lower_ci = curr_ci$lower[1],
+                                          upper_ci = curr_ci$upper[1]))
+  }
+}
+```
+
+
+
+## Format Correlations
+### By Session
+```{r}
+formatted_correlations = correlations %>% 
+  # Identify CIs that DO NOT overlap with 0
+  mutate(sig = case_when(lower_ci < 0 & upper_ci < 0 ~ "*",
+                         lower_ci > 0 & upper_ci > 0 ~ "*",
+                         T ~ ""),
+         # Format numerics
+         r = str_replace(format(round(r, 2), nsmall = 2), "0.", replacement = "."),
+         lower_ci = str_replace(format(round(lower_ci, 2), nsmall = 2), "0.", replacement = "."),
+         upper_ci = str_replace(format(round(upper_ci, 2), nsmall = 2), "0.", replacement = "."),
+         # Concatenating correlations and CIs
+         estimate = paste(r, " (", lower_ci, ", ", upper_ci, ")", sig,
+                          sep = "")) %>% 
+  select(-c(sig, r, lower_ci, upper_ci)) %>% 
+  pivot_wider(names_from = c("parameter", "parameter_session", "scale_session"), values_from = estimate,
+              values_fill = "")
+
+write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "Summary_Score_Correlations", "card_proportion_formatted_correlations.csv"))
+```
+
+
+
+### Overall
+```{r}
+formatted_correlations = overall_correlations %>% 
+  # Identify CIs that DO NOT overlap with 0
+  mutate(sig = case_when(lower_ci < 0 & upper_ci < 0 ~ "*",
+                         lower_ci > 0 & upper_ci > 0 ~ "*",
+                         T ~ ""),
+         # Format numerics
+         r = str_replace(format(round(r, 2), nsmall = 2), "0.", replacement = "."),
+         lower_ci = str_replace(format(round(lower_ci, 2), nsmall = 2), "0.", replacement = "."),
+         upper_ci = str_replace(format(round(upper_ci, 2), nsmall = 2), "0.", replacement = "."),
+         # Concatenating correlations and CIs
+         estimate = paste(r, " (", lower_ci, ", ", upper_ci, ")", sig,
+                          sep = "")) %>% 
+  select(-c(sig, r, lower_ci, upper_ci)) %>% 
+  pivot_wider(names_from = "parameter", values_from = estimate,
+              values_fill = "")
+
+write.csv(formatted_correlations, here("1_IGT_PP", "Figs_Tables", "Summary_Score_Correlations", "card_proportion_formatted_overall_correlations.csv"))
+```
+
+
+
+## Unformatted Correlations
+```{r}
+unformatted_correlations = correlations %>% 
+  # format correlations
+  mutate(r = str_replace(format(round(r, 2), nsmall = 2), "0.", replacement = ".")) %>% 
+  select(-c(lower_ci, upper_ci)) %>% 
+  pivot_wider(names_from = c("parameter", "parameter_session", "scale_session"), values_from = r,
+              values_fill = "")
+
+write.csv(unformatted_correlations, here("1_IGT_PP", "Figs_Tables", "Summary_Score_Correlations", "card_proportion_unformatted_correlations.csv"))
+```
+
+
+
+# -----------------------------------------------
 
 
 

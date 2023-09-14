@@ -28,8 +28,8 @@ library(grid)
 library(HDInterval)
 library(lemon)
 
-fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint", "orl_pp_joint_fit.rds"))
-data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "List_Sess1&2.rds"))
+fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint", "orl_pp_joint_fit.rds"))
+data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
 ```
 
 
@@ -45,6 +45,7 @@ N = data$N
 S = data$S
 C = 4
 Trials = data$T
+size = 5-1
 
 proportions = data.frame()
 
@@ -54,7 +55,7 @@ for(i in 1:N){
       for(c in 1:C){
         curr_data = ifelse(data$choice[i,data$card[i,,s] == c,s] == 2, 0, 1)
         curr_posterior = ifelse(posteriors$choice_pred[,i,data$card[i,,s] == c,s] == 2, 0, 1)
-        for(k in 1:26){
+        for(k in 1:(30-size)){
           proportions = data.frame(
             subject = i,
             session = s,
@@ -78,7 +79,7 @@ for(i in 1:N){
 # ---------------------------------------
 # Plotting
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckA_Session1_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckA_Session1_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -88,7 +89,7 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckA_Session1_individual_PPC.tif
                      linewidth = .5) +
       geom_point(aes(y = prob),
                  shape = 21, size = 2, fill = "darkgoldenrod1") +
-      geom_point(aes(y = choice), size = 1) +
+      geom_point(aes(y = choice), size = 2) +
       scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
       scale_size_continuous(range = c(2, 6)) +
       labs(x = "5-Trial Bin", y = "Proportion") +
@@ -103,7 +104,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckA_Session2_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckA_Session2_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -113,7 +114,7 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckA_Session2_individual_PPC.tif
                      linewidth = .5) +
       geom_point(aes(y = prob),
                  shape = 21, size = 2, fill = "darkgoldenrod1") +
-      geom_point(aes(y = choice), size = 1) +
+      geom_point(aes(y = choice), size = 2) +
       scale_y_continuous(limits = c(-.05, 1.1), breaks = seq(0, 1, .25)) +
       scale_size_continuous(range = c(2, 6)) +
       labs(x = "5-Trial Bin", y = "Proportion") +
@@ -127,7 +128,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckB_Session1_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckB_Session1_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -151,7 +152,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckB_Session2_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckB_Session2_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -175,7 +176,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckC_Session1_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckC_Session1_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -199,7 +200,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckC_Session2_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckC_Session2_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -223,7 +224,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckD_Session1_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckD_Session1_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 
@@ -247,7 +248,7 @@ dev.off()
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "Joint", "DeckD_Session2_individual_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint", "DeckD_Session2_individual_PPC.tiff"),
      width = 35, height = 35, units = "cm", res = 300)
 
   proportions %>% 

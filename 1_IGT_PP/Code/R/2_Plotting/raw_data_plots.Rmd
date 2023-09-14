@@ -312,7 +312,7 @@ dev.off()
 ## Session-Wide
 ```{r}
 group_proportions = combined_data %>% 
-  group_by(version, stim, trial) %>% 
+  group_by(version, stim, trial, session) %>% 
   reframe(prop_play = mean(play))
 
 tiff(here("1_IGT_PP", "Figs_Tables", "Raw_Data", "trial_choices_sessionwide.tiff"),

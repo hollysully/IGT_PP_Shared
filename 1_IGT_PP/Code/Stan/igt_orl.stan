@@ -131,6 +131,7 @@ generated quantities {
   real<lower=0,upper=5> mu_K;
   real                  mu_betaF;
   real                  mu_betaP;
+  real log_lik[N];
   
   // For log likelihood calculation
   int y_pred[N,T];
@@ -143,6 +144,8 @@ generated quantities {
   
   { // local section, this saves time and space
     for (i in 1:N) {
+      log_lik[i] = 0;        // Initialize log_lik
+      
       // Define values
       matrix[4,2] ef;
       matrix[4,2] ev;
@@ -167,6 +170,9 @@ generated quantities {
       }
       
       for (t in 1:Tsubj[i]) {
+        // softmax choice
+        log_lik[i] += categorical_logit_lpmf(ydata[i,t]|to_vector(util[stim[i,t], :]));
+            
         // softmax choice
         y_pred[i,t] = categorical_rng(softmax(to_vector(util[stim[i,t],:])));
         

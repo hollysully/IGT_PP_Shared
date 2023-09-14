@@ -12,7 +12,7 @@ library(here)
 ########################################################################################## 
 
 # Read in stan-ready data for single sess play pass ORL model
-stan_dat <- readRDS(here("Data", "1_Preprocessed", "Sess1.rds"))
+stan_dat <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Sess1.rds"))
 
 #explore the stan_dat
 #stan_dat$Tsubj
@@ -21,14 +21,14 @@ stan_dat <- readRDS(here("Data", "1_Preprocessed", "Sess1.rds"))
 ################## skip to line 43 and read in the RDS file
 
 # Compile model
-orl_pp_sep1 <- stan_model(here("Code", "Stan", "igt_orl.stan"))
+orl_pp_sep1 <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl.stan"))
 
 # Fit model
 fit_sep <- sampling(orl_pp_sep1, 
                     data   = stan_dat, 
                     iter   = 5000, 
                     warmup = 1000,
-                    chains = 6, 
+                    chains = 4, 
                     cores  = 4,
                     seed   = 43210)
 
@@ -36,7 +36,7 @@ fit_sep <- sampling(orl_pp_sep1,
 
 
 #save the fitted model as an .rds file
-filename <- here("Data", "2_Fitted", "orl_pp_sess1.rds")
+filename <- here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "orl_pp_sess1.rds")
 saveRDS(fit_sep, filename)
 
 # to read the .rds file back into R later, you do:
@@ -75,7 +75,7 @@ Fit_sep_sess1_mu_betaP <- mean(pars$mu_betaP)  # 0.6657244
 
 
 #save the pars dataset
-write.csv(IGT_PP_sep_sess1, here("Data", "2_Fitted", "IGT_PP_sep_sess1_IndPars.csv"))
+write.csv(IGT_PP_sep_sess1, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "IGT_PP_sep_sess1_IndPars.csv"))
 
 
 
@@ -88,7 +88,7 @@ write.csv(IGT_PP_sep_sess1, here("Data", "2_Fitted", "IGT_PP_sep_sess1_IndPars.c
 ########################################################################################## 
 
 # Read in stan-ready data for single sess play pass ORL model
-stan_dat <- readRDS(here("Data", "1_Preprocessed", "Sess2.rds"))
+stan_dat <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "Sess2.rds"))
 
 #explore the stan_dat
 #stan_dat$Tsubj
@@ -97,14 +97,14 @@ stan_dat <- readRDS(here("Data", "1_Preprocessed", "Sess2.rds"))
 ################## skip to line 43 and read in the RDS file
 
 # Compile model
-orl_pp_sep2 <- stan_model("Code", "Stan", "igt_orl.stan")
+orl_pp_sep2 <- stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl.stan"))
 
 # Fit model
 fit_sep <- sampling(orl_pp_sep2, 
                     data   = stan_dat, 
                     iter   = 5000, 
                     warmup = 1000,
-                    chains = 6, 
+                    chains = 4, 
                     cores  = 4,
                     seed   = 43210)
 
@@ -112,7 +112,7 @@ fit_sep <- sampling(orl_pp_sep2,
 
 
 #save the fitted model as an .rds file
-filename = here("Data", "2_Fitted", "orl_pp_sess2.rds")
+filename = here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "orl_pp_sess2.rds")
 saveRDS(fit_sep, filename)
 
 # to read the .rds file back into R later, you do:
@@ -152,6 +152,6 @@ Fit_sep_sess2_mu_betaP = mean(pars$mu_betaP)  # 1.110543
 
 
 #save the pars dataset
-write.csv(IGT_PP_sep_sess2,here("Data", "2_Fitted", "IGT_PP_sep_sess2_IndPars.csv"))
+write.csv(IGT_PP_sep_sess2,here("1_IGT_PP", "Data", "2_Fitted", "ORL_Sep", "IGT_PP_sep_sess2_IndPars.csv"))
 
 
