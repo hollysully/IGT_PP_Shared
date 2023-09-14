@@ -18,7 +18,6 @@ data {
   real sign[N,T];                    // Signs of the outcome received on each trial
 }
 
-
 parameters {
 // Declare parameters
   // Hyper(group)-parameters
@@ -243,43 +242,6 @@ generated quantities {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
