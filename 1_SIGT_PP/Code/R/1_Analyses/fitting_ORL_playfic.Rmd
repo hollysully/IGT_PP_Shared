@@ -20,6 +20,7 @@ library(here)
 library(miscTools)
 library(wBoot)
 library(cmdstanr)
+library(grid)
 library('devtools')
 source_url("https://raw.githubusercontent.com/MatthewBJane/theme_barbie/main/theme_barbie.R")
 source(here("1_SIGT_PP", "Code", "R", "3_Other", "helpful_functions.R"))
@@ -183,23 +184,25 @@ dev.off()
 # Results
 ## PPCs
 ```{r}
+PPCs = make_PPCs(orl_fit, stan_data)
+
 tiff(here("1_SIGT_PP", "Figs_Tables", "ORL_playfic", "PPC.tiff"),
-     width = 25, height = 10, units = "cm", res = 300)
+     width = 15, height = 7.5, units = "cm", res = 300)
 
   grid.newpage()
   pushViewport(viewport(x = .5, y = .5, width = .9, height = .9))
-  grid.draw(make_PPCs(orl_fit, stan_data, barbie))
+  grid.draw(PPCs)
   popViewport()
   
   
   # x axis
   grid.text("Trial",
-            x = .5125, y = .05,
-            gp = gpar(fontsize = 16))
+            x = .52, y = .05,
+            gp = gpar(fontsize = 14))
   # y axis
-  grid.text("Proportion/Probability Play",
+  grid.text("Proportion Play",
             x = .0225, y = .5,
-            gp = gpar(fontsize = 16),
+            gp = gpar(fontsize = 14),
             rot = 90)
 dev.off()
 ```

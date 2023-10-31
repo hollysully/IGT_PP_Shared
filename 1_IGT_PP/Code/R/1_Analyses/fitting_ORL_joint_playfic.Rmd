@@ -20,6 +20,8 @@ library(here)
 library(miscTools)
 library(wBoot)
 library(cmdstanr)
+library(lemon)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
 ```
 
 
@@ -77,9 +79,9 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 # -------------------------------------------
 # Model Diagnostics
 ```{r}
-orl_posteriors <- extract(orl_fit)
-saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
-                             "orl_pp_joint_playfic_posteriors.rds"))
+# orl_posteriors <- extract(orl_fit)
+# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
+#                              "orl_pp_joint_playfic_posteriors.rds"))
 orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
                               "orl_pp_joint_playfic_posteriors.rds"))
 
@@ -99,10 +101,10 @@ person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TR
 
 ## Rhat
 ```{r, eval = T}
-rhats = rhat(orl_fit, pars = focal_parameters) %>%
-  data.frame() %>% mutate(parameter = rownames(.))
-saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
-                    "orl_pp_joint_playfic_rhats.rds"))
+# rhats = rhat(orl_fit, pars = focal_parameters) %>%
+#   data.frame() %>% mutate(parameter = rownames(.))
+# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
+#                     "orl_pp_joint_playfic_rhats.rds"))
 rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
                      "orl_pp_joint_playfic_rhats.rds"))
 ```
@@ -110,7 +112,7 @@ rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic",
 
 
 ## Traceplots
-```{r}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic",
           "orl_pp_joint_playfic_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
@@ -135,7 +137,7 @@ for(i in person_parameters){
 
 
 ## Pairs
-```{r}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic",
           "orl_pp_joint_playfic_group_pairs.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
@@ -151,7 +153,7 @@ dev.off()
 # -------------------------------------------
 # Inspect Parameters
 ## Means +/- PI
-```{r}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic",
           "orl_pp_joint_playfic_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
@@ -162,7 +164,7 @@ dev.off()
 
 
 ## Posterior Distributions
-```{r}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic",
           "orl_pp_joint_playfic_posterior_distributions.tiff"),
      width = 30, height = 20, units = "cm", res = 300)
@@ -186,26 +188,48 @@ dev.off()
 
 # -------------------------------------------
 # Results
-## PPCs
+## PPC Plot
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic", "PPC.tiff"),
-     width = 25, height = 10, units = "cm", res = 300)
+choice_proportions = calculate_proportions(orl_posteriors, stan_data,
+                                           data_type = "data.frame"
+                                           # data_type = "list_of_matrices"
+                                           )
+```
 
-  grid.newpage()
-  pushViewport(viewport(x = .5, y = .5, width = .9, height = .9))
-  grid.draw(make_PPCs(orl_fit, stan_data, barbie))
-  popViewport()
-  
-  
-  # x axis
-  grid.text("Trial",
-            x = .5125, y = .05,
-            gp = gpar(fontsize = 16))
-  # y axis
-  grid.text("Proportion/Probability Play",
-            x = .0225, y = .5,
-            gp = gpar(fontsize = 16),
-            rot = 90)
+
+
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic",
+          "ORL_joint_playfic_PPC.tiff"),
+     width = 15, height = 8, units = "cm", res = 300)
+
+  # simplify data
+  choice_proportions %>% 
+    group_by(trial, deck, session) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    # plotting
+    ggplot(aes(x = trial,
+               group = trial)) +
+    geom_linerange(aes(ymin = lower95, ymax = upper95),
+                   linewidth = .35, color = "goldenrod3", alpha = .5) +
+    geom_linerange(aes(ymin = lower50, ymax = upper50),
+                   linewidth = .35, color = "goldenrod3") +
+    geom_point(aes(y = mu), shape = 21,
+               color = "goldenrod3", fill = "white",
+               size = .75) +
+    geom_point(aes(y = observed), size = .75) +
+    scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                       breaks = seq(0,1,.25)) +
+    labs(x = "Trial", y = "Proportion Play") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          strip.background = element_blank(),
+          ) +
+    facet_rep_grid(session~deck,
+                   labeller = labeller(deck = c("A" = "Deck A", "B" = "Deck B",
+                                                "C" = "Deck C", "D" = "Deck D")))
 dev.off()
 ```
 

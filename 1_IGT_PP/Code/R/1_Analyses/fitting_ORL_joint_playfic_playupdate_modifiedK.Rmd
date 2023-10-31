@@ -37,9 +37,9 @@ stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_I
 
 # -------------------------------------------
 # Check Model
-```{r, eval = F}
+```{r, eval = T}
 model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", 
-                                "igt_orl_joint_playfic_playupdate_modifiedK.stan"), compile = F)
+                                "igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan"), compile = F)
 
 model_code$check_syntax(quiet = T)
 ```
@@ -47,9 +47,9 @@ model_code$check_syntax(quiet = T)
 
 
 # Fit Model
-```{r, eval = F}
+```{r, eval = T}
 # Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK.stan"))
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan"))
 
 
 # Fit model
@@ -63,15 +63,15 @@ orl_fit = sampling(orl_model,
 
 
 #save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                      "orl_pp_joint_playfic_playupdate_modifiedK_fit.rds"))
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                      "orl_pp_joint_playfic_playupdate_modifiedK_simplified_fit.rds"))
 ```
 
 
 
 ```{r}
-orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                       "orl_pp_joint_playfic_playupdate_modifiedK_fit.rds"))
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                       "orl_pp_joint_playfic_playupdate_modifiedK_simplified_fit.rds"))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -80,12 +80,17 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 
 # -------------------------------------------
 # Model Diagnostics
+```{r, eval = T}
+orl_posteriors <- extract(orl_fit)
+saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                             "orl_pp_joint_playfic_playupdate_modifiedK_simplified_posteriors.rds"))
+```
+
+
+
 ```{r}
-# orl_posteriors <- extract(orl_fit)
-# saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-#                              "orl_pp_joint_playfic_playupdate_modifiedK_posteriors.rds"))
-orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                              "orl_pp_joint_playfic_playupdate_modifiedK_posteriors.rds"))
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                              "orl_pp_joint_playfic_playupdate_modifiedK_simplified_posteriors.rds"))
 
 
 focal_parameters <- c(
@@ -102,21 +107,26 @@ person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TR
 
 
 ## Rhat
-```{r, eval = F}
-# rhats = rhat(orl_fit, pars = focal_parameters) %>%
-#   data.frame() %>% mutate(parameter = rownames(.))
-# saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-#                     "orl_pp_joint_playfic_playupdate_modifiedK_rhats.rds"))
-rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                     "orl_pp_joint_playfic_playupdate_modifiedK_rhats.rds"))
+```{r, eval = T}
+rhats = rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                    "orl_pp_joint_playfic_playupdate_modifiedK_simplified_rhats.rds"))
+```
+
+
+
+```{r}
+rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                     "orl_pp_joint_playfic_playupdate_modifiedK_simplified_rhats.rds"))
 ```
 
 
 
 ## Traceplots
-```{r, eval = F}
-tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
-          "orl_pp_joint_playfic_playupdate_modifiedK_group_traceplots.tiff"),
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+          "orl_pp_joint_playfic_playupdate_modifiedK_simplified_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   traceplot(
     orl_fit,
@@ -126,8 +136,8 @@ dev.off()
 
 
 for(i in person_parameters){
-  tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
-            paste("orl_pp_joint_playfic_playupdate_modifiedK_", i, "_traceplots.tiff", sep = "")),
+  tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+            paste("orl_pp_joint_playfic_playupdate_modifiedK_simplified_", i, "_traceplots.tiff", sep = "")),
        width = 35, height = 25, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
@@ -141,9 +151,9 @@ for(i in person_parameters){
 # -------------------------------------------
 # Inspect Parameters
 ## Means +/- PI
-```{r, eval = F}
-tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
-          "orl_pp_joint_playfic_playupdate_modifiedK_posterior_means.tiff"),
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+          "orl_pp_joint_playfic_playupdate_modifiedK_simplified_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   plot(orl_fit, pars = group_parameters)
 dev.off()
@@ -153,8 +163,8 @@ dev.off()
 
 ## Posterior Distributions
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
-          "orl_pp_joint_playfic_playupdate_modifiedK_posterior_distributions.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+          "orl_pp_joint_playfic_playupdate_modifiedK_simplified_posterior_distributions.tiff"),
      width = 30, height = 20, units = "cm", res = 300)
   par(mfrow = c(5, 5))
   # Mus & Sigmas
@@ -183,18 +193,18 @@ choice_proportions = calculate_proportions(orl_posteriors, stan_data,
                                            # data_type = "list_of_matrices"
                                            )
 saveRDS(choice_proportions,
-        here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-             "orl_pp_joint_playfic_playupdate_modifiedK_ppcs.rds"))
+        here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+             "orl_pp_joint_playfic_playupdate_modifiedK_simplified_ppcs.rds"))
 
-choice_proportions = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK",
-                                  "orl_pp_joint_playfic_playupdate_modifiedK_ppcs.rds"))
+choice_proportions = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+                                  "orl_pp_joint_playfic_playupdate_modifiedK_simplified_ppcs.rds"))
 ```
 
 
 
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
-          "ORL_joint_playfic_playupdate_modifiedK_PPC.tiff"),
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+          "ORL_joint_playfic_playupdate_modifiedK_simplified_PPC.tiff"),
      width = 15, height = 8, units = "cm", res = 300)
 
   # simplify data
@@ -233,7 +243,7 @@ dev.off()
 
 ## Reliability
 ```{r}
-tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
           "reliability_coefficients.tiff"),
      width = 15, height = 6.25, units = "cm", res = 300)
   bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
@@ -397,7 +407,7 @@ for(parameter in c(person_parameters,"RewPun_ratio")){
 correlations %>% 
   separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
   mutate(lower = as.numeric(str_remove(lower, "\\(")), upper = as.numeric(str_remove(upper, "\\)"))) %>% 
-  write.csv(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
+  write.csv(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
                  "session_orl_sr_correlations.csv"))
 
 correlations = data.frame()
@@ -428,8 +438,8 @@ for(parameter in c(person_parameters,"RewPun_ratio")){
 correlations %>% 
   separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
   mutate(lower = as.numeric(str_remove(lower, "\\(")), upper = as.numeric(str_remove(upper, "\\)"))) %>% 
-write.csv(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK",
-               "overall_orl_playfic_playupdate_modifiedK_sr_correlations.csv"))
+write.csv(here("1_IGT_PP", "Figs_Tables", "ORL_Joint_playfic_playupdate_modifiedK_simplified",
+               "overall_orl_playfic_playupdate_modifiedK_simplified_sr_correlations.csv"))
 ```
 
 
