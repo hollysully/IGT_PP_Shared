@@ -1,0 +1,94 @@
+---
+title: "Fitting Joint Test-Retest ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(lemon)
+library(foreach)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+## Load Data
+```{r}
+stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+```
+
+
+
+# Fit Model
+```{r, eval = T}
+# Compile model
+orl_model = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_joint.stan"))
+orl_model_orig = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan"))
+
+# design matrix implying same structure as the 
+# `igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan` model
+stan_data$D <- 2
+stan_data$X <- array(1, dim = c(stan_data$N, 2, 2)) 
+stan_data$X[,2,1] <- 0
+
+# Fit model
+orl_fit = orl_model$sample(
+  stan_data, 
+  iter_sampling = 500, 
+  iter_warmup = 100, 
+  chains = 4, 
+  parallel_chains = 4,
+  seed = 43210
+) 
+orl_fit_orig = orl_model_orig$sample(
+  stan_data, 
+  iter_sampling = 500, 
+  iter_warmup = 100, 
+  chains = 4, 
+  parallel_chains = 4,
+  seed = 43210
+) 
+```
+
+```{r}
+# all person-level parameters should match (be on the identity line)
+pars <- c("Arew", "Apun", "K", "betaF", "betaP")
+df <- foreach(par=pars, .combine="rbind") %do% {
+  data.frame(
+    parameter=par,
+    session=rep(c(rep(1, stan_data$N), rep(2, stan_data$N)), 2),
+    model=c(
+      rep("Original", stan_data$N*2), 
+      rep("Design Matrix", stan_data$N*2)
+    ),
+    value=scale(c(
+      apply(orl_fit_orig$draws(paste0(par)), 3, mean),
+      apply(orl_fit$draws(paste0(par)), 3, mean)
+    ))
+  )
+}
+
+df %>% 
+  mutate(parameter = factor(parameter, levels = pars, labels = pars)) %>%
+  ggplot(aes(x=value, y=value, group=model)) +
+  geom_abline(slope = 1, intercept = 0, color = "#8F2727") +
+  geom_point(color = "darkgray") +
+  facet_grid(vars(parameter), vars(session), scales = "free") +
+  xlab("Original Parameter (scaled)") +
+  ylab("Design Matrix Parameter (scaled)") +
+  theme_minimal(base_size = 15) + 
+  theme(panel.grid.minor = element_blank())
+```
