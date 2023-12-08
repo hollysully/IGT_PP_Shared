@@ -1,0 +1,215 @@
+---
+title: "IGT Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Setup
+## Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(dplyr)
+library(here)
+```
+
+
+
+## Load Data
+```{r}
+T1_IGT_child = readRDS(here("1_TADS_long", "Data", "0_Raw", "T1_IGT_child.RDS"))
+T2_IGT_child = readRDS(here("1_TADS_long", "Data", "0_Raw", "T2_IGT_child.RDS"))
+T3_IGT_child = readRDS(here("1_TADS_long", "Data", "0_Raw", "T3_IGT_child.RDS"))
+T4_IGT_child = readRDS(here("1_TADS_long", "Data", "0_Raw", "T4_IGT_child.RDS"))
+T5_IGT_child = readRDS(here("1_TADS_long", "Data", "0_Raw", "T5_IGT_child.RDS"))
+
+```
+
+
+## Check number of trials
+## For any subject <120 trials, this will print (1) the sub id and (2) the number of trials 
+```{r}
+
+#Enter the name of the data you want to check below
+curr_dat <- T2_IGT_child
+
+subj_ids <- unique(curr_dat$id)
+n_subj <- length(t(unique(curr_dat["id"])))
+for (i in 1:n_subj) {
+  # Subset out current subject
+   tmp <- subset(curr_dat, id==subj_ids[i])
+   x <- length(tmp[,1])
+   if (x != 120) {
+     print(tmp[1,"id"])
+     print(length(tmp[,"trial"]))
+   }
+}
+
+#  Can also visually check the subj_ids to make sure they are TADS ids 
+subj_ids
+```
+
+### From running the above code for T1_IGT_child & T2_IGT_child:
+
+### T1_IGT_child, sub 5083 only had 55 trials & 5119 only had 68 trials
+### also, there is a subject 9995, which is not a TADS subject number
+
+### T2_IGT_child, sub 5040 had 50 trials & 5083 had 75 trials
+
+### Remove these subjects from the respective datasets
+
+```{r}
+T1_IGT_child <- subset(T1_IGT_child, id!= 5083 & id!= 5119 & id!= 9995)
+T2_IGT_child <- subset(T2_IGT_child, id!= 5040 & id!= 5083)
+
+```
+
+
+# --------------------------------------
+# Make Stan Data
+## Function
+```{r}
+make_stan = function(data){
+  # # create variable to denote separate people for a given ID x participant combo & then another
+  # #   new variable that gives consecutive numbers for those combos
+  # data = dplyr::mutate(dplyr::group_by(tidyr::unite(data, col = "id_part", c(id, participant), remove = F),
+  #                                      id_part),
+  #                      id_part_order = dplyr::cur_group_id())
+  # # create ID variable that gives consecutive numbers for IDs (note that ID references both child & parent)
+  # data = dplyr::mutate(dplyr::group_by(data, id), id_order = dplyr::cur_group_id())
+  # # create ID variable that assigns child = 1, mom = 2, & dad = 3
+  # data = dplyr::mutate(dplyr::group_by(data, participant),
+  #                      part_order = match(participant, c("child", "mom", "dad")[1:3]))
+  
+  ##################################################################
+  # NOTE: id_part_order != id_order + part_order
+  ##################################################################
+  
+  # setup stan variables
+  ID = unique(data$id)                 # vector of unique ID 
+  N = length(ID)                       # number of unique IDs
+  sessions = unique(data$time)         # vector of unique sessions
+  S = length(sessions)                 # number of unique sessions
+  Tr = max(data$trial)                 # max number of trials across participants
+  
+
+  ID_num = rep(-1, N)                           # ID
+  #participant = rep(-1, N)                     # child (1), mom (2), or dad (3)?
+  Tsubj = array(data = 0, dim = c(N,S))         # number of trials by participant
+  card = array(data = -1, dim = c(N,Tr,S))      # cards
+  choice = array(data = -1, dim = c(N,Tr,S))    # choices made by participant
+  outcome = array(data = -999, dim = c(N,Tr,S)) # outcome of choice
+  sign = array(data = -999, dim = c(N,Tr,S))    # sign of choice outcome
+  
+  for(i in 1:N){
+    cur_id = dplyr::filter(data, id == ID[i])
+    #ID_num[i] = mean(cur_id$id)
+    ID_num[i] <- cur_id$id[1]
+    #participant[i] = mean(cur_id_part$part_order)
+    for(s in 1:S){
+      cur_session = dplyr::filter(cur_id, time == sessions[s])
+      if(nrow(cur_session) > 0){
+        Tsubj[i,s] = max(cur_session$trial)
+        for(t in 1:Tsubj[i,s]){
+          cur_trial = dplyr::filter(cur_session, trial == t)
+          card[i,t,s] = match(stringr::str_remove(cur_trial$AB_card, "AB_"), LETTERS[1:4])
+          choice[i,t,s] = ifelse(cur_trial$card_play == 0, 2, cur_trial$card_play)
+          outcome[i,t,s] = ifelse(is.na(cur_trial$outcome), 0, cur_trial$outcome / 100)
+          sign[i,t,s] = sign(outcome[i,t,s])
+        }
+      }
+    }
+  }
+  
+  stan = list(ID_num = ID_num,
+              #as.numeric(gsub("T", "", sessions)),
+              #participant = participant,
+              N = N,
+              S = S,
+              T = Tr,
+              card = card,
+              Tsubj = Tsubj,
+              choice = choice,
+              outcome = outcome,
+              sign = sign)
+}
+```
+
+
+## Make Child Data
+```{r}
+child_stan <- make_stan(bind_rows(T1_IGT_child,T2_IGT_child))
+saveRDS(child_stan, here("1_TADS_long", "Data", "1_Preprocessed", "child_IGT.RDS"))
+
+```
+
+
+
+## NOTE:  I haven't used anything below here
+## Make Parent Data
+```{r}
+parent_stan = make_stan(bind_rows(T1_IGT_mom, T1_IGT_dad,
+                                  T2_IGT_mom, T2_IGT_dad#,
+                                  # T3_IGT_mom, T3_IGT_dad,
+                                  # T4_IGT_mom, T4_IGT_dad,
+                                  # T5_IGT_mom, T5_IGT_dad
+                                  ))
+saveRDS(parent_stan, here("Data", "1_Stan", "parent_IGT.RDS"))
+```
+
+
+
+```{r, eval = F}
+for(i in names(parent_stan)){
+  View(data.frame(parent_stan[[i]]), title = i)
+}
+```
+
+
+
+## Make Combined Data
+```{r}
+full_stan = make_stan(full)
+saveRDS(full_stan, here("Data", "1_Stan", "full_IGT.RDS"))
+```
+
+
+
+# --------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
