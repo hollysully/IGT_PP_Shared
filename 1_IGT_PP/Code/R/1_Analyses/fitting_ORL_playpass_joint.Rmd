@@ -19,30 +19,35 @@ library(bayesplot)
 library(here)
 library(miscTools)
 library(cmdstanr)
+library(stringi)
+library(ggpp)
 library(lemon)
 library(foreach)
-source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+source(here("1_TADS_long", "Code", "R", "3_Other", "helpful_functions.R"))
 ```
+
 
 
 ## Load Data
 ```{r}
-stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+stan_data = readRDS(here("1_TADS_long", "Data", "1_Preprocessed", "child_IGT.RDS"))
 ```
+
 
 
 
 # Fit Model
 ```{r, eval = T}
 # Compile model
-orl_model = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_joint.stan"))
-orl_model_orig = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan"))
+orl_model = cmdstan_model(here("1_TADS_long", "Code", "Stan", "igt_orl_playpass_joint.stan"))
+#orl_model_orig = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan"))
 
 # design matrix implying same structure as the 
 # `igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan` model
-stan_data$D <- 2
-stan_data$X <- array(1, dim = c(stan_data$N, 2, 2)) 
-stan_data$X[,2,1] <- 0
+stan_data$D <- 2 # number of columns (will always need one column for the intercept)
+stan_data$X <- array(1, dim = c(stan_data$N, 2, 2)) # D = first 2; 3rd 2 is the sessions; 
+# the above line sets all dimensions of the array to 1 (this is for convenience)
+stan_data$X[,2,1] <- 0 # this sets the 2nd covariate for the 1st session to 0
 
 # Fit model
 orl_fit = orl_model$sample(
@@ -53,16 +58,67 @@ orl_fit = orl_model$sample(
   parallel_chains = 4,
   seed = 43210
 ) 
-orl_fit_orig = orl_model_orig$sample(
-  stan_data, 
-  iter_sampling = 500, 
-  iter_warmup = 100, 
-  chains = 4, 
-  parallel_chains = 4,
-  seed = 43210
-) 
+# orl_fit_orig = orl_model_orig$sample(
+#   stan_data, 
+#   iter_sampling = 500, 
+#   iter_warmup = 100, 
+#   chains = 4, 
+#   parallel_chains = 4,
+#   seed = 43210
+# ) 
 ```
 
+
+# save fitted model
+```{r}
+# Save the fitted model as an rds file
+saveRDS(orl_fit, here("1_TADS_long", "Data", "2_Fitted",
+                        paste("orl_fit_T1_T2", ".rds", sep = "_")))
+```
+
+
+# read in fitted model
+```{r}
+orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                        paste("orl_fit_T1_T2", ".rds", sep = "_")))
+
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+```{r}
+orl_posteriors <- extract(orl_fit)
+saveRDS(orl_posteriors, (here("1_TADS_long", "Data", "2_Fitted",
+                        paste("orl_posteriors_T1_T2", ".rds", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Save posterior means
+```{r}
+
+posterior_means <- data.frame(subjID  = stan_data$ID_num,
+                  T1_child_Arew = colMeans(orl_posteriors$Arew[,,1]), # posterior means for session 1
+                  T1_child_Apun = colMeans(orl_posteriors$Apun[,,1]),      
+                  T1_child_K = colMeans(orl_posteriors$K[,,1]),
+                  T1_child_betaF = colMeans(orl_posteriors$betaF[,,1]),
+                  T1_child_betaP = colMeans(orl_posteriors$betaP[,,1]),
+                  T1_child_Arew_bt = colMeans(qnorm(orl_posteriors$Arew[,,1])), 
+                  T1_child_Apun_bt = colMeans(qnorm(orl_posteriors$Apun[,,1])),
+                  T1_child_K_bt = colMeans(qnorm((orl_posteriors$K[,,1]/5))))
+
+write.csv(posterior_means, here("IGT_Data", "2_Fitted",
+                             paste(sample, model_name, "posterior_means.csv", sep = "_")))
+
+```
+
+
+
+
+# a plot Nate made for comparing this flex model w/ the previous 2 timepoint joint model
 ```{r}
 # all person-level parameters should match (be on the identity line)
 pars <- c("Arew", "Apun", "K", "betaF", "betaP")
@@ -71,11 +127,11 @@ df <- foreach(par=pars, .combine="rbind") %do% {
     parameter=par,
     session=rep(c(rep(1, stan_data$N), rep(2, stan_data$N)), 2),
     model=c(
-      rep("Original", stan_data$N*2), 
+      #rep("Original", stan_data$N*2), 
       rep("Design Matrix", stan_data$N*2)
     ),
     value=scale(c(
-      apply(orl_fit_orig$draws(paste0(par)), 3, mean),
+      #apply(orl_fit_orig$draws(paste0(par)), 3, mean),
       apply(orl_fit$draws(paste0(par)), 3, mean)
     ))
   )
