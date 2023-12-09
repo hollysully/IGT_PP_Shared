@@ -1,5 +1,5 @@
 ---
-title: "Fitting Joint Test-Retest ORL"
+title: "Fitting ORL"
 output: html_document
 date: "2023-03-07"
 ---
@@ -20,15 +20,17 @@ library(here)
 library(miscTools)
 library(wBoot)
 library(cmdstanr)
+library(stringi)
+library(ggpp)
 library(lemon)
-source(here("1_SIGT_PP", "Code", "R", "3_Other", "helpful_functions.R"))
+source(here("1_SIGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
 ```
 
 
 
 ## Load Data
 ```{r}
-stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
+stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_SR_stan_data.rds"))
 ```
 
 
@@ -36,8 +38,7 @@ stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_pre.rds"))
 # -------------------------------------------
 # Check Model
 ```{r, eval = F}
-model_code = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", 
-                                "igt_orl.stan"), compile = F)
+model_code = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", "ORL.stan"), compile = F)
 
 model_code$check_syntax(quiet = T)
 ```
@@ -47,12 +48,12 @@ model_code$check_syntax(quiet = T)
 # Fit Model
 ```{r, eval = F}
 # Compile model
-orl_model = stan_model(here("1_SIGT_PP", "Code", "Stan", "igt_orl.stan"))
+orl_model = stan_model(here("1_SIGT_PP", "Code", "Stan", "ORL.stan"))
 
 
 # Fit model
 orl_fit = sampling(orl_model, 
-                   data   = stan_data, 
+                   data   = stan_data[1:8],
                    iter   = 5000, 
                    warmup = 1000, 
                    chains = 4, 
@@ -61,15 +62,13 @@ orl_fit = sampling(orl_model,
 
 
 #save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
-                      "orl_pp_fit.rds"))
+saveRDS(orl_fit, here("1_SIGT_PP", "Data", "2_Fitted", "ORL", "ORL_fit.rds"))
 ```
 
 
 
 ```{r}
-orl_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
-                       "orl_pp_fit.rds"))
+orl_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL", "ORL_fit.rds"))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -78,13 +77,17 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 
 # -------------------------------------------
 # Model Diagnostics
-```{r}
-# orl_posteriors <- extract(orl_fit)
-# saveRDS(orl_posteriors, here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
-#                              "orl_pp_posteriors.rds"))
-orl_posteriors = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
-                              "orl_pp_posteriors.rds"))
+```{r, eval = F}
+orl_posteriors <- extract(orl_fit)
+saveRDS(orl_posteriors, here("1_SIGT_PP", "Data", "2_Fitted", 
+                             "ORL", "ORL_posteriors.rds"))
+```
 
+
+
+```{r}
+orl_posteriors = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", 
+                              "ORL", "ORL_posteriors.rds"))
 
 focal_parameters <- c(
   "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
@@ -99,21 +102,26 @@ person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 
 
 ## Rhat
+```{r, eval = F}
+rhats = rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(rhats, here("1_SIGT_PP", "Data", "2_Fitted", 
+                    "ORL", "ORL_rhats.rds"))
+```
+
+
+
 ```{r, eval = T}
-# rhats = rhat(orl_fit, pars = focal_parameters) %>%
-#   data.frame() %>% mutate(parameter = rownames(.))
-# saveRDS(rhats, here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
-#                     "orl_pp_rhats.rds"))
-rhats = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL",
-                     "orl_pp_rhats.rds"))
+rhats = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", 
+                     "ORL", "ORL_rhats.rds"))
 ```
 
 
 
 ## Traceplots
-```{r}
-tiff(here("1_SIGT_PP", "Figs_Tables", "ORL",
-          "orl_pp_group_traceplots.tiff"),
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables", 
+          "ORL", "ORL_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   traceplot(
     orl_fit,
@@ -123,9 +131,9 @@ dev.off()
 
 
 for(i in person_parameters){
-  tiff(here("1_SIGT_PP", "Figs_Tables", "ORL",
-            paste("orl_pp_", i, "_traceplots.tiff", sep = "")),
-       width = 35, height = 25, units = "cm", res = 300)
+  tiff(here("1_SIGT_PP", "Figs_Tables", 
+            "ORL", "ORL_", i, "_traceplots.tiff", sep = ""),
+       width = 50, height = 50, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
               ) %>% print()
@@ -136,11 +144,11 @@ for(i in person_parameters){
 
 
 # -------------------------------------------
-# Results
-## Parameter Means
-```{r}
-tiff(here("1_SIGT_PP", "Figs_Tables", "ORL",
-          "orl_pp_posterior_means.tiff"),
+# Inspect Parameters
+## Means +/- PI
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables", 
+          "ORL", "ORL_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   plot(orl_fit, pars = group_parameters)
 dev.off()
@@ -149,9 +157,9 @@ dev.off()
 
 
 ## Posterior Distributions
-```{r}
-tiff(here("1_SIGT_PP", "Figs_Tables", "ORL",
-          "orl_pp_posterior_distributions.tiff"),
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables", 
+          "ORL", "ORL_posterior_distributions.tiff"),
      width = 30, height = 20, units = "cm", res = 300)
   par(mfrow = c(5, 5))
   # Mus & Sigmas
@@ -164,67 +172,78 @@ dev.off()
 
 
 
-## PPC Plot
-```{r}
-choice_proportions = calculate_proportions(orl_posteriors, stan_data,
-                                           data_type = "data.frame"
-                                           # data_type = "list_of_matrices"
-                                           )
-
-simplified_data = choice_proportions %>% 
-  group_by(trial, deck) %>% 
-  summarise(observed = mean(observed), mu = mean(mu),
-            lower50 = mean(lower50), upper50 = mean(upper50),
-            lower95 = mean(lower95), upper95 = mean(upper95))
-```
-
-
-
-```{r}
-tiff(here("1_SIGT_PP", "Figs_Tables", "ORL",
-          "ORL_PPC.tiff"),
-     width = 15, height = 8, units = "cm", res = 300)
-
-  # simplify data
-  choice_proportions %>% 
-    group_by(trial, deck) %>% 
-    summarise(observed = mean(observed), mu = mean(mu),
-              lower50 = mean(lower50), upper50 = mean(upper50),
-              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
-    # plotting
-    ggplot(aes(x = trial,
-               group = trial)) +
-    geom_linerange(aes(ymin = lower95, ymax = upper95),
-                   linewidth = .35, color = "goldenrod3", alpha = .5) +
-    geom_linerange(aes(ymin = lower50, ymax = upper50),
-                   linewidth = .35, color = "goldenrod3") +
-    geom_point(aes(y = mu), shape = 21,
-               color = "goldenrod3", fill = "white",
-               size = .75) +
-    geom_point(aes(y = observed), size = .75) +
-    scale_y_continuous(limits = c(0,1), expand = c(0,0),
-                       breaks = seq(0,1,.25)) +
-    labs(x = "Trial", y = "Proportion Play") +
-    theme_classic() +
-    theme(axis.text = element_text(color = "black"),
-          strip.background = element_blank(),
-          ) +
-    facet_rep_wrap(deck~.,
-                   labeller = labeller(deck = c("A" = "Deck A", "B" = "Deck B",
-                                                "C" = "Deck C", "D" = "Deck D")))
-dev.off()
-```
-
-
-
-```{r}
-  print(ppc_plot)
-```
-
-
-
-
 # -------------------------------------------
+# Correlations with Self-Report
+## Correlation Function
+```{r}
+run_cor = function(cur_data, cor_type, x_nam, y_nam){
+  cor = boot.cor.bca(
+    x = cur_data[[x_nam]], y = cur_data[[y_nam]],
+    alternative = c("two.sided", "less", "greater"),
+    null.hyp = NULL, conf.level = 0.95, type = NULL, R = 9999)
+  return(data.frame(
+    cor_type = cor_type,
+    x = x_nam, y = y_nam,
+    r = cor$Observed,
+    CI = cor$Confidence.interval))
+}
+```
+
+
+
+## Prep Data
+```{r}
+orl_sr = data.frame(ID = stan_data$IDs,
+                    Arew = apply(orl_posteriors$Arew, 2, mean),
+                    Apun = apply(orl_posteriors$Apun, 2, mean),
+                    betaF = apply(orl_posteriors$betaF, 2, mean),
+                    betaP = apply(orl_posteriors$betaP, 2, mean),
+                    K = apply(orl_posteriors$K, 2, mean),
+                    bastot = stan_data$bastot,
+                    basdrive = stan_data$basdrive,
+                    basfunsk = stan_data$basfunsk,
+                    basrewres = stan_data$basrewres,
+                    bis = stan_data$bis,
+                    panas_pa = stan_data$panas_pa,
+                    panas_na = stan_data$panas_na,
+                    masqGDA = stan_data$masqGDA,
+                    masqAA = stan_data$masqAA,
+                    masqGDD = stan_data$masqGDD,
+                    masqAD = stan_data$masqAD,
+                    shaps_tot = stan_data$shaps_tot,
+                    prdep_tot = stan_data$prdep_tot)
+```
+
+
+
+## Calculate Correlations
+```{r}
+correlations = data.frame()
+
+for(parameter in c("Arew", "Apun", "betaF", "betaP", "K")){
+  for(scale in c("bastot", "basdrive", "basfunsk", "basrewres", "bis",
+                 "panas_pa", "panas_na", "masqGDA", "masqAA", "masqGDD",
+                 "masqAD", "shaps_tot", "prdep_tot")){
+    cur_data = orl_sr %>% 
+        select(ID, all_of(parameter), all_of(scale)) %>% 
+        na.omit()
+    
+    correlations = run_cor(cur_data, "ORL-SR", parameter, scale) %>% 
+      bind_rows(correlations)
+  }
+}
+
+orl_sr_correlations = correlations %>% 
+  separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+  mutate(lower = as.numeric(str_remove(lower, "\\(")),
+         upper = as.numeric(str_remove(upper, "\\)")),
+         sig = case_when(lower < 0 & upper < 0 ~ "*",
+                         lower > 0 & upper > 0 ~ "*",
+                         lower < 0 & upper < .01 ~ "#",
+                         lower > .01 & upper > 0 ~ "#",
+                         T ~ ""))
+```
+
 
 
 

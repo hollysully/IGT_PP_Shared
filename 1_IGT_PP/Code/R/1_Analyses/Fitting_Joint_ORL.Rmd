@@ -1,0 +1,198 @@
+---
+title: "Fitting Joint ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(wBoot)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+
+## Load Data
+```{r}
+stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+```
+
+
+
+# -------------------------------------------
+# Check Model
+```{r, eval = T}
+model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL.stan"), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+# Fit Model
+```{r, eval = T}
+# Compile model
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL.stan"))
+
+
+# Fit model
+orl_fit = sampling(orl_model, 
+                   data   = stan_data, 
+                   iter   = 5000, 
+                   warmup = 1000, 
+                   chains = 4, 
+                   cores  = 4,
+                   seed   = 43210)
+
+
+#save the fitted model as an .rds file
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL", "Joint_ORL_fit.rds"))
+```
+
+
+
+```{r}
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL", "Joint_ORL_fit.rds"))
+
+iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+```{r, eval = T}
+orl_posteriors <- extract(orl_fit)
+saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", 
+                             "Joint_ORL", "Joint_ORL_posteriors.rds"))
+```
+
+
+
+```{r}
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                              "Joint_ORL", "Joint_ORL_posteriors.rds"))
+
+focal_parameters <- c(
+  "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
+  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun", "K", "betaF", "betaP",
+  "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]"
+)
+
+group_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Rhat
+```{r, eval = T}
+rhats = rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", 
+                    "Joint_ORL", "Joint_ORL_rhats.rds"))
+```
+
+
+
+```{r, eval = T}
+rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                     "Joint_ORL", "Joint_ORL_rhats.rds"))
+```
+
+
+
+## Traceplots
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Joint_ORL", "Joint_ORL_group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(
+    orl_fit,
+    pars = group_parameters
+)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_IGT_PP", "Figs_Tables", 
+            "Joint_ORL", "Joint_ORL_", i, "_traceplots.tiff", sep = ""),
+       width = 35, height = 25, units = "cm", res = 300)
+    traceplot(orl_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Inspect Parameters
+## Means +/- PI
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Joint_ORL", "Joint_ORL_posterior_means.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  plot(orl_fit, pars = group_parameters)
+dev.off()
+```
+
+
+
+## Posterior Distributions
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Joint_ORL", "Joint_ORL_posterior_distributions.tiff"),
+     width = 30, height = 20, units = "cm", res = 300)
+  par(mfrow = c(5, 5))
+  # Mus & Sigmas
+  for(s in 1:2){
+    for(i in grep("mu|sigma", group_parameters, value = T)){
+      plot(density(orl_posteriors[[i]][,s]), main = paste(i, s))
+      abline(v = mean(orl_posteriors[[i]][,s]))
+    }
+  }
+  
+  for(i in grep("R_", group_parameters, value = T)){
+    plot(density(orl_posteriors[[str_remove(i, "\\[1,2\\]")]][,2,1]), main = i)
+    abline(v = mean(orl_posteriors[[i]][,2,1]))
+  }
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

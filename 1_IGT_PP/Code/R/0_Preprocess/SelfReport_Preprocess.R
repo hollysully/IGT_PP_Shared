@@ -49,7 +49,7 @@ session1 = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Sessi
                                    "bastot", "basdrive", "basfunsk",
                                    "basrewres", "bis", "panas_pa",
                                    "panas_na", "masqGDA", "masqAA", "masqGDD",
-                                   # "masqAD", # Removed
+                                   "masqAD", # Removed
                                    "shaps_tot", "prdep_tot")) %>% 
   mutate(session = 1) %>%                     # Create session variable
   filter(ID >= 2049,                          # Subset PP participants
@@ -72,7 +72,7 @@ both_sessions = bind_rows(session1, session2) %>%
   select(ID, session,
          # Session 1 only
          prdep_tot, masqGDA, masqAA, masqGDD,
-         # masqAD, # Removed
+         masqAD, # Removed
          # Both sessions
          bastot, basdrive, basfunsk, basrewres,
          bis, panas_pa, panas_na, shaps_tot,
@@ -81,7 +81,8 @@ both_sessions = bind_rows(session1, session2) %>%
   pivot_longer(cols = -c("ID", "session"), values_to = "score", names_to = "scale")
 
   
-  
+
+saveRDS(both_sessions, here("1_IGT_PP", "Data", "1_Preprocessed", "self_report.RDS"))
 # -----------------------------------------------
 # PREP DATA
 IDs = unique(both_sessions$ID)

@@ -383,7 +383,7 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
     geom_point(aes(y = observed, color = "Observed", fill = "Observed"),
                shape = 21, size = .75) +
     # scales
-    scale_y_continuous(limits = c(0,1), expand = c(0,0),
+    scale_y_continuous(limits = c(0,1),
                        breaks = seq(0,1,.25)) +
     scale_color_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "goldenrod3")) +
     scale_fill_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "white")) +
@@ -485,10 +485,6 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
     # plotting
     ggplot(aes(x = binC-2.5)) +
       # geoms
-      # geom_linerange(aes(ymin = lower_1, ymax = upper_1), show.legend = F,
-      #                linewidth = .35, color = "goldenrod3") +
-      # geom_linerange(aes(ymin = lower_2, ymax = upper_2), show.legend = F,
-      #                linewidth = .35, color = "goldenrod3") +
       geom_point(aes(y = prob_1, shape = "Session 1 Predicted",
                      color = "Session 1 Predicted", fill = "Session 1 Predicted"),
                  size = .75) +
@@ -539,6 +535,112 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
       facet_rep_grid(id~card,
                      labeller = labeller(card = c("1" = "Deck A", "2" = "Deck B",
                                                   "3" = "Deck C", "4" = "Deck D")))
+dev.off()
+```
+
+
+
+## Plot 2050
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "2050_PPCs.tiff"),
+     width = 15, height = 7, units = "cm", res = 300)
+
+  # simplify data
+  ind_choice_proportions %>% 
+    left_join(data.frame(IDs)) %>% 
+    filter(subjID == 2050) %>% 
+    mutate(id = paste0("ID #", subjID),
+           deck = chartr("1234", "ABCD", as.character(card))) %>%
+    select(everything(),
+           mu = prob_mean, observed = choice,
+           lower = lower95, upper = upper95,
+           -c(prob_median, lower50, upper50)) %>% 
+    # plotting
+    ggplot(aes(x = binC-2.5)) +
+      # geoms
+      geom_point(aes(y = mu, color = "Predicted", fill = "Predicted"),
+                 shape = 21, size = .75) +
+      geom_point(aes(y = observed, color = "Observed", fill = "Observed"),
+                 shape = 21, size = .75) +
+      # scales
+      scale_x_continuous(limits = c(0,25), breaks = seq(0,25,5)) +
+      scale_y_continuous(limits = c(0,1), breaks = seq(0,1,.25)) +
+      coord_cartesian(ylim=c(0,1),expand=F,clip="off")+ # added clip = "off"
+      scale_color_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "goldenrod3")) +
+      scale_fill_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "white")) +
+      # theme
+      labs(x = "6-Trial Bin", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.84,.59), 
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            legend.key.size = unit(.25, "cm"),
+            panel.spacing.y = unit(0,"lines")) +
+      guides(color = guide_legend(override.aes = list(size = 1.25))) +
+      facet_rep_grid(session~deck,
+                     labeller = labeller(session = c("1" = "Session 1", "2" = "Session 2"),
+                                         deck = c("A" = "Deck A", "B" = "Deck B",
+                                                  "C" = "Deck C", "D" = "Deck D")))
+dev.off()
+```
+
+
+
+## Plot 2051
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "2051_PPCs.tiff"),
+     width = 15, height = 7, units = "cm", res = 300)
+
+  # simplify data
+  ind_choice_proportions %>% 
+    left_join(data.frame(IDs)) %>% 
+    filter(subjID == 2051) %>% 
+    mutate(id = paste0("ID #", subjID),
+           deck = chartr("1234", "ABCD", as.character(card))) %>%
+    select(everything(),
+           mu = prob_mean, observed = choice,
+           lower = lower95, upper = upper95,
+           -c(prob_median, lower50, upper50)) %>% 
+    # plotting
+    ggplot(aes(x = binC-2.5)) +
+      # geoms
+      geom_point(aes(y = mu, color = "Predicted", fill = "Predicted"),
+                 shape = 21, size = .75) +
+      geom_point(aes(y = observed, color = "Observed", fill = "Observed"),
+                 shape = 21, size = .75) +
+      # scales
+      scale_x_continuous(limits = c(0,25), breaks = seq(0,25,5)) +
+      scale_y_continuous(limits = c(0,1), breaks = seq(0,1,.25)) +
+      coord_cartesian(ylim=c(0,1),expand=F,clip="off")+ # added clip = "off"
+      scale_color_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "goldenrod3")) +
+      scale_fill_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "white")) +
+      # theme
+      labs(x = "6-Trial Bin", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.84,.59), 
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            legend.key.size = unit(.25, "cm"),
+            panel.spacing.y = unit(0,"lines")) +
+      guides(color = guide_legend(override.aes = list(size = 1.25))) +
+      facet_rep_grid(session~deck,
+                     labeller = labeller(session = c("1" = "Session 1", "2" = "Session 2"),
+                                         deck = c("A" = "Deck A", "B" = "Deck B",
+                                                  "C" = "Deck C", "D" = "Deck D")))
 dev.off()
 ```
 
@@ -769,9 +871,12 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
                                          expression(paste("\u03B2",italic(p),sep="")),
                                          expression(italic(K))))) %>% 
     group_by(parameter) %>% 
-    mutate(mu_r = mean(r), lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
+    mutate(mu_r = mean(r),
+           estimate_lab = paste("r=", ifelse(sign(round(mu_r,2))==1," ","-"), stri_pad_right(str_remove(abs(round(mu_r,2)), "^0+"),
+                                                                                             width = 3, pad = "0"),sep=""),
+           lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
            below_0 = paste0(round(mean(r<0)*100), "% < 0"), above_0 = paste0(round(mean(r>0)*100), "% > 0"),
-           height = max(density(r)$x)*.025) %>% 
+           height_ci = max(density(r)$x)*.025, height_m = max(density(r)$x)*.25) %>% 
     ggplot(aes(x = r)) +
       # geoms
       geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
@@ -780,14 +885,12 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
                     size = 2, vjust = -1.43) +
       geom_text_npc(aes(npcx = "right", npcy = "top", label = above_0),
                     size = 2, vjust = -1.43) +
-      # geom_text_npc(aes(npcx = "left", npcy = "top", label = below_0),
-      #               size = 2, hjust = -3, vjust = -1.43) +
-      # geom_text_npc(aes(npcx = "right", npcy = "top",
-      #                   label = rCI_lab), size = 2, vjust = -1.05) +
+      geom_text(aes(x = -.925, y = height_m, label = estimate_lab),
+                    size = 2) +
       geom_hline(yintercept = 0) +
       geom_vline(aes(xintercept = mu_r), color = "red2", linewidth = .4) +
       geom_errorbarh(aes(xmin = lower, xmax = upper,
-                         y = height),
+                         y = height_ci),
                          color = "red", linewidth = .4) +
       # scales
       scale_x_continuous(limits = c(-1,1), expand = c(0,0), breaks = seq(-1,1,.5),
@@ -1456,48 +1559,27 @@ orl_ratio = data.frame(ID = stan_data$subjIDs,
                        ratio = apply(orl_posteriors$Apun, 2, mean)/
                          apply(orl_posteriors$Arew, 2, mean))
 
-session1_session2 = self_report %>% 
-  pivot_wider(names_from = "scale", values_from = "score") %>% 
-  left_join(orl_parameters) %>% left_join(ch_prop_sess)
 averages = self_report %>% 
   group_by(ID, scale) %>% 
   reframe(score = mean(score, na.rm = T), session = 0) %>% 
   pivot_wider(names_from = "scale", values_from = "score") %>% 
-  left_join(orl_parameters) %>% left_join(ch_prop_avg)
+  left_join(orl_ratio)
 
-combined = bind_rows(session1_session2, averages)
+orlratio_correlations = data.frame()
 
-correlations = data.frame()
-
-for(s in unique(combined$session)){
-  for(parameter in c("Arew", "Apun", "betaF", "betaP", "K")){
-    check_data = combined %>% 
-      filter(session == s) %>% 
-      select(ID, parameter, Good, Bad) %>% 
-      na.omit()
-    
-    if(nrow(check_data)!=0){
-      correlations = run_cor(combined, s, "ORL-Prop", parameter, "Good") %>% 
-        bind_rows(correlations)
-      correlations = run_cor(combined, s, "ORL-Prop", parameter, "Bad") %>% 
-        bind_rows(correlations)
       
-      for(scale in unique(self_report$scale)){
-        correlations = run_cor(combined, s, "SR-ORL", scale, parameter) %>% 
-          bind_rows(correlations)
-        correlations = run_cor(combined, s, "SR-Prop", scale, "Good") %>% 
-          bind_rows(correlations)
-        correlations = run_cor(combined, s, "SR-Prop", scale, "Bad") %>% 
-          bind_rows(correlations)
-      }
-    }
-  }
+for(scale in unique(self_report$scale)){
+  orlratio_correlations = run_cor(averages, 0, "SR-ORL Ratio", scale, "ratio") %>% 
+    bind_rows(orlratio_correlations)
 }
 
-correlations = correlations %>% 
+orlratio_correlations = orlratio_correlations %>% 
   separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
   mutate(lower = as.numeric(str_remove(lower, "\\(")),
-         upper = as.numeric(str_remove(upper, "\\)")))          
+         upper = as.numeric(str_remove(upper, "\\)")),
+         sig = case_when(lower > 0 & upper > 0 ~ "*",
+                         lower < 0 & upper < 0 ~ "*",
+                         T ~ ""))
 ```
 
 
@@ -1830,6 +1912,39 @@ nom_correlations %>%
                              x == "prdep_tot" ~ 13)) %>% 
   write.csv(here("1_IGT_PP", "Data", "2_Fitted",
                  "Joint_ORL_start_noK", paste0("Joint_ORL_start_noK_correlations.csv")))
+```
+
+
+
+# ---------------------------------------
+# Single Timepoint Correlations
+```{r}
+sess1_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Sess1_ORL",
+                                "Sess1_ORL_posteriors.rds"))
+sess2_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Sess2_ORL",
+                                "Sess2_ORL_posteriors.rds"))
+```
+
+
+
+```{r}
+sess12_ORL = data.frame(ID = 1:49,
+                        Arew_1 = apply(sess1_posteriors$Arew, 2, mean),
+                        Arew_2 = apply(sess2_posteriors$Arew, 2, mean),
+                        Apun_1 = apply(sess1_posteriors$Apun, 2, mean),
+                        Apun_2 = apply(sess2_posteriors$Apun, 2, mean),
+                        K_1 = apply(sess1_posteriors$K, 2, mean),
+                        K_2 = apply(sess2_posteriors$K, 2, mean),
+                        betaF_1 = apply(sess1_posteriors$betaF, 2, mean),
+                        betaF_2 = apply(sess2_posteriors$betaF, 2, mean),
+                        betaP_1 = apply(sess1_posteriors$betaP, 2, mean),
+                        betaP_2 = apply(sess2_posteriors$betaP, 2, mean))
+
+sess12_orl_correlations = bind_rows(run_cor(sess12_ORL, "rel", "Sess12", "Arew_1", "Arew_2"),
+                                    run_cor(sess12_ORL, "rel", "Sess12", "Apun_1", "Apun_2"),
+                                    run_cor(sess12_ORL, "rel", "Sess12", "K_1", "K_2"),
+                                    run_cor(sess12_ORL, "rel", "Sess12", "betaF_1", "betaF_2"),
+                                    run_cor(sess12_ORL, "rel", "Sess12", "betaP_1", "betaP_2"))
 ```
 
 
