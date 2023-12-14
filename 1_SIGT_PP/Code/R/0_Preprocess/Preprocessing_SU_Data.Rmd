@@ -170,15 +170,18 @@ create_data = function(data){
   IDs = unique(data$ID)
   N = length(IDs)
   T = max(data$trial)
+  G = length(unique(data$group))
   
   card = matrix(data = -1, nrow = N, ncol = T)
   Tsubj = vector(length = N)
+  group = vector(length = N)
   choice = matrix(data = -1, nrow = N, ncol = T)
   outcome = matrix(data = -1, nrow = N, ncol = T)
   sign = matrix(data = -1, nrow = N, ncol = T)
   for(i in 1:N){
     card[i,] = data$card[data$ID == IDs[i]]
     Tsubj[i] = length(data$trial[data$ID == IDs[i]])
+    group[i] = data$group[data$ID == IDs[i]] + 1
     choice[i,] = data$choice[data$ID == IDs[i]]
     outcome[i,] = data$outcome[data$ID == IDs[i]]
     sign[i,] = data$sign[data$ID == IDs[i]]
@@ -187,8 +190,10 @@ create_data = function(data){
   stan_data = list(IDs = IDs,
                    N = N,
                    T = T,
+                   G = G,
                    card = card,
                    Tsubj = Tsubj,
+                   group = group,
                    choice = choice,
                    outcome = outcome,
                    sign = sign)
@@ -199,10 +204,11 @@ create_data = function(data){
 
 ## Save Data
 ```{r, eval = T}
-orl_stan_data = create_data(combined_data)
+orl_stan_data = create_data(mutate(combined_data,
+                                   group = drug_drink))
 
 saveRDS(orl_stan_data, here("1_SIGT_PP", "Data", "1_Preprocessed",
-                            "IGT_stan_data.RDS"))
+                            "drug_drink_IGT_stan_data.RDS"))
 ```
 
 

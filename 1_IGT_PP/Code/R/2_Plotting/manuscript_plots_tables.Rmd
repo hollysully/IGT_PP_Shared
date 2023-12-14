@@ -649,76 +649,91 @@ dev.off()
 
 ## Plot All
 ```{r, eval = F}
-tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "ALL_Individual_PPCs.tiff"),
-     width = 15, height = 7*25, units = "cm", res = 300)
-
-  # simplify data
-  ind_choice_proportions %>% 
+all_choice_proportions = ind_choice_proportions %>% 
     left_join(data.frame(IDs)) %>% 
     mutate(id = paste0("ID #", subjID)) %>%
     select(everything(),
            prob = prob_mean, lower = lower95, upper = upper95,
            -c(prob_median, lower50, upper50)) %>% 
-    pivot_wider(names_from = "session", values_from = c("prob", "choice", "lower", "upper")) %>%
-    # plotting
-    ggplot(aes(x = binC-2.5)) +
-      # geoms
-      # geom_linerange(aes(ymin = lower_1, ymax = upper_1), show.legend = F,
-      #                linewidth = .35, color = "goldenrod3") +
-      # geom_linerange(aes(ymin = lower_2, ymax = upper_2), show.legend = F,
-      #                linewidth = .35, color = "goldenrod3") +
-      geom_point(aes(y = prob_1, shape = "Session 1 Predicted",
-                     color = "Session 1 Predicted", fill = "Session 1 Predicted"),
-                 size = .75) +
-      geom_point(aes(y = choice_1, shape = "Session 1 Observed",
-                     color = "Session 1 Observed", fill = "Session 1 Observed"),
-                 size = .75) +
-      geom_point(aes(y = prob_2, shape = "Session 2 Predicted",
-                     color = "Session 2 Predicted", fill = "Session 2 Predicted"),
-                 size = .75) +
-      geom_point(aes(y = choice_2, shape = "Session 2 Observed",
-                     color = "Session 2 Observed", fill = "Session 2 Observed"),
-                 size = .75) +
-      # scales
-      scale_x_continuous(limits = c(0, 25), expand = c(.0175, .0175), breaks = seq(0, 25, 5)) +
-      scale_y_continuous(limits = c(0, 1), expand = c(.015, .015), breaks = seq(0, 1, .25),
-                         labels = c("0", ".25", ".50", ".75", "1")) +
-      scale_color_manual(name = "hello",
-                         values = c("Session 1 Observed" = "black",
-                                    "Session 1 Predicted" = "goldenrod3",
-                                    "Session 2 Observed" = "black",
-                                    "Session 2 Predicted" = "goldenrod3")) +
-      scale_fill_manual(name = "hello",
-                        values = c("Session 1 Observed" = "black",
-                                   "Session 1 Predicted" = "white",
-                                   "Session 2 Observed" = "black",
-                                   "Session 2 Predicted" = "white")) +
-      scale_shape_manual(name = "hello",
-                         values = c("Session 1 Observed" = 22,
-                                    "Session 1 Predicted" = 22,
-                                    "Session 2 Observed" = 23,
-                                    "Session 2 Predicted" = 23)) +
-      # theme
-      labs(x = "6-Trial Bin", y = "Proportion Play") +
-      theme_classic() +
-      theme(axis.text = element_text(color = "black"),
-            strip.background = element_blank(),
-            panel.spacing.x = unit(-.5,"lines"),
-            legend.title = element_blank(),
-            legend.background = element_rect(fill = "transparent", colour = "transparent"),
-            legend.position = c(.855,.6175),
-            # legend.position = "top", 
-            legend.spacing.x = unit(0, 'cm'),
-            legend.spacing.y = unit(-.25, 'cm'),
-            legend.text = element_text(size = 6.25),
-            legend.key.size = unit(.2, "cm"),
-            panel.spacing.y = unit(0,"lines")) +
-      guides(color = guide_legend(override.aes = list(size = 1.25))) +
-      facet_rep_grid(id~card,
-                     labeller = labeller(card = c("1" = "Deck A", "2" = "Deck B",
-                                                  "3" = "Deck C", "4" = "Deck D")))
-dev.off()
+    pivot_wider(names_from = "session", values_from = c("prob", "choice", "lower", "upper"))
+
+batches = list(unique(all_choice_proportions$id)[1:5],
+               unique(all_choice_proportions$id)[6:10],
+               unique(all_choice_proportions$id)[11:15],
+               unique(all_choice_proportions$id)[16:20],
+               unique(all_choice_proportions$id)[21:25],
+               unique(all_choice_proportions$id)[26:30],
+               unique(all_choice_proportions$id)[31:35],
+               unique(all_choice_proportions$id)[36:40],
+               unique(all_choice_proportions$id)[41:45],
+               unique(all_choice_proportions$id)[46:49])
+
+for(i in batches){
+  plot = all_choice_proportions %>%
+      filter(str_detect(id, paste(i, collapse = "|"))) %>% 
+      # plotting
+      ggplot(aes(x = binC-2.5)) +
+        # geoms
+        # geom_linerange(aes(ymin = lower_1, ymax = upper_1), show.legend = F,
+        #                linewidth = .35, color = "goldenrod3") +
+        # geom_linerange(aes(ymin = lower_2, ymax = upper_2), show.legend = F,
+        #                linewidth = .35, color = "goldenrod3") +
+        geom_point(aes(y = prob_1, shape = "Session 1 Predicted",
+                       color = "Session 1 Predicted", fill = "Session 1 Predicted"),
+                   size = .75) +
+        geom_point(aes(y = choice_1, shape = "Session 1 Observed",
+                       color = "Session 1 Observed", fill = "Session 1 Observed"),
+                   size = .75) +
+        geom_point(aes(y = prob_2, shape = "Session 2 Predicted",
+                       color = "Session 2 Predicted", fill = "Session 2 Predicted"),
+                   size = .75) +
+        geom_point(aes(y = choice_2, shape = "Session 2 Observed",
+                       color = "Session 2 Observed", fill = "Session 2 Observed"),
+                   size = .75) +
+        # scales
+        scale_x_continuous(limits = c(0, 25), expand = c(.0175, .0175), breaks = seq(0, 25, 5)) +
+        scale_y_continuous(limits = c(0, 1), expand = c(.015, .015), breaks = seq(0, 1, .25),
+                           labels = c("0", ".25", ".50", ".75", "1")) +
+        scale_color_manual(name = "hello",
+                           values = c("Session 1 Observed" = "black",
+                                      "Session 1 Predicted" = "goldenrod3",
+                                      "Session 2 Observed" = "black",
+                                      "Session 2 Predicted" = "goldenrod3")) +
+        scale_fill_manual(name = "hello",
+                          values = c("Session 1 Observed" = "black",
+                                     "Session 1 Predicted" = "white",
+                                     "Session 2 Observed" = "black",
+                                     "Session 2 Predicted" = "white")) +
+        scale_shape_manual(name = "hello",
+                           values = c("Session 1 Observed" = 22,
+                                      "Session 1 Predicted" = 22,
+                                      "Session 2 Observed" = 23,
+                                      "Session 2 Predicted" = 23)) +
+        # theme
+        labs(x = "6-Trial Bin", y = "Proportion Play") +
+        theme_classic() +
+        theme(axis.text = element_text(color = "black"),
+              strip.background = element_blank(),
+              panel.spacing.x = unit(-.5,"lines"),
+              legend.title = element_blank(),
+              legend.background = element_rect(fill = "transparent", colour = "transparent"),
+              legend.position = "top",
+              # legend.position = "top", 
+              legend.spacing.x = unit(0, 'cm'),
+              legend.spacing.y = unit(-.25, 'cm'),
+              legend.text = element_text(size = 6.25),
+              legend.key.size = unit(.2, "cm"),
+              panel.spacing.y = unit(0,"lines")) +
+        guides(color = guide_legend(override.aes = list(size = 1.25))) +
+        facet_rep_grid(id~card,
+                       labeller = labeller(card = c("1" = "Deck A", "2" = "Deck B",
+                                                    "3" = "Deck C", "4" = "Deck D")))
+  tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+            paste(paste(i, collapse = " & "), "PPCs.tiff")),
+       width = 15, height = 12, units = "cm", res = 300)
+    print(plot)
+  dev.off()
+}
 ```
 
 
