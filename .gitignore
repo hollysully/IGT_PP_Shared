@@ -39,10 +39,12 @@ Manuscript/
 1_IGT_PP/Figs_Tables/ORL_Joint_playfic_playupdate_modifiedK_simplified/
 1_SIGT_PP/Old/
 1_IGT_PP/Old/ 
+1_IGT_PP/Figs_Tables/ 
 
 
 # 
 Icon?
 
 # Ignore plots
-*.tiff
+*.docx
+*.pdf
