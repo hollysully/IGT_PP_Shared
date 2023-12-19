@@ -13,6 +13,7 @@ calculate_proportions = function(posteriors, stan_data, data_type = "list_of_mat
   # Recode choice data
   choices = ifelse(stan_data$choice == 2, 0, 1)
   predicted_values = ifelse(posteriors$choice_pred == 2, 0, 1)
+  iterations = nrow(posteriors$choice_pred)
   
   
   # Trial matrix (to skip when participant wasn't there)

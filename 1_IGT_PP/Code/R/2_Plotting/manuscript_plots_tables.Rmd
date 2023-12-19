@@ -1105,7 +1105,7 @@ correlations %>%
 # ---------------------------------------
 # Simulate ORL Parameters
 ## Prep Inputs for Simulations
-```{r, eval = F}
+```{r, eval = T}
 # PREP TASK-RELATED INPUTS
 cards = data.frame(card = stan_data$card[1,,1]) %>%
   mutate(trial = 1:n()) %>% 
@@ -1236,7 +1236,7 @@ K_simulations = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL",
 
 
 ## Arew/BetaP Simulation
-```{r, eval = F}
+```{r, eval = T}
 labs = c("Session 1",
          expression(paste("\u0394",italic(A),"+",sep="")),
          expression(paste("\u0394","\u03B2",italic(f),sep="")),
@@ -1284,7 +1284,7 @@ dev.off()
 
 
 ## Arew-Only Simulation
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "Arew_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1330,7 +1330,7 @@ dev.off()
 
 
 ## Apun-Only Simulation
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "Apun_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1376,7 +1376,7 @@ dev.off()
 
 
 ## BetaP-Only Simulation
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "betaP_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1422,7 +1422,7 @@ dev.off()
 
 
 ## BetaF-Only Simulation
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "betaF_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1468,7 +1468,7 @@ dev.off()
 
 
 ## K-Only Simulation
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "K_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
