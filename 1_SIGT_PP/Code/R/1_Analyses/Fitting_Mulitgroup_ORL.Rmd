@@ -1,0 +1,385 @@
+---
+title: "Fitting ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(wBoot)
+library(ggh4x)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+source(here("1_SIGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+
+## Load Data & Set Groups
+```{r}
+stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SU_IGT_stan_data.RDS"))
+
+group1 = "Comparison"
+group2 = "Drug"
+model = "SU"
+```
+
+
+
+# -------------------------------------------
+# Check Model
+```{r, eval = F}
+model_code = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", "Multigroup_ORL.stan"), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+# Fit Model
+```{r, eval = F}
+# Compile model
+orl_model = stan_model(here("1_SIGT_PP", "Code", "Stan", "Multigroup_ORL.stan"))
+
+
+# Fit model
+orl_fit = sampling(orl_model, 
+                   data   = stan_data,
+                   iter   = 5000, 
+                   warmup = 1000, 
+                   chains = 4, 
+                   cores  = 4,
+                   seed   = 43210)
+
+
+#save the fitted model as an .rds file
+saveRDS(orl_fit, here("1_SIGT_PP", "Data", "2_Fitted",
+                      paste(model, "ORL", sep = "_"),
+                      paste(model, "ORL_fit.rds", sep = "_")))
+```
+
+
+
+```{r}
+orl_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted",
+                       paste(model, "ORL", sep = "_"),
+                       paste(model, "ORL_fit.rds", sep = "_")))
+
+iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+```{r, eval = F}
+orl_posteriors <- extract(orl_fit)
+saveRDS(orl_posteriors, here("1_SIGT_PP", "Data", "2_Fitted",
+                             paste(model, "ORL", sep = "_"),
+                             paste(model, "ORL_posteriors.rds", sep = "_")))
+```
+
+
+
+```{r}
+orl_posteriors = readRDS(here("1_SIGT_PP", "Data", "2_Fitted",
+                              paste(model, "ORL", sep = "_"),
+                              paste(model, "ORL_posteriors.rds", sep = "_")))
+
+focal_parameters <- c(
+  "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
+  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun", "K", "betaF", "betaP"
+)
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Rhat
+```{r, eval = F}
+rhats = rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(rhats, here("1_SIGT_PP", "Data", "2_Fitted",
+                    paste(model, "ORL", sep = "_"),
+                    paste(model, "ORL_rhats.rds", sep = "_")))
+```
+
+
+
+```{r, eval = F}
+rhats = readRDS(here("1_SIGT_PP", "Data", "2_Fitted",
+                       paste(model, "ORL", sep = "_"),
+                       paste(model, "ORL_rhats.rds", sep = "_")))
+```
+
+
+
+## Traceplots
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables",
+          paste(model, "ORL", sep = "_"),
+          paste(model, "ORL_group_traceplots.tiff", sep = "_")),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(
+    orl_fit,
+    pars = group_parameters
+)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_SIGT_PP", "Figs_Tables",
+                       paste(model, "ORL", sep = "_"),
+                       paste(model, "ORL", i, "traceplots.tiff", sep = "_")),
+       width = 50, height = 50, units = "cm", res = 300)
+    traceplot(orl_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Inspect Parameters
+## Means +/- PI
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables",
+          paste(model, "ORL", sep = "_"),
+          paste(model, "ORL_posterior_means.tiff", sep = "_")),
+     width = 35, height = 25, units = "cm", res = 300)
+  plot(orl_fit, pars = group_parameters)
+dev.off()
+```
+
+
+
+## Posterior Distributions
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables",
+          paste(model, "ORL", sep = "_"),
+          paste(model, "ORL_posterior_distributions.tiff", sep = "_")),
+     width = 30, height = 20, units = "cm", res = 300)
+  par(mfrow = c(5, 4))
+  # Mus & Sigmas for each group
+  for(g in 1:2){
+    for(i in grep("mu|sigma", group_parameters, value = T)){
+      plot(density(orl_posteriors[[i]][,g]), main = paste(i, g, sep = "-"))
+      abline(v = mean(orl_posteriors[[i]][,g]))
+    }
+  }
+dev.off()
+```
+
+
+
+# ---------------------------------------
+# PPC Plots
+## Prep Data
+```{r}
+source(here("1_SIGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+group1_proportions = calculate_group_proportions(group = 1,
+                                                 posteriors = orl_posteriors, 
+                                                 stan_data = stan_data,
+                                                 data_type = "data.frame") %>% 
+  mutate(group = group1)
+group2_proportions = calculate_group_proportions(group = 2,
+                                                 posteriors = orl_posteriors, 
+                                                 stan_data = stan_data,
+                                                 data_type = "data.frame") %>% 
+  mutate(group = group2)
+
+trial_choice_proportions = bind_rows(group1_proportions, group2_proportions)
+```
+
+
+
+## Plot
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables",
+          paste(model, "ORL", sep = "_"),
+          paste(model, "PPC.tiff", sep = " ")),
+     width = 15, height = 7, units = "cm", res = 300)
+
+
+  # simplify data
+  trial_choice_proportions %>% 
+    group_by(trial, deck, group) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    # plotting
+    ggplot(aes(x = trial,
+               group = trial)) +
+    # geoms
+    geom_linerange(aes(ymin = lower95, ymax = upper95),
+                   linewidth = .35, color = "goldenrod3", alpha = .35) +
+    geom_linerange(aes(ymin = lower50, ymax = upper50),
+                   linewidth = .35, color = "goldenrod3") +
+    geom_point(aes(y = mu, color = "Predicted", fill = "Predicted"),
+               shape = 21, size = .75) +
+    geom_point(aes(y = observed, color = "Observed", fill = "Observed"),
+               shape = 21, size = .75) +
+    # scales
+    scale_y_continuous(limits = c(0,1),
+                       breaks = seq(0,1,.25)) +
+    scale_color_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "goldenrod3")) +
+    scale_fill_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "white")) +
+    # theme
+    labs(x = "Trial", y = "Proportion Play") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          legend.title = element_blank(),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.position = c(.84,.59), 
+          legend.spacing.x = unit(0, 'cm'),
+          legend.spacing.y = unit(-.25, 'cm'),
+          legend.text = element_text(size = 8),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(-.5,"lines"),
+          legend.key.size = unit(.25, "cm"),
+          panel.spacing.y = unit(0,"lines")) +
+    guides(color = guide_legend(override.aes = list(size = 1.25))) +
+    facet_rep_grid(group~deck,
+                   labeller = labeller(deck = c("A" = "Deck A", "B" = "Deck B",
+                                                "C" = "Deck C", "D" = "Deck D")))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Between-Group Differences
+## Prep Data
+```{r, eval = T}
+parameters = bind_rows(data.frame(parameter = "Arew", group = orl_posteriors$mu_Arew),
+                         data.frame(parameter = "Apun", group = orl_posteriors$mu_Apun),
+                         data.frame(parameter = "betaF", group = orl_posteriors$mu_betaF),
+                         data.frame(parameter = "betaP", group = orl_posteriors$mu_betaP),
+                         data.frame(parameter = "K", group = orl_posteriors$mu_K)) %>% 
+  mutate(group.diff = group.2 - group.1) %>% 
+  pivot_longer(starts_with("group"),
+               names_to = "group", values_to = "estimate", names_prefix = "group.") %>% 
+  group_by(parameter, group) %>% 
+  mutate(group = case_when(group == "1" ~ tolower(group1),
+                           group == "2" ~ tolower(group2),
+                           group == "diff" ~ "diff"),
+         mu = mean(estimate),
+         lower50 = HDIofMCMC(estimate, credMass = .5)[1],
+         upper50 = HDIofMCMC(estimate, credMass = .5)[2],
+         lower95 = HDIofMCMC(estimate)[1],
+         upper95 = HDIofMCMC(estimate)[2],
+         parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaP", "K")),
+         parameter_lab = factor(parameter,
+                                levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                                labels = c(expression(paste(italic(A),"+",sep="")),
+                                           expression(paste(italic(A),"-",sep="")),
+                                           expression(paste("\u03B2",italic(f),sep="")),
+                                           expression(paste("\u03B2",italic(p),sep="")),
+                                           expression(italic(K)))),
+         parameter_lab = case_when(group == "diff" ~ parameter_lab, T ~ NA))
+```
+
+
+
+## Build Plot
+```{r, eval = F}
+parameter_plot = parameters %>% 
+  mutate(group = factor(group, levels = c(tolower(group1), tolower(group2), "diff"), ordered = T)) %>% 
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                   linewidth = .1, bins = 50) +
+    geom_vline(xintercept = 0, color = "transparent") +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower95), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper95), color = "red", linetype = "dashed", linewidth = .25) +
+    # themes
+    scale_x_continuous(breaks = 0) +
+    scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.5, .5, .3, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(parameter~group, scales = "free",
+                   nrow = 5, ncol = 3)
+```
+
+
+
+## Save Plot
+```{r, eval = F}
+tiff(here("1_SIGT_PP", "Figs_Tables",
+          paste(model, "ORL", sep = "_"),
+          paste(model, "Posterior Distributions.tiff", sep = " ")),
+     width = 7, height = 10, units = "cm", res = 300)
+
+  grid.newpage()
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(parameter_plot)
+  
+  # text
+  grid.text(c(group1, group2, paste(group2, group1, sep = "-")),
+            x = c(.2, .515, .81), y = .98,
+            gp = gpar(fontsize = 9.5))
+  grid.text(c(expression(paste(italic(A),"+",sep="")),
+              expression(paste(italic(A),"-",sep="")),
+              expression(paste("\u03B2",italic(f),sep="")),
+              expression(paste("\u03B2",italic(p),sep="")),
+              expression(italic(K))),
+            x = rep(.93, 5), y = c(.89, .725, .55, .37, .195),
+            gp = gpar(fontsize = 9.5))
+  
+dev.off()
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

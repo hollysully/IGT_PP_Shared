@@ -20,11 +20,11 @@ library(readxl)
 
 
 # --------------------------------------
-# Questionnaire Data
+# Drug Questionnaire Data
 ## Import Data
 ```{r}
-raw_questionnaire_data = read_sav(here("1_SIGT_PP", "Data", "0_Raw",
-                                       "FINAL Questionnaire Data- Item Level 9.11.18.sav")) %>% 
+raw_drug_questionnaire_data = read_sav(here("1_SIGT_PP", "Data", "0_Raw",
+                                            "FINAL Questionnaire Data- Item Level 9.11.18.sav")) %>% 
   filter(Subject != 7156, # 7156 completed IGT version 2 & SIGT on the same day, but then 
                             # has data for IGT version 1 a week later, so I am deleting
                             # task data for sub 7156 from the IGT_AB dataframe (IGT version 1) 
@@ -37,7 +37,7 @@ raw_questionnaire_data = read_sav(here("1_SIGT_PP", "Data", "0_Raw",
 
 ## Prep Data
 ```{r}
-questionnaire_data = raw_questionnaire_data %>% 
+drug_questionnaire_data = raw_drug_questionnaire_data %>% 
   select(ID = Subject, complete, sex,
          beer_freq = DUFM6,          # How often did you drink BEER during the last three months?
          beer_amt = DUFM7,           # What was the USUAL amount of BEER you had on any typical day
@@ -92,6 +92,38 @@ questionnaire_data = raw_questionnaire_data %>%
 
 
 
+
+# --------------------------------------
+# SR Questionnaire Data
+## Import Data
+```{r}
+raw_SR_questionnaire_data = read_sav(here("1_SIGT_PP", "Data", "0_Raw",
+                                          "FINAL Questionnaire Data- Summary Scales Only - 9.11.18.sav")) %>% 
+  filter(Subject != 7156, # 7156 completed IGT version 2 & SIGT on the same day, but then 
+                            # has data for IGT version 1 a week later, so I am deleting
+                            # task data for sub 7156 from the IGT_AB dataframe (IGT version 1) 
+         Subject != 7034, # 7034 played IGT version 2 at 7:39pm & IGT version 1 at 8:20pm,
+                            # so I am removing their IGT version 1 data
+         Subject != 7081) # Something is wrong with this datafile - incomplete and always
+```
+
+
+
+## Prep Data
+```{r}
+SR_questionnaire_data = raw_SR_questionnaire_data %>% 
+  select(ID = Subject, sex, ethnicity = Ethnicity,
+         bastot = bastot0, basdrive = basdriv0, basfunsk = basfuns0,
+         basrewres = basrewr0, bis = bis0,
+         panas_pa = panasPA, panas_na = panasNA,
+         masqGDA = masqGDA, masqAA = masqAA, masqGDD = masqGDD,
+         masqAD = masqAD, shaps_tot = shaps_tot, prdep_tot = prmd_tot
+         ) %>% 
+  mutate(sex = case_when(sex == 1 ~ "male", sex == 2 ~ "female"))
+```
+
+
+
 # --------------------------------------
 # IGT Data
 ## Import Data
@@ -134,8 +166,13 @@ IGT_data = bind_rows(raw_AB, raw_BD) %>%
 # Stan Data
 ## Join Data
 ```{r}
-combined_data = inner_join(questionnaire_data, IGT_data) %>% 
-  select(ID, drug_drink, binge_drinking, hard_drugs, chronic_pot, nothing, trial, card, outcome, sign, choice)
+combined_data = inner_join(drug_questionnaire_data, IGT_data) %>% 
+  inner_join(SR_questionnaire_data) %>% 
+  select(ID, trial, card, outcome, sign, choice,
+         drug_drink, binge_drinking, hard_drugs, chronic_pot, nothing,
+         bastot, basdrive, basfunsk, basrewres, bis,
+         panas_pa, panas_na, masqGDA, masqAA, masqGDD,
+         masqAD, shaps_tot, prdep_tot)
 # 7 participants do not have complete data after filtering others out above:
   # No IGT data: 7047 7108, 7165
   # No questionnaire data: 4074, 7034, 7136, 7156")
@@ -170,18 +207,48 @@ create_data = function(data){
   IDs = unique(data$ID)
   N = length(IDs)
   T = max(data$trial)
+  G = length(unique(data$group))
   
   card = matrix(data = -1, nrow = N, ncol = T)
   Tsubj = vector(length = N)
+  group = vector(length = N)
   choice = matrix(data = -1, nrow = N, ncol = T)
   outcome = matrix(data = -1, nrow = N, ncol = T)
   sign = matrix(data = -1, nrow = N, ncol = T)
+  bastot = vector(length = N)
+  basdrive = vector(length = N) 
+  basfunsk = vector(length = N) 
+  basrewres = vector(length = N)
+  bis = vector(length = N)
+  panas_pa = vector(length = N) 
+  panas_na = vector(length = N) 
+  masqGDA = vector(length = N) 
+  masqAA = vector(length = N) 
+  masqGDD = vector(length = N)
+  masqAD = vector(length = N) 
+  shaps_tot = vector(length = N) 
+  prdep_tot = vector(length = N)
+  
   for(i in 1:N){
     card[i,] = data$card[data$ID == IDs[i]]
     Tsubj[i] = length(data$trial[data$ID == IDs[i]])
+    group[i] = data$group[data$ID == IDs[i]] + 1
     choice[i,] = data$choice[data$ID == IDs[i]]
     outcome[i,] = data$outcome[data$ID == IDs[i]]
     sign[i,] = data$sign[data$ID == IDs[i]]
+    bastot[i] = data$bastot[data$ID == IDs[i]]
+    basdrive[i] = data$basdrive[data$ID == IDs[i]]
+    basfunsk[i] = data$basfunsk[data$ID == IDs[i]]
+    basrewres[i] = data$basrewres[data$ID == IDs[i]]
+    bis[i] = data$bis[data$ID == IDs[i]]
+    panas_pa[i] = data$panas_pa[data$ID == IDs[i]]
+    panas_na[i] = data$panas_na[data$ID == IDs[i]]
+    masqGDA[i] = data$masqGDA[data$ID == IDs[i]]
+    masqAA[i] = data$masqAA[data$ID == IDs[i]]
+    masqGDD[i] = data$masqGDD[data$ID == IDs[i]]
+    masqAD[i] = data$masqAD[data$ID == IDs[i]]
+    shaps_tot[i] = data$shaps_tot[data$ID == IDs[i]]
+    prdep_tot[i] = data$prdep_tot[data$ID == IDs[i]]
   }
   
   stan_data = list(IDs = IDs,
@@ -189,9 +256,23 @@ create_data = function(data){
                    T = T,
                    card = card,
                    Tsubj = Tsubj,
+                   group = group,
                    choice = choice,
                    outcome = outcome,
-                   sign = sign)
+                   sign = sign,
+                   bastot = bastot,
+                   basdrive = basdrive, 
+                   basfunsk = basfunsk, 
+                   basrewres = basrewres,
+                   bis = bis,
+                   panas_pa = panas_pa, 
+                   panas_na = panas_na, 
+                   masqGDA = masqGDA, 
+                   masqAA = masqAA, 
+                   masqGDD = masqGDD,
+                   masqAD = masqAD, 
+                   shaps_tot = shaps_tot, 
+                   prdep_tot = prdep_tot)
 }
 ```
 
@@ -199,10 +280,11 @@ create_data = function(data){
 
 ## Save Data
 ```{r, eval = T}
-orl_stan_data = create_data(combined_data)
+orl_stan_data = create_data(mutate(combined_data,
+                                   group = drug_drink))
 
 saveRDS(orl_stan_data, here("1_SIGT_PP", "Data", "1_Preprocessed",
-                            "IGT_stan_data.RDS"))
+                            "SU_IGT_SR_stan_data.RDS"))
 ```
 
 
