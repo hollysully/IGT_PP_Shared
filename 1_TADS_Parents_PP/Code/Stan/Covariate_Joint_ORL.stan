@@ -45,6 +45,7 @@ functions {
   }
 }
 
+
 data {
   int<lower=1> N;                      // Number of participants
   int<lower=1> S;                      // Number of sessions
@@ -60,7 +61,13 @@ data {
 }
 
 
-       
+transformed data {
+  // This calculates the number of covariates to estimate which is used in the generated quantities block
+    // We add 1 because we always estimate a group-level mean for the session without the covariate.
+  int C;
+  C = D - S + 1;
+}
+
 
 parameters {
 // Declare parameters
@@ -228,11 +235,12 @@ model {
 
 generated quantities {
   // Hyper(group)-parameters - these are 5 (number of parameters) x S (number of sessions) matrix of mus & sigmas, respectively, for each parameter
-  // vector<lower=0,upper=1>[S] mu_Arew;
-  // vector<lower=0,upper=1>[S] mu_Apun;
-  // vector<lower=0,upper=5>[S] mu_K;
-  // vector[S] mu_betaF;
-  // vector[S] mu_betaP;
+  matrix<lower=0,upper=1>[S,C] mu_Arew;
+  matrix<lower=0,upper=1>[S,C]  mu_Apun;
+  matrix<lower=0,upper=5>[S,C]  mu_K;
+  matrix[S,C]  mu_betaF;
+  matrix[S,C]  mu_betaP;
+  
   vector[N] log_lik;
 
   // For posterior predictive check
@@ -262,45 +270,27 @@ generated quantities {
     }
   }
   
-  // // // Compute group-level means
-  // for (s in 1:S) {
-  //   mu_Arew[s] = Phi_approx_group_mean_rng(mu_p[s, 1], sigma_Arew[s], 10000);
-  //   mu_Apun[s] = Phi_approx_group_mean_rng(mu_p[s, 2], sigma_Apun[s], 10000);
-  //   mu_K[s] = Phi_approx_group_mean_rng(mu_p[s, 3], sigma_K[s], 10000) * 5;
-  //   mu_betaF[s] = mu_p[s, 4];
-  //   mu_betaP[s] = mu_p[s, 5];
-  // }
-  // 
-  // 
-  // 
-  // 
-  // 
-  // 
-  // // START
-  // 
-  // // Calculate & transform Arew, Apun, & K to use in RL algorithm
-  // for(s in 1:S){    // Loop over sessions
-  //   for(i in 1:N){  // Loop over subjects
-  //     Arew[i,s] = Phi_approx_group_mean_rng(dot_product(beta_Arew, to_vector(X[i,,s])) + Arew_tilde[s,i]);
-  //     Apun[i,s] = Phi_approx_group_mean_rng(dot_product(beta_Apun, to_vector(X[i,,s])) + Apun_tilde[s,i]);
-  //     K[i,s]    = Phi_approx_group_mean_rng(dot_product(beta_K, to_vector(X[i,,s])) + K_tilde[s,i]) * 5;
-  //   }
-  //   
-  // // Calculate betaF & betaP to use in RL algorithm
-  // betaF[:,s] = to_matrix(X[,,s]) * beta_betaF + to_vector(betaF_tilde[s,:]);
-  // betaP[:,s] = to_matrix(X[,,s]) * beta_betaP + to_vector(betaP_tilde[s,:]);
-  // }
-  // 
-  // 
-  // // STOP
-  
-  
-  
-  
-  
-  
-  
-  
+  // // Compute group-level means
+  for(s in 1:S) {
+    mu_Arew[s,1] = beta_Arew[s];
+    
+    if(C > 1){ // If we're estimating covariates beyond the group-level means for each session, then we have some additional work
+      for(c in 1:(C-1)){ // We need to loop thru the number of covariates beyond the sessions which is why we subtract out 1 here
+        mu_Arew[s,S+c] += beta_Arew[S+c];
+        mu_Arew[s,S+c] = Phi_approx_group_mean_rng(mu_Arew[s,S+c], sigma_Arew[s], 10000);
+        mu_Apun[s,S+c] += beta_Apun[S+c];
+        mu_Apun[s,S+c] = Phi_approx_group_mean_rng(mu_Apun[s,S+c], sigma_Apun[s], 10000);
+        mu_K[s,S+c] += beta_K[S+c];
+        mu_K[s,S+c] = Phi_approx_group_mean_rng(mu_K[s,S+c], sigma_K[s], 10000)*5;
+        mu_betaF[s,S+c] += beta_betaF[S+c];
+        mu_betaP[s,S+c] += beta_betaP[S+c];
+      }
+    }
+    mu_Arew[s,1] = Phi_approx_group_mean_rng(mu_Arew[s,S+c], sigma_Arew[s], 10000);
+    mu_Apun[s,1] = Phi_approx_group_mean_rng(mu_Apun[s,S+c], sigma_Apun[s], 10000);
+    mu_K[s,1] = Phi_approx_group_mean_rng(mu_K[s,S+c], sigma_K[s], 10000);
+  }
+
   
   { // local section, this saves time and space
     // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
