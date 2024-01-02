@@ -47,6 +47,8 @@ T5_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_mom.RDS"
 
 
 full = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "full_IGT.RDS"))
+
+SCID = readRDS(here("1_TADS_Parents_PP", "Drugs", "processed_SCID_data.RDS"))
 ```
 
 
@@ -57,6 +59,22 @@ full %>%
   reframe(fix = 1) %>% 
   group_by(time, participant) %>% 
   reframe(`sample size` = sum(fix))
+```
+
+
+
+# --------------------------------------
+# Prep Data
+```{r}
+IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom) %>% 
+  select(ID = id, -date, everything())
+
+SCID_prepped = SCID %>%
+  mutate(participant = tolower(participant)) %>% 
+  select(-date)
+
+combined_data = inner_join(IGT_prepped, SCID_prepped) %>% 
+  filter(ID >= 5000 & ID < 6000)
 ```
 
 
@@ -79,11 +97,11 @@ make_stan = function(data, covariate_names){
            # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
            card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4])) %>% 
     # create new ID variable for consecutive IDs (this is just the "id" variable but with consecutive numbers) 
-    group_by(id) %>% mutate(ID_num = cur_group_id()) %>% 
+    group_by(ID) %>% mutate(ID_num = cur_group_id()) %>% 
     # create unique ID for individual participants - this helps make sure that
       # we have a unique ID for moms & dads ("participant" variable) with the
       # same kid ("id" variable)
-    group_by(id, participant) %>% mutate(ID_part = cur_group_id())
+    group_by(ID, participant) %>% mutate(ID_part = cur_group_id())
   
   ##################################################################
   # setup stan variables
@@ -115,7 +133,7 @@ make_stan = function(data, covariate_names){
     cur_i = filter(data, ID_part == ID_participant[i]) # subset individual
     
     # assign original ID & double-check it gives whole number (it should)
-    ID_OG[i] = mean(cur_i$id)
+    ID_OG[i] = mean(cur_i$ID)
     pbx = ifelse(ID_OG[i]%%1>0, "problem in OG ID", pbx)
     
     # assign ID number that ties parents together & double-check it gives whole number (it should)
@@ -129,7 +147,8 @@ make_stan = function(data, covariate_names){
     for(s in 1:S){ # loop through sessions
       cur_is = filter(cur_i, time == sessions[s]) # subset session within individual
       
-      if(nrow(cur_is) > 0){ # check if participant has data - if not, skip next loop
+      if(nrow(cur_is) > 0 & max(cur_is$trial) == 120){ # check if participant has a full session's
+                                                         # worth of data - if not, skip next loop
         
         # assign covariate variables
         X[i,s,s] = 1 # assign a 1 for current session
@@ -182,13 +201,13 @@ make_stan = function(data, covariate_names){
 
 ## Make Parent Data
 ```{r}
-parent_stan = make_stan(data = bind_rows(T1_IGT_mom, T1_IGT_dad,
-                                         T2_IGT_mom, T2_IGT_dad,
-                                         T3_IGT_mom, T3_IGT_dad,
-                                         T4_IGT_mom, T4_IGT_dad,
-                                         T5_IGT_mom, T5_IGT_dad),
-                        covariate_names = c())
-saveRDS(parent_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", "design_T12345_parent_IGT.RDS"))
+parent_stan = make_stan(data = bind_rows(combined_data),
+                        covariate_names = c("SU"))
+
+sample = "T1_parent_SU"
+
+saveRDS(parent_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", 
+                          paste("design", sample, "IGT.RDS", sep = "_")))
 ```
 
 
@@ -202,7 +221,7 @@ for(i in names(parent_stan)){
 
 
 ## Make Combined Data
-```{r}
+```{r, eval = F}
 full_stan = make_stan(full)
 saveRDS(full_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", "full_IGT.RDS"))
 ```
