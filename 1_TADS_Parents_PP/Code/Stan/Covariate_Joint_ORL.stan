@@ -281,11 +281,11 @@ generated quantities {
     if(C > 1){ // If we're estimating covariates beyond the group-level means for each session, then we have some additional work
       for(c in 1:(C-1)){ // We need to loop thru the number of covariates beyond the sessions which is why we subtract out 1 here
         mu_Arew[s,c+1] = mu_Arew[s,1] + beta_Arew[S+c];
-        mu_Arew[s,c+1] = Phi_approx_group_mean_rng(mu_Arew[s,S+c], sigma_Arew[s], 10000);
+        mu_Arew[s,c+1] = Phi_approx_group_mean_rng(mu_Arew[s,c+1], sigma_Arew[s], 10000);
         mu_Apun[s,c+1] = mu_Apun[s,1] + beta_Apun[S+c];
-        mu_Apun[s,c+1] = Phi_approx_group_mean_rng(mu_Apun[s,S+c], sigma_Apun[s], 10000);
+        mu_Apun[s,c+1] = Phi_approx_group_mean_rng(mu_Apun[s,c+1], sigma_Apun[s], 10000);
         mu_K[s,c+1] = mu_K[s,1] + beta_K[S+c];
-        mu_K[s,c+1] = Phi_approx_group_mean_rng(mu_K[s,S+c], sigma_K[s], 10000)*5;
+        mu_K[s,c+1] = Phi_approx_group_mean_rng(mu_K[s,c+1], sigma_K[s], 10000)*5;
         mu_betaF[s,c+1] = mu_betaF[s,1] + beta_betaF[S+c];
         mu_betaP[s,c+1] = mu_betaP[s,1] + beta_betaP[S+c];
       }

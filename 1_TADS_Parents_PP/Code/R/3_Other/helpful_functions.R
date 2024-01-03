@@ -13,10 +13,10 @@ calculate_group_proportions = function(group = "everyone", posteriors, stan_data
   # Recode choice data
   predicted_values = ifelse(posteriors$choice_pred == 2, 0, 1)
   choices = ifelse(stan_data$choice == 2, 0, 1)
-  iterations = nrow(orl_posteriors$choice_pred)
+  iterations = nrow(posteriors$choice_pred)
   if(group != "everyone"){
     predicted_values = predicted_values[,stan_data$group == group,] # I'll need to fix this to be sure that columns represent subjects - I think it does though
-    choices = choices[stan_data$group == group]
+    choices = choices[stan_data$group == group,]
   }
   
   # Trial matrix (to skip when participant wasn't there)
@@ -38,7 +38,7 @@ calculate_group_proportions = function(group = "everyone", posteriors, stan_data
   
   # Calculate group-level predicted proportions into a 30 (trial) x 4 (card) matrix
   predicted_proportions = foreach(c = 1:4, .combine = "acomb") %do% {
-    foreach(i = 1:49, .combine = "acomb") %do% {
+    foreach(i = 1:nrow(choices), .combine = "acomb") %do% {
       if(trials[i] > 0){
         predicted_values[ , i, cards[i, ] == c]
       }
