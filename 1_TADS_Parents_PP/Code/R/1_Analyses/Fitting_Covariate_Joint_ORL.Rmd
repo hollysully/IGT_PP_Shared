@@ -18,7 +18,7 @@ library(hBayesDM)
 library(bayesplot)
 library(here)
 library(miscTools)
-# library(cmdstanr)
+library(cmdstanr)
 library(stringi)
 library(ggpp)
 library(lemon)
@@ -107,8 +107,6 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
                               model_name,
                               paste(sample, model_name, "posteriors.rds", sep = "_")))
-
-orl_posteriors$mu_betaF
 ```
 
 
