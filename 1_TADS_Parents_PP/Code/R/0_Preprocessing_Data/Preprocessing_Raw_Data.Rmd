@@ -47,7 +47,7 @@ eprime_filenames = list()
 check_version = function(data, eprime = T){
   
   if(eprime){
-    outcome_list = read.csv(here("eprime_AB_outcome_list.csv")) %>% 
+    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "eprime_AB_outcome_list.csv")) %>% 
   mutate(trial_seq = as.numeric(row.names(.)))
   
   versions = data %>%
@@ -70,7 +70,7 @@ check_version = function(data, eprime = T){
                                        str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
     select(-ends_with("prop"))
   } else {
-    outcome_list = read.csv(here("pavlovia_AB_outcome_list.csv"))
+    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "pavlovia_AB_outcome_list.csv"))
   
   versions = data %>%
     select(id, block, card, outcome) %>% 
@@ -308,8 +308,12 @@ T1_IGT_mom = TADS_IGT_trim_v %>%
                           T ~ date)) %>% 
   check_version() %>% 
   # fix participant's data because they didn't respond on any A cards
-  mutate(AB_card = case_when(id == 5139 & card == "A" ~ "AB_A", T ~ AB_card),
-         checked_version = case_when(id == 5139 & card == "A" ~ "AB", T ~ checked_version))
+  mutate(AB_card = case_when(id == 5139 & card == "A" ~ "AB_A",
+                             id == 5222 & card == "B" ~ "AB_B",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5139 & card == "A" ~ "AB",
+                                     id == 5222 & card == "B" ~ "AB",
+                                     T ~ checked_version))
 
 rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
                         "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom")))
@@ -319,19 +323,19 @@ rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
 
 ```{r, eval = T}
 saveRDS(T1_IGT_child,
-        here("Data", "0_Raw_Data", "T1_IGT_child.RDS"))
+        here("1_TADS_Raw_Data", "T1_IGT_child.RDS"))
 saveRDS(T1_IGT_dad,
-        here("Data", "0_Raw_Data", "T1_IGT_dad.RDS"))
+        here("1_TADS_Raw_Data", "T1_IGT_dad.RDS"))
 saveRDS(T1_IGT_mom,
-        here("Data", "0_Raw_Data", "T1_IGT_mom.RDS"))
+        here("1_TADS_Raw_Data", "T1_IGT_mom.RDS"))
 ```
 
 
 
 ```{r}
-T1_IGT_child = readRDS(here("Data", "0_Raw_Data", "T1_IGT_child.RDS"))
-T1_IGT_dad = readRDS(here("Data", "0_Raw_Data", "T1_IGT_dad.RDS"))
-T1_IGT_mom = readRDS(here("Data", "0_Raw_Data", "T1_IGT_mom.RDS"))
+T1_IGT_child = readRDS(here("1_TADS_Raw_Data", "T1_IGT_child.RDS"))
+T1_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T1_IGT_dad.RDS"))
+T1_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T1_IGT_mom.RDS"))
 ```
 
 
@@ -619,19 +623,19 @@ rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
 
 ```{r, eval = T}
 saveRDS(T2_IGT_child,
-        here("Data", "0_Raw_Data", "T2_IGT_child.RDS"))
+        here("1_TADS_Raw_Data", "T2_IGT_child.RDS"))
 saveRDS(T2_IGT_dad,
-        here("Data", "0_Raw_Data", "T2_IGT_dad.RDS"))
+        here("1_TADS_Raw_Data", "T2_IGT_dad.RDS"))
 saveRDS(T2_IGT_mom,
-        here("Data", "0_Raw_Data", "T2_IGT_mom.RDS"))
+        here("1_TADS_Raw_Data", "T2_IGT_mom.RDS"))
 ```
 
 
 
 ```{r}
-T2_IGT_child = readRDS(here("Data", "0_Raw_Data", "T2_IGT_child.RDS"))
-T2_IGT_dad = readRDS(here("Data", "0_Raw_Data", "T2_IGT_dad.RDS"))
-T2_IGT_mom = readRDS(here("Data", "0_Raw_Data", "T2_IGT_mom.RDS"))
+T2_IGT_child = readRDS(here("1_TADS_Raw_Data", "T2_IGT_child.RDS"))
+T2_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T2_IGT_dad.RDS"))
+T2_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T2_IGT_mom.RDS"))
 ```
 
 
@@ -1055,19 +1059,19 @@ rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
 
 ```{r, eval = T}
 saveRDS(T3_IGT_child,
-        here("Data", "0_Raw_Data", "T3_IGT_child.RDS"))
+        here("1_TADS_Raw_Data", "T3_IGT_child.RDS"))
 saveRDS(T3_IGT_dad,
-        here("Data", "0_Raw_Data", "T3_IGT_dad.RDS"))
+        here("1_TADS_Raw_Data", "T3_IGT_dad.RDS"))
 saveRDS(T3_IGT_mom,
-        here("Data", "0_Raw_Data", "T3_IGT_mom.RDS"))
+        here("1_TADS_Raw_Data", "T3_IGT_mom.RDS"))
 ```
 
 
 
 ```{r}
-T3_IGT_child = readRDS(here("Data", "0_Raw_Data", "T3_IGT_child.RDS"))
-T3_IGT_dad = readRDS(here("Data", "0_Raw_Data", "T3_IGT_dad.RDS"))
-T3_IGT_mom = readRDS(here("Data", "0_Raw_Data", "T3_IGT_mom.RDS"))
+T3_IGT_child = readRDS(here("1_TADS_Raw_Data", "T3_IGT_child.RDS"))
+T3_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T3_IGT_dad.RDS"))
+T3_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T3_IGT_mom.RDS"))
 ```
 
 
@@ -1515,19 +1519,19 @@ rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
 
 ```{r, eval = T}
 saveRDS(T4_IGT_child,
-        here("Data", "0_Raw_Data", "T4_IGT_child.RDS"))
+        here("1_TADS_Raw_Data", "T4_IGT_child.RDS"))
 saveRDS(T4_IGT_dad,
-        here("Data", "0_Raw_Data", "T4_IGT_dad.RDS"))
+        here("1_TADS_Raw_Data", "T4_IGT_dad.RDS"))
 saveRDS(T4_IGT_mom,
-        here("Data", "0_Raw_Data", "T4_IGT_mom.RDS"))
+        here("1_TADS_Raw_Data", "T4_IGT_mom.RDS"))
 ```
 
 
 
 ```{r}
-T4_IGT_child = readRDS(here("Data", "0_Raw_Data", "T4_IGT_child.RDS"))
-T4_IGT_dad = readRDS(here("Data", "0_Raw_Data", "T4_IGT_dad.RDS"))
-T4_IGT_mom = readRDS(here("Data", "0_Raw_Data", "T4_IGT_mom.RDS"))
+T4_IGT_child = readRDS(here("1_TADS_Raw_Data", "T4_IGT_child.RDS"))
+T4_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T4_IGT_dad.RDS"))
+T4_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T4_IGT_mom.RDS"))
 ```
 
 
@@ -1959,19 +1963,19 @@ rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
 
 ```{r, eval = T}
 saveRDS(T5_IGT_child,
-        here("Data", "0_Raw_Data", "T5_IGT_child.RDS"))
+        here("1_TADS_Raw_Data", "T5_IGT_child.RDS"))
 saveRDS(T5_IGT_dad,
-        here("Data", "0_Raw_Data", "T5_IGT_dad.RDS"))
+        here("1_TADS_Raw_Data", "T5_IGT_dad.RDS"))
 saveRDS(T5_IGT_mom,
-        here("Data", "0_Raw_Data", "T5_IGT_mom.RDS"))
+        here("1_TADS_Raw_Data", "T5_IGT_mom.RDS"))
 ```
 
 
 
 ```{r}
-T5_IGT_child = readRDS(here("Data", "0_Raw_Data", "T5_IGT_child.RDS"))
-T5_IGT_dad = readRDS(here("Data", "0_Raw_Data", "T5_IGT_dad.RDS"))
-T5_IGT_mom = readRDS(here("Data", "0_Raw_Data", "T5_IGT_mom.RDS"))
+T5_IGT_child = readRDS(here("1_TADS_Raw_Data", "T5_IGT_child.RDS"))
+T5_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T5_IGT_dad.RDS"))
+T5_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T5_IGT_mom.RDS"))
 ```
 
 
@@ -1986,24 +1990,24 @@ full_data = bind_rows(T1_IGT_child, T1_IGT_dad, T1_IGT_mom,
                       T4_IGT_child, T4_IGT_dad, T4_IGT_mom,
                       T5_IGT_child, T5_IGT_dad, T5_IGT_mom)
 
-saveRDS(full_data, here("Data", "0_Raw_Data", "full_IGT.RDS"))
+saveRDS(full_data, here("1_TADS_Raw_Data", "full_IGT.RDS"))
 
-saveRDS(eprime_filenames, here("Data", "0_Raw_Data", "eprime_filenames.RDS"))
+saveRDS(eprime_filenames, here("1_TADS_Raw_Data", "eprime_filenames.RDS"))
 ```
 
 
 
 ```{r}
-full_data = readRDS(here("Data", "0_Raw_Data", "full_IGT.RDS"))
+full_data = readRDS(here("1_TADS_Raw_Data", "full_IGT.RDS"))
 
-eprime_filenames = readRDS(here("Data", "0_Raw_Data", "eprime_filenames.RDS"))
+eprime_filenames = readRDS(here("1_TADS_Raw_Data", "eprime_filenames.RDS"))
 ```
 
 
 
 # Find Pbxs
 ```{r, eval = F}
-old_full_data = readRDS(here("Data", "0_Raw_Data", "old_full_IGT_data.RDS"))
+old_full_data = readRDS(here("1_TADS_Raw_Data", "old_full_IGT_data.RDS"))
 
 pbx_IDs = filter(full_data, is.na(AB_card)) %>% 
   group_by(id, platform, version, participant, time, date) %>% 

@@ -21,32 +21,32 @@ library(here)
 
 ## Load Data
 ```{r}
-T1_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_IGT_child.RDS"))
-T1_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_IGT_dad.RDS"))
-T1_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_IGT_mom.RDS"))
+T1_IGT_child = readRDS(here("1_TADS_Raw_Data", "T1_IGT_child.RDS"))
+T1_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T1_IGT_dad.RDS"))
+T1_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T1_IGT_mom.RDS"))
 
 
-T2_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_IGT_child.RDS"))
-T2_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_IGT_dad.RDS"))
-T2_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_IGT_mom.RDS"))
+T2_IGT_child = readRDS(here("1_TADS_Raw_Data", "T2_IGT_child.RDS"))
+T2_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T2_IGT_dad.RDS"))
+T2_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T2_IGT_mom.RDS"))
 
 
-T3_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_IGT_child.RDS"))
-T3_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_IGT_dad.RDS"))
-T3_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_IGT_mom.RDS"))
+T3_IGT_child = readRDS(here("1_TADS_Raw_Data", "T3_IGT_child.RDS"))
+T3_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T3_IGT_dad.RDS"))
+T3_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T3_IGT_mom.RDS"))
 
 
-T4_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_IGT_child.RDS"))
-T4_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_IGT_dad.RDS"))
-T4_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_IGT_mom.RDS"))
+T4_IGT_child = readRDS(here("1_TADS_Raw_Data", "T4_IGT_child.RDS"))
+T4_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T4_IGT_dad.RDS"))
+T4_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T4_IGT_mom.RDS"))
 
 
-T5_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_child.RDS"))
-T5_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_dad.RDS"))
-T5_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_mom.RDS"))
+T5_IGT_child = readRDS(here("1_TADS_Raw_Data", "T5_IGT_child.RDS"))
+T5_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T5_IGT_dad.RDS"))
+T5_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T5_IGT_mom.RDS"))
 
 
-full = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "full_IGT.RDS"))
+full = readRDS(here("1_TADS_Raw_Data", "full_IGT.RDS"))
 
 SCID = readRDS(here("1_TADS_Parents_PP", "Drugs", "processed_SCID_data.RDS"))
 ```
