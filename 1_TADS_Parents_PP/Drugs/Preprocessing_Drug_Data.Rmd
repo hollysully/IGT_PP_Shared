@@ -50,6 +50,7 @@ SCID_mom = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets S
 ```{r}
 SCID = bind_rows(SCID_mom, SCID_dad) %>% 
   mutate(SU = case_when(lsub > 0 | lpot > 0 | lalc > 0 ~ 1, T ~ 0)) %>% 
+  mutate(drug_drink = case_when(lsub > 0 | lalc > 0 ~ 1, T ~ 0)) %>% 
   select(everything(), depression = ldep, anxiety = lanx, -lsub, -lpot, -lalc)
 
 

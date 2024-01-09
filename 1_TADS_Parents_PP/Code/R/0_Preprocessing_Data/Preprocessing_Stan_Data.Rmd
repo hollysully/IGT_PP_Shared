@@ -66,11 +66,7 @@ full %>%
 # --------------------------------------
 # Prep Data
 ```{r}
-IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom,
-                        T2_IGT_dad, T2_IGT_mom,
-                        T3_IGT_dad, T3_IGT_mom,
-                        T4_IGT_dad, T4_IGT_mom,
-                        T5_IGT_dad, T5_IGT_mom) %>% 
+IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom) %>% 
   select(ID = id, -date, everything())
 
 SCID_prepped = SCID %>%
@@ -208,9 +204,9 @@ make_stan = function(data, covariate_names){
 ## Make Parent Data
 ```{r}
 parent_stan = make_stan(data = bind_rows(combined_data),
-                        covariate_names = c())
+                        covariate_names = c("anxiety"))
 
-sample = "T12345_parent"
+sample = "T1_parent_Anx"
 
 saveRDS(parent_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", 
                           paste("design", sample, "IGT.RDS", sep = "_")))

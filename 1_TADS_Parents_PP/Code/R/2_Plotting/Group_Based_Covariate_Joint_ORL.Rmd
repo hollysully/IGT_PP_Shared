@@ -1,0 +1,296 @@
+---
+title: "Evaluating Group-Based Covariate Model"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+# source(here("Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+
+## RMD Setup
+```{r}
+group1 = "Co"
+group2 = "SU"
+model_name = "Covariate_Joint_ORL"
+sample = "T1_parent_SU"
+
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         paste("design", sample, "IGT.RDS", sep = "_")))
+
+focal_parameters = c(
+  "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
+  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun", "K", "betaF", "betaP", 
+  "R_Arew", "R_Apun", "R_K", "R_betaF", "R_betaP"
+)
+
+
+group_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Load Data
+```{r}
+orl_fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                       model_name,
+                       paste(sample, model_name, "fit.rds", sep = "_")))
+
+
+orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                              model_name,
+                              paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+
+orl_rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+## Traceplots
+```{r, eval = F}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample,
+          "group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(
+    orl_fit,
+    pars = group_parameters
+)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+            model_name, sample,
+            "traceplots.tiff"),
+       width = 100, height = 100, units = "cm", res = 300)
+    traceplot(orl_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+}
+```
+
+
+
+## PPC Plots
+### Prep Data
+```{r}
+source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
+
+PPC_data = data.frame()
+
+for(g in c(0,1)){
+  PPC_data = calculate_PPCs(cards = stan_data$card[stan_data$X[,2,]==g,,],
+                            trials = stan_data$Tsubj[stan_data$X[,2,]==g],
+                            predicted_choices = orl_posteriors$choice_pred[,stan_data$X[,2,]==g,,], 
+                            observed_choices = stan_data$choice[stan_data$X[,2,]==g,,],
+                            data_type = "data.frame") %>%
+    mutate(group = group1) %>% 
+    bind_rows(PPC_data)
+}
+```
+
+
+
+### Plot
+```{r, eval = F}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample,
+          "PPC.tiff"),
+     width = 15, height = stan_data$S*3.5, units = "cm", res = 300)
+
+  # simplify data
+  PPC_data %>% 
+    group_by(trial, deck, group) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    # plotting
+    ggplot(aes(x = trial,
+               group = trial)) +
+    # geoms
+    geom_linerange(aes(ymin = lower95, ymax = upper95),
+                   linewidth = .35, color = "goldenrod3", alpha = .35) +
+    geom_linerange(aes(ymin = lower50, ymax = upper50),
+                   linewidth = .35, color = "goldenrod3") +
+    geom_point(aes(y = mu, color = "Predicted", fill = "Predicted"),
+               shape = 21, size = .75) +
+    geom_point(aes(y = observed, color = "Observed", fill = "Observed"),
+               shape = 21, size = .75) +
+    # scales
+    scale_y_continuous(limits = c(0,1),
+                       breaks = seq(0,1,.25)) +
+    scale_color_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "goldenrod3")) +
+    scale_fill_manual(name = "hello", values = c("Observed" = "black", "Predicted" = "white")) +
+    # theme
+    labs(x = "Trial", y = "Proportion Play") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          legend.title = element_blank(),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.position = c(.84,.59), 
+          legend.spacing.x = unit(0, 'cm'),
+          legend.spacing.y = unit(-.25, 'cm'),
+          legend.text = element_text(size = 8),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(-.5,"lines"),
+          legend.key.size = unit(.25, "cm"),
+          panel.spacing.y = unit(0,"lines")) +
+    guides(color = guide_legend(override.aes = list(size = 1.25))) +
+    facet_rep_grid(group~deck,
+                   labeller = labeller(deck = c("A" = "Deck A", "B" = "Deck B",
+                                                "C" = "Deck C", "D" = "Deck D")))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Posterior Distributions
+## Prep Data
+```{r, eval = T}
+parameters = bind_rows(data.frame(parameter = "Arew", group = orl_posteriors$mu_Arew),
+                       data.frame(parameter = "Apun", group = orl_posteriors$mu_Apun),
+                       data.frame(parameter = "betaF", group = orl_posteriors$mu_betaF),
+                       data.frame(parameter = "betaP", group = orl_posteriors$mu_betaP),
+                       data.frame(parameter = "K", group = orl_posteriors$mu_K)) %>% 
+  select(group.1 = group.1.1, group.2 = group.1.2, everything())
+  mutate(group.diff = group.2 - group.1) %>% 
+  pivot_longer(starts_with("group"),
+               names_to = "group", values_to = "estimate", names_prefix = "group.") %>% 
+  group_by(parameter, group) %>% 
+  mutate(group = case_when(group == "1" ~ tolower(group1),
+                           group == "2" ~ tolower(group2),
+                           group == "diff" ~ "diff"),
+         mu = mean(estimate),
+         lower50 = HDIofMCMC(estimate, credMass = .5)[1],
+         upper50 = HDIofMCMC(estimate, credMass = .5)[2],
+         lower95 = HDIofMCMC(estimate)[1],
+         upper95 = HDIofMCMC(estimate)[2],
+         parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaP", "K")),
+         parameter_lab = factor(parameter,
+                                levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                                labels = c(expression(paste(italic(A),"+",sep="")),
+                                           expression(paste(italic(A),"-",sep="")),
+                                           expression(paste("\u03B2",italic(f),sep="")),
+                                           expression(paste("\u03B2",italic(p),sep="")),
+                                           expression(italic(K)))),
+         parameter_lab = case_when(group == "diff" ~ parameter_lab, T ~ NA))
+```
+
+
+
+## Build Plot
+```{r, eval = T}
+parameter_plot = parameters %>% 
+  mutate(group = factor(group, levels = c(tolower(group1), tolower(group2), "diff"), ordered = T)) %>% 
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                   linewidth = .1, bins = 50) +
+    geom_vline(xintercept = 0, color = "transparent") +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower95), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper95), color = "red", linetype = "dashed", linewidth = .25) +
+    # themes
+    scale_x_continuous(breaks = 0) +
+    scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.5, .5, .3, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(parameter~group, scales = "free",
+                   nrow = 5, ncol = 3)
+```
+
+
+
+## Save Plot
+```{r, eval = T}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Posterior Distributions.tiff", sep = " ")),
+     width = 7, height = 10, units = "cm", res = 300)
+
+  grid.newpage()
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(parameter_plot)
+  
+  # text
+  grid.text(c(group1, group2, paste(group2, group1, sep = "-")),
+            x = c(.2, .515, .81), y = .98,
+            gp = gpar(fontsize = 9.5))
+  grid.text(c(expression(paste(italic(A),"+",sep="")),
+              expression(paste(italic(A),"-",sep="")),
+              expression(paste("\u03B2",italic(f),sep="")),
+              expression(paste("\u03B2",italic(p),sep="")),
+              expression(italic(K))),
+            x = rep(.93, 5), y = c(.89, .725, .55, .37, .195),
+            gp = gpar(fontsize = 9.5))
+  
+dev.off()
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
