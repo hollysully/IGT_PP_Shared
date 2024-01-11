@@ -23,17 +23,15 @@ library(stringi)
 library(ggpp)
 library(lemon)
 library(grid)
-# source(here("Code", "R", "3_Other", "helpful_functions.R"))
 ```
 
 
 
 ## RMD Setup
 ```{r}
-group1 = "Co"
-group2 = "SU"
+groups = c("Con", "Dep")
 model_name = "Covariate_Joint_ORL"
-sample = "T1_parent_SU"
+sample = "T1_parent_Dep"
 
 stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
                          paste("design", sample, "IGT.RDS", sep = "_")))
@@ -113,7 +111,7 @@ for(g in c(0,1)){
                             predicted_choices = orl_posteriors$choice_pred[,stan_data$X[,2,]==g,,], 
                             observed_choices = stan_data$choice[stan_data$X[,2,]==g,,],
                             data_type = "data.frame") %>%
-    mutate(group = group1) %>% 
+    mutate(group = groups[g+1]) %>% 
     bind_rows(PPC_data)
 }
 ```
@@ -124,8 +122,8 @@ for(g in c(0,1)){
 ```{r, eval = F}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample,
-          "PPC.tiff"),
-     width = 15, height = stan_data$S*3.5, units = "cm", res = 300)
+          paste(sample, "PPC.tiff")),
+     width = 15, height = stan_data$D*3.5, units = "cm", res = 300)
 
   # simplify data
   PPC_data %>% 
@@ -182,7 +180,7 @@ parameters = bind_rows(data.frame(parameter = "Arew", group = orl_posteriors$mu_
                        data.frame(parameter = "betaF", group = orl_posteriors$mu_betaF),
                        data.frame(parameter = "betaP", group = orl_posteriors$mu_betaP),
                        data.frame(parameter = "K", group = orl_posteriors$mu_K)) %>% 
-  select(group.1 = group.1.1, group.2 = group.1.2, everything())
+  select(group.1 = group.1.1, group.2 = group.1.2, everything()) %>% 
   mutate(group.diff = group.2 - group.1) %>% 
   pivot_longer(starts_with("group"),
                names_to = "group", values_to = "estimate", names_prefix = "group.") %>% 
@@ -249,7 +247,7 @@ parameter_plot = parameters %>%
 ## Save Plot
 ```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
-          model_name,
+          model_name, sample,
           paste(sample, "Posterior Distributions.tiff", sep = " ")),
      width = 7, height = 10, units = "cm", res = 300)
 
@@ -258,7 +256,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
   grid.draw(parameter_plot)
   
   # text
-  grid.text(c(group1, group2, paste(group2, group1, sep = "-")),
+  grid.text(c(groups[1], groups[2], paste(groups[2], groups[1], sep = "-")),
             x = c(.2, .515, .81), y = .98,
             gp = gpar(fontsize = 9.5))
   grid.text(c(expression(paste(italic(A),"+",sep="")),
