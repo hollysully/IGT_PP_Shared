@@ -310,9 +310,11 @@ T1_IGT_mom = TADS_IGT_trim_v %>%
   # fix participant's data because they didn't respond on any A cards
   mutate(AB_card = case_when(id == 5139 & card == "A" ~ "AB_A",
                              id == 5222 & card == "B" ~ "AB_B",
+                             id == 5198 & card == "D" ~ "AB_D",
                              T ~ AB_card),
          checked_version = case_when(id == 5139 & card == "A" ~ "AB",
                                      id == 5222 & card == "B" ~ "AB",
+                                     id == 5198 & card == "D" ~ "AB",
                                      T ~ checked_version))
 
 rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
