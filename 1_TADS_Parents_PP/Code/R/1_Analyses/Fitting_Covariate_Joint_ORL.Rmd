@@ -31,7 +31,7 @@ library(grid)
 ## RMD Setup
 ```{r}
 model_name = "Covariate_Joint_ORL"
-sample = "T1_parent_SU"
+sample = "T1_parent_SU_Dep_Anx"
 
 stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
                          paste("design", sample, "IGT.RDS", sep = "_")))

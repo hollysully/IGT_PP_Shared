@@ -29,9 +29,9 @@ library(grid)
 
 ## RMD Setup
 ```{r}
-groups = c("Con", "Dep")
+groups = c("Con", "Anx")
 model_name = "Covariate_Joint_ORL"
-sample = "T1_parent_Dep"
+sample = "T1_parent_SU_Dep_Anx"
 
 stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
                          paste("design", sample, "IGT.RDS", sep = "_")))
@@ -72,7 +72,7 @@ orl_rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
 # -------------------------------------------
 # Model Diagnostics
 ## Traceplots
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample,
           "group_traceplots.tiff"),
@@ -100,7 +100,7 @@ for(i in person_parameters){
 
 ## PPC Plots
 ### Prep Data
-```{r}
+```{r, eval = T}
 source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 PPC_data = data.frame()
@@ -119,7 +119,7 @@ for(g in c(0,1)){
 
 
 ### Plot
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample,
           paste(sample, "PPC.tiff")),
@@ -185,8 +185,8 @@ parameters = bind_rows(data.frame(parameter = "Arew", group = orl_posteriors$mu_
   pivot_longer(starts_with("group"),
                names_to = "group", values_to = "estimate", names_prefix = "group.") %>% 
   group_by(parameter, group) %>% 
-  mutate(group = case_when(group == "1" ~ tolower(group1),
-                           group == "2" ~ tolower(group2),
+  mutate(group = case_when(group == "1" ~ tolower(groups[1]),
+                           group == "2" ~ tolower(groups[2]),
                            group == "diff" ~ "diff"),
          mu = mean(estimate),
          lower50 = HDIofMCMC(estimate, credMass = .5)[1],
@@ -210,7 +210,7 @@ parameters = bind_rows(data.frame(parameter = "Arew", group = orl_posteriors$mu_
 ## Build Plot
 ```{r, eval = T}
 parameter_plot = parameters %>% 
-  mutate(group = factor(group, levels = c(tolower(group1), tolower(group2), "diff"), ordered = T)) %>% 
+  mutate(group = factor(group, levels = c(tolower(groups[1]), tolower(groups[2]), "diff"), ordered = T)) %>% 
   ggplot(aes(x = estimate)) +
     # geoms
     geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
