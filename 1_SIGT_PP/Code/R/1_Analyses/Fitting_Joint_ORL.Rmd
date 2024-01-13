@@ -18,7 +18,7 @@ library(hBayesDM)
 library(bayesplot)
 library(here)
 library(miscTools)
-library(wBoot)
+# library(wBoot)
 library(cmdstanr)
 library(stringi)
 library(ggpp)
@@ -37,7 +37,7 @@ stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_SIGT_SR_sta
 
 # -------------------------------------------
 # Check Model
-```{r, eval = T}
+```{r, eval = F}
 model_code = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", "Joint_ORL.stan"), compile = F)
 
 model_code$check_syntax(quiet = T)
