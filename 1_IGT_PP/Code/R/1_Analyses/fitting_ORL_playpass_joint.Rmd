@@ -20,52 +20,38 @@ library(here)
 library(miscTools)
 library(cmdstanr)
 library(stringi)
-library(ggpp)
-library(lemon)
 library(foreach)
 source(here("1_TADS_long", "Code", "R", "3_Other", "helpful_functions.R"))
+source(here("1_IGT_PP", "Code", "R", "utils.R"))
 ```
-
 
 
 ## Load Data
 ```{r}
-stan_data = readRDS(here("1_TADS_long", "Data", "1_Preprocessed", "child_IGT.RDS"))
+all_task_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_task_data.rds"))
+all_survey_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_survey_data.rds"))
 ```
-
-
-
 
 # Fit Model
 ```{r, eval = T}
 # Compile model
-orl_model = cmdstan_model(here("1_TADS_long", "Code", "Stan", "igt_orl_playpass_joint.stan"))
-#orl_model_orig = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan"))
+orl_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_joint.stan"))
 
-# design matrix implying same structure as the 
-# `igt_orl_joint_playfic_playupdate_modifiedK_simplified.stan` model
-stan_data$D <- 2 # number of columns (will always need one column for the intercept)
-stan_data$X <- array(1, dim = c(stan_data$N, 2, 2)) # D = first 2; 3rd 2 is the sessions; 
-# the above line sets all dimensions of the array to 1 (this is for convenience)
-stan_data$X[,2,1] <- 0 # this sets the 2nd covariate for the 1st session to 0
+stan_data <- make_stan_data(
+  all_task_data, 
+  all_survey_data,
+  ~ session
+)
 
 # Fit model
-orl_fit = orl_model$sample(
+orl_fit <- orl_model$sample(
   stan_data, 
-  iter_sampling = 500, 
+  iter_sampling = 200, 
   iter_warmup = 100, 
-  chains = 4, 
-  parallel_chains = 4,
+  chains = 8, 
+  parallel_chains = 8,
   seed = 43210
 ) 
-# orl_fit_orig = orl_model_orig$sample(
-#   stan_data, 
-#   iter_sampling = 500, 
-#   iter_warmup = 100, 
-#   chains = 4, 
-#   parallel_chains = 4,
-#   seed = 43210
-# ) 
 ```
 
 
