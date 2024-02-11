@@ -55,7 +55,7 @@ data {
   int choice[N,T,S];                   // Choices on each trial
   real outcome[N,T,S];                 // Outcomes received on each trial
   real sign[N,T,S];                    // Signs of the outcome received on each trial
-  real X[N,D,S];                       // person-level predictors
+  real X[N,T,D,S];                       // person-level predictors
   
 }
 
@@ -118,14 +118,14 @@ transformed parameters {
   // Calculate & transform Arew, Apun, & K to use in RL algorithm
   for(s in 1:S){    // Loop over sessions
     for(i in 1:N){  // Loop over subjects
-      Arew[i,s] = Phi_approx(dot_product(beta_Arew, to_vector(X[i,,s])) + Arew_tilde[s,i]);
-      Apun[i,s] = Phi_approx(dot_product(beta_Apun, to_vector(X[i,,s])) + Apun_tilde[s,i]);
-      K[i,s]    = Phi_approx(dot_product(beta_K, to_vector(X[i,,s])) + K_tilde[s,i]) * 5;
+      Arew[i,s] = Phi_approx(dot_product(beta_Arew, to_vector(X[i,1,,s])) + Arew_tilde[s,i]);
+      Apun[i,s] = Phi_approx(dot_product(beta_Apun, to_vector(X[i,1,,s])) + Apun_tilde[s,i]);
+      K[i,s]    = Phi_approx(dot_product(beta_K, to_vector(X[i,1,,s])) + K_tilde[s,i]) * 5;
     }
     
   // Calculate betaF & betaP to use in RL algorithm
-  betaF[:,s] = to_matrix(X[,,s]) * beta_betaF + to_vector(betaF_tilde[s,:]);
-  betaP[:,s] = to_matrix(X[,,s]) * beta_betaP + to_vector(betaP_tilde[s,:]);
+  betaF[:,s] = to_matrix(X[,1,,s]) * beta_betaF + to_vector(betaF_tilde[s,:]);
+  betaP[:,s] = to_matrix(X[,1,,s]) * beta_betaP + to_vector(betaP_tilde[s,:]);
   }
 }
 
@@ -193,7 +193,7 @@ model {
             // After choice, calculate prediction error
             PEval      = outcome[i,t,s] - ev[card[i,t,s]];     // Value prediction error
             PEfreq     = sign[i,t,s] - ef[card[i,t,s]];        // Win-frequency prediction error
-            PEfreq_fic = -sign[i,t,s]/3 - ef;
+            PEfreq_fic = -sign[i,t,s] - ef;
             ef_chosen  = ef[card[i,t,s]];
             
             if (outcome[i,t,s] >= 0) {  // If participant DID NOT lose
@@ -306,7 +306,7 @@ generated quantities {
               // After choice, calculate prediction error
               PEval      = outcome[i,t,s] - ev[card[i,t,s]];     // Value prediction error
               PEfreq     = sign[i,t,s] - ef[card[i,t,s]];        // Win-frequency prediction error
-              PEfreq_fic = -sign[i,t,s]/3 - ef;
+              PEfreq_fic = -sign[i,t,s] - ef;
               ef_chosen = ef[card[i,t,s]];
               
               if (outcome[i,t,s] >= 0) {  // If participant DID NOT lose
