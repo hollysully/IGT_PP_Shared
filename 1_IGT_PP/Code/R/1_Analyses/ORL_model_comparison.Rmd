@@ -1,0 +1,83 @@
+---
+title: "Model-Comparison"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(loo)
+```
+
+
+
+# -------------------------------------------
+# IGT
+```{r}
+joint_orl = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL",
+                         "Joint_ORL_fit.rds"))
+
+joint_orl_noK = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_noK",
+                             "Joint_ORL_noK_fit.rds"))
+```
+
+
+
+```{r}
+log_lik_orl_joint = extract_log_lik(joint_orl)
+log_lik_orl_joint_noK = extract_log_lik(joint_orl_noK)
+```
+
+
+
+```{r}
+loo_orl_joint = loo(log_lik_orl_joint)
+loo_orl_joint_noK = loo(log_lik_orl_joint_noK)
+```
+
+
+
+```{r}
+comparison = loo_compare(list("Joint ORL" = loo_orl_joint,
+                              "Joint ORL no K" = loo_orl_joint_noK))
+
+print(comparison, simplify = F)
+```
+
+
+
+# -------------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

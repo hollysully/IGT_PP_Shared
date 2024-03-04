@@ -45,95 +45,77 @@ functions {
   }
 }
 
-
 data {
   int<lower=1> N;                      // Number of participants
   int<lower=1> S;                      // Number of sessions
   int<lower=1> T;                      // Total possile number of trials
-  int<lower=1> D;                      // Number of person-level predictors
-  array[N,T,S] int card;               // Cards presented on each trial
-  array[N,S] int Tsubj;                // Total number of trials presented to each subject on each session
-  array[N,T,S] int choice;             // Choices on each trial
-  array[N,T,S] real outcome;           // Outcomes received on each trial
-  array[N,T,S] real sign;              // Signs of the outcome received on each trial
-  array[N,D,S] real X;                 // person-level predictors
-}
-
-
-transformed data {
-  // This calculates the number of covariates to estimate which is used in the generated quantities block
-    // We add 1 because we always estimate a group-level mean for the session without the covariate.
-  int C;
-  C = D - S + 1;
+  int card[N,T,S];                     // Cards presented on each trial
+  int Tsubj[N,S];                      // Total number of trials presented to each subject on each session
+  int choice[N,T,S];                   // Choices on each trial
+  real outcome[N,T,S];                 // Outcomes received on each trial
+  real sign[N,T,S];                    // Signs of the outcome received on each trial
 }
 
 
 parameters {
 // Declare parameters
   // Hyper(group)-parameters
-  vector<lower=0>[S] sigma_Arew;
-  vector<lower=0>[S] sigma_Apun;
-  vector<lower=0>[S] sigma_K;
-  vector<lower=0>[S] sigma_betaF;
-  vector<lower=0>[S] sigma_betaP;
-  
-  vector[D] beta_Arew;
-  vector[D] beta_Apun;
-  vector[D] beta_K;
-  vector[D] beta_betaF;
-  vector[D] beta_betaP;
+  matrix[S, 4] mu_p;   // S (number of sessions) x 5 (number of parameters) matrix of mus
+  vector<lower=0>[2] sigma_Arew;
+  vector<lower=0>[2] sigma_Apun;
+  vector<lower=0>[2] sigma_betaF;
+  vector<lower=0>[2] sigma_betaB;
 
   // Subject-level "raw" parameters - i.e., independent/uncorrelated & normally distributed person-level (random-)effects
     // Note, these are S (number of sessions) x N (number of subjects) matrices
-  matrix[S,N] Arew_pr;  
-  matrix[S,N] Apun_pr;  
-  matrix[S,N] K_pr;   
+  matrix[S,N] Arew_pr;
+  matrix[S,N] Apun_pr;
   matrix[S,N] betaF_pr;
-  matrix[S,N] betaP_pr;
+  matrix[S,N] betaB_pr;
   
   // Correlation matrices for correlating between sessions
-  cholesky_factor_corr[S] R_chol_Arew;
-  cholesky_factor_corr[S] R_chol_Apun;
-  cholesky_factor_corr[S] R_chol_K;
-  cholesky_factor_corr[S] R_chol_betaF;
-  cholesky_factor_corr[S] R_chol_betaP;
+  cholesky_factor_corr[2] R_chol_Arew;
+  cholesky_factor_corr[2] R_chol_Apun;
+  cholesky_factor_corr[2] R_chol_betaF;
+  cholesky_factor_corr[2] R_chol_betaB;
 }
 
 transformed parameters {
 // Declare transformed parameters
   // Parameters to use in the reinforcement-learning algorithm
     // Note, for each of these, we include the mus and the subject-level parameters (see below), allowing for shrinkage and subject-to-subject variability
-  matrix<lower=0,upper=1>[N,S] Arew; 
-  matrix<lower=0,upper=1>[N,S] Apun; 
-  matrix<lower=0,upper=5>[N,S] K;    
+  matrix<lower=0,upper=1>[N,S] Arew;
+  matrix<lower=0,upper=1>[N,S] Apun;
   matrix[N,S] betaF;
-  matrix[N,S] betaP;
+  matrix[N,S] betaB;
   
   // Untransformed subject-level parameters incorporating correlation between sessions
   matrix[S,N] Arew_tilde;
   matrix[S,N] Apun_tilde;
-  matrix[S,N] K_tilde;
   matrix[S,N] betaF_tilde;
-  matrix[S,N] betaP_tilde;
+  matrix[S,N] betaB_tilde;
+  
+  // Calculate transformed parameters
   
   // Untransformed subject-level parameters incorporating correlation between sessions
-  Arew_tilde  = diag_pre_multiply(sigma_Arew, R_chol_Arew) * Arew_pr;  
-  Apun_tilde  = diag_pre_multiply(sigma_Apun, R_chol_Apun) * Apun_pr;  
-  K_tilde     = diag_pre_multiply(sigma_K, R_chol_K) * K_pr;  
-  betaF_tilde = diag_pre_multiply(sigma_betaF, R_chol_betaF) * betaF_pr;  
-  betaP_tilde = diag_pre_multiply(sigma_betaP, R_chol_betaP) * betaP_pr;
+  Arew_tilde  = diag_pre_multiply(sigma_Arew, R_chol_Arew) * Arew_pr;
+  Apun_tilde  = diag_pre_multiply(sigma_Apun, R_chol_Apun) * Apun_pr;
+  betaF_tilde = diag_pre_multiply(sigma_betaF, R_chol_betaF) * betaF_pr;
+  betaB_tilde = diag_pre_multiply(sigma_betaB, R_chol_betaB) * betaB_pr;
   
   // Calculate & transform Arew, Apun, & K to use in RL algorithm
   for(s in 1:S){    // Loop over sessions
-    for(i in 1:N){  // Loop over subjects
-      Arew[i,s] = Phi_approx(dot_product(beta_Arew, to_vector(X[i,,s])) + Arew_tilde[s,i]);
-      Apun[i,s] = Phi_approx(dot_product(beta_Apun, to_vector(X[i,,s])) + Apun_tilde[s,i]);
-      K[i,s]    = Phi_approx(dot_product(beta_K, to_vector(X[i,,s])) + K_tilde[s,i]) * 5;
+    for(i in 1:N){  // Loop over subjects - This is structured the same as the OG joint retest model such that Arew,
+                        // Apun, & K are looped over for individual subjects whereas betaF & betaB are vectorized for
+                        // individual subjects.
+                        // Maybe to avoid nesting a function within a function - e.g., to_vector(Phi_approx... 
+      Arew[i,s] = Phi_approx(mu_p[s,1] + Arew_tilde[s,i]);
+      Apun[i,s] = Phi_approx(mu_p[s,2] + Apun_tilde[s,i]);
     }
     
-  // Calculate betaF & betaP to use in RL algorithm
-  betaF[:,s] = to_matrix(X[,,s]) * beta_betaF + to_vector(betaF_tilde[s,:]);
-  betaP[:,s] = to_matrix(X[,,s]) * beta_betaP + to_vector(betaP_tilde[s,:]);
+  // Calculate betaF & betaB to use in RL algorithm
+  betaF[:,s] = to_vector(mu_p[s,3] + betaF_tilde[s,:]);
+  betaB[:,s] = to_vector(mu_p[s,4] + betaB_tilde[s,:]);
   }
 }
 
@@ -141,61 +123,47 @@ model {
   // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
   vector[4] ef;
   vector[4] ev;
-  vector[4] pers;
   vector[4] utility;
   
   real ef_chosen;  
   real PEval;
   real PEfreq;
   vector[4] PEfreq_fic;
-  real K_tr;
   
   // Priors
   // Hyperparameters for correlations
   R_chol_Arew   ~ lkj_corr_cholesky(1);
   R_chol_Apun   ~ lkj_corr_cholesky(1);
-  R_chol_K      ~ lkj_corr_cholesky(1);
   R_chol_betaF  ~ lkj_corr_cholesky(1);
-  R_chol_betaP  ~ lkj_corr_cholesky(1);
+  R_chol_betaB  ~ lkj_corr_cholesky(1);
   
   // Hyperparameters for RL learning algorithm
-  beta_Arew ~ normal(0, 1);
-  beta_Apun ~ normal(0, 1);
-  beta_K ~ normal(0, 1);
-  beta_betaF ~ normal(0, 1);
-  beta_betaP ~ normal(0, 1);
+  mu_p[1,:]   ~ normal(0, 1);
+  mu_p[2,:]   ~ normal(0, 1);
   sigma_Arew  ~ normal(0, 0.2);
   sigma_Apun  ~ normal(0, 0.2);
-  sigma_K     ~ normal(0, 0.2);
   sigma_betaF ~ cauchy(0, 1);
-  sigma_betaP ~ cauchy(0, 1);
+  sigma_betaB ~ cauchy(0, 1);
   
   // Subject-level parameters
   to_vector(Arew_pr)  ~ normal(0, 1.0);
   to_vector(Apun_pr)  ~ normal(0, 1.0);
-  to_vector(K_pr)     ~ normal(0, 1.0);
   to_vector(betaF_pr) ~ normal(0, 1.0);
-  to_vector(betaP_pr) ~ normal(0, 1.0);
+  to_vector(betaB_pr) ~ normal(0, 1.0);
   
   for (i in 1:N) {         // Loop through individual participants
     for (s in 1:S) {       // Loop though sessions for participant i
       if (Tsubj[i,s] > 0) {    // If we have data for participant i on session s, run through RL algorithm
         
         // Initialize starting values
-        K_tr = pow(3, K[i,s]) - 1;
         ev = rep_vector(0,4);
         ef = rep_vector(0,4);
-        pers = rep_vector(0,4);
-        utility = rep_vector(0,4);
+        utility = rep_vector(betaB[i,s],4);
         
         for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
           
           // Likelihood - predict choice as a function of utility
           choice[i,t,s] ~ categorical_logit(to_vector({utility[card[i,t,s]], 0}));
-          // this could equivalently be specified as: 
-          // choice[i,t,s] ~ bernoulli_logit(utility[card[i,t,s]]);
-          // if choice = 0 for pass and 1 for play. Keeping categorical_*
-          // is consistent with other models
           
           if(choice[i,t,s]==1){
             // After choice, calculate prediction error
@@ -217,15 +185,9 @@ model {
               ef[card[i,t,s]] = ef_chosen + Apun[i,s] * PEfreq;
               ev[card[i,t,s]] = ev[card[i,t,s]] + Apun[i,s] * PEval;
             }
-            
-            // Update perseverance
-            pers[card[i,t,s]] = 1;
           }
-          // perseverance decay
-          pers = pers / (1 + K_tr);
-            
           // Calculate expected value of card
-          utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
+          utility = ev + ef * betaF[i,s];
         }
       }
     }
@@ -234,31 +196,27 @@ model {
 
 generated quantities {
   // Hyper(group)-parameters - these are 5 (number of parameters) x S (number of sessions) matrix of mus & sigmas, respectively, for each parameter
-  matrix<lower=0,upper=1>[S,C] mu_Arew;
-  matrix<lower=0,upper=1>[S,C]  mu_Apun;
-  matrix<lower=0,upper=5>[S,C]  mu_K;
-  matrix[S,C]  mu_betaF;
-  matrix[S,C]  mu_betaP;
-  
-  vector[N] log_lik;
+  vector<lower=0,upper=1>[2] mu_Arew;
+  vector<lower=0,upper=1>[2] mu_Apun;
+  vector[2] mu_betaF;
+  vector[2] mu_betaB;
+  real log_lik[N];
 
   // For posterior predictive check
-  array[N,T,S] real choice_pred;
+  real choice_pred[N,T,S];
 
   // test-retest correlations
-  corr_matrix[S] R_Arew;
-  corr_matrix[S] R_Apun;
-  corr_matrix[S] R_K;
-  corr_matrix[S] R_betaF;
-  corr_matrix[S] R_betaP;
+  corr_matrix[2] R_Arew;
+  corr_matrix[2] R_Apun;
+  corr_matrix[2] R_betaF;
+  corr_matrix[2] R_betaB;
   
   // Reconstruct correlation matrix from cholesky factor
     // Note that we're multipling the cholesky factor by its transpose which gives us the correlation matrix
-  R_Arew  = R_chol_Arew * R_chol_Arew'; //Phi_approx_corr_rng(mu_p[,1], sigma_Arew, R_chol_Arew * R_chol_Arew', 10000);
-  R_Apun  = R_chol_Apun * R_chol_Apun'; //Phi_approx_corr_rng(mu_p[,2], sigma_Apun, R_chol_Apun * R_chol_Apun', 10000);
-  R_K     = R_chol_K * R_chol_K'; //Phi_approx_corr_rng(mu_p[,3], sigma_K, R_chol_K * R_chol_K', 10000);
+  R_Arew  = Phi_approx_corr_rng(mu_p[,1], sigma_Arew, R_chol_Arew * R_chol_Arew', 10000);
+  R_Apun  = Phi_approx_corr_rng(mu_p[,2], sigma_Apun, R_chol_Apun * R_chol_Apun', 10000);
   R_betaF = R_chol_betaF * R_chol_betaF';
-  R_betaP = R_chol_betaP * R_chol_betaP';
+  R_betaB = R_chol_betaB * R_chol_betaB';
   
   // Set all posterior predictions to -1 (avoids NULL values)
   for (i in 1:N) {
@@ -269,44 +227,24 @@ generated quantities {
     }
   }
   
-  // // Compute group-level means
-  for(s in 1:S) {
-    mu_Arew[s,1] = beta_Arew[s];
-    mu_Apun[s,1] = beta_Apun[s];
-    mu_K[s,1] = beta_K[s];
-    mu_betaF[s,1] = beta_betaF[s];
-    mu_betaP[s,1] = beta_betaP[s];
-    
-    if(C > 1){ // If we're estimating covariates beyond the group-level means for each session, then we have some additional work
-      for(c in 1:(C-1)){ // We need to loop thru the number of covariates beyond the sessions which is why we subtract out 1 here
-        mu_Arew[s,c+1] = mu_Arew[s,1] + beta_Arew[S+c];
-        mu_Arew[s,c+1] = Phi_approx_group_mean_rng(mu_Arew[s,c+1], sigma_Arew[s], 10000);
-        mu_Apun[s,c+1] = mu_Apun[s,1] + beta_Apun[S+c];
-        mu_Apun[s,c+1] = Phi_approx_group_mean_rng(mu_Apun[s,c+1], sigma_Apun[s], 10000);
-        mu_K[s,c+1] = mu_K[s,1] + beta_K[S+c];
-        mu_K[s,c+1] = Phi_approx_group_mean_rng(mu_K[s,c+1], sigma_K[s], 10000)*5;
-        mu_betaF[s,c+1] = mu_betaF[s,1] + beta_betaF[S+c];
-        mu_betaP[s,c+1] = mu_betaP[s,1] + beta_betaP[S+c];
-      }
-    }
-    mu_Arew[s,1] = Phi_approx_group_mean_rng(mu_Arew[s,1], sigma_Arew[s], 10000);
-    mu_Apun[s,1] = Phi_approx_group_mean_rng(mu_Apun[s,1], sigma_Apun[s], 10000);
-    mu_K[s,1] = Phi_approx_group_mean_rng(mu_K[s,1], sigma_K[s], 10000);
+  // Compute group-level means
+  for (s in 1:S) {
+    mu_Arew[s] = Phi_approx_group_mean_rng(mu_p[s, 1], sigma_Arew[s], 10000);
+    mu_Apun[s] = Phi_approx_group_mean_rng(mu_p[s, 2], sigma_Apun[s], 10000);
+    mu_betaF[s] = mu_p[s, 3];
+    mu_betaB[s] = mu_p[s, 4];
   }
-
   
   { // local section, this saves time and space
     // Declare variables to calculate utility after each trial: These 4 (number of cards) x 2 (playing vs. not playing) matrices
     vector[4] ef;
     vector[4] ev;
-    vector[4] pers;
     vector[4] utility;
     
     real ef_chosen;
     real PEval;
     real PEfreq;
     vector[4] PEfreq_fic;
-    real K_tr;
   
     for (i in 1:N) {         // Loop through individual participants
       log_lik[i] = 0;        // Initialize log_lik
@@ -315,13 +253,14 @@ generated quantities {
         if (Tsubj[i,s] > 0) {    // If we have data for participant i on session s, run through RL algorithm
           
           // Initialize starting values
-          K_tr = pow(3, K[i,s]) - 1;
           ev = rep_vector(0,4);
           ef = rep_vector(0,4);
-          pers = rep_vector(0,4);
           utility = rep_vector(0,4);
           
           for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
+            // Calculate expected value of card
+            utility = ev + ef * betaF[i,s] + betaB[i,s];
+            
             // softmax choice
             log_lik[i] += categorical_logit_lpmf(choice[i,t,s]|to_vector({utility[card[i,t,s]], 0}));
             
@@ -348,15 +287,7 @@ generated quantities {
                 ef[card[i,t,s]] = ef_chosen + Apun[i,s] * PEfreq;
                 ev[card[i,t,s]] = ev[card[i,t,s]] + Apun[i,s] * PEval;
               }
-              
-              // Update perseverance
-              pers[card[i,t,s]] = 1;
             }
-            // perseverance decay
-            pers = pers / (1 + K_tr);
-              
-            // Calculate expected value of card
-            utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
           }
         }
       }

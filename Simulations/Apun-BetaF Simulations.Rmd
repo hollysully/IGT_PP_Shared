@@ -1,0 +1,440 @@
+---
+title: "Simulations"
+output: html_document
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(foreach)
+library(tidybayes)
+library(patchwork)
+library(abind)
+library(zoo)
+library(here)
+library(ggpubr)
+library(egg)
+library(grid)
+library(tidyverse)
+library(lemon)
+library(ggpp)
+library(wBoot)
+library(stringi)
+library(ggh4x)
+library(hBayesDM)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+
+## Functions
+```{r}
+#------------------------------------------------------------------------------
+# USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
+softmax = function(values){
+  return(exp(values) / sum(exp(values)))
+}
+
+
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_orl = function(parameter_mus, condition,
+                        custom_seed = 20230928, n_iterations = 1000) {
+  set.seed(seed = custom_seed)
+  data = data.frame()
+  
+  # parameters for sim
+  Arew = filter(parameter_mus, parameter == "Arew")[[condition]]
+  Apun = filter(parameter_mus, parameter == "Apun")[[condition]]
+  K = filter(parameter_mus, parameter == "K")[[condition]]
+  betaF = filter(parameter_mus, parameter == "betaF")[[condition]]
+  betaP = filter(parameter_mus, parameter == "betaP")[[condition]]
+  
+  for(i in 1:n_iterations){
+    utility = rep(0,4)
+    ev = rep(0,4)
+    ef = rep(0,4)
+    pers = rep(0,4)
+    K_tr = 3^(K)-1
+    
+    ef_chosen = 0
+    PEval = 0
+    PEfreq = 0
+    PEfreq_fic = rep(0,4)
+    card_trial = rep(0,4)
+    
+    for(t in 1:120){
+      outcome = outcomes$outcome[outcomes$trial == t]
+      sign = outcomes$sign[outcomes$trial == t]
+      card = outcomes$card[outcomes$trial == t]
+      prob = softmax(c(utility[card], 0))
+      curr_choice = sample(c(1,2), 1, prob = prob)
+      
+      if(curr_choice==1) {
+        PEval = outcome - ev[card]
+        PEfreq= -1*sign - ef[card]
+        PEfreq_fic = -1*sign/3 - ef;
+        ef_chosen = ef[card];
+        
+        if(outcome >= 0) {
+          ef = ef + Apun * PEfreq_fic
+          ef[card] = ef_chosen + Arew * PEfreq
+          ev[card] = ev[card] + Arew * PEval
+        } else {
+          ef = ef + Arew * PEfreq_fic
+          ef[card] = ef_chosen + Apun * PEfreq;
+          ev[card] = ev[card] + Apun * PEval;
+        }
+        pers[card] = 1;
+      }
+      pers = pers / (1 + K_tr)
+      
+      utility = ev + ef * betaF + pers * betaP
+      card_trial[card] = card_trial[card] + 1
+      data = data.frame(simulation = condition,
+                        iteration = i,
+                        card = card,
+                        trial = t,
+                        card_trial = card_trial[card],
+                        choice = curr_choice) %>% 
+        bind_rows(data)
+    }
+  }
+  data %>%
+    return()
+}
+```
+
+
+
+# ---------------------------------------
+# Simulate ORL Parameters
+## Prep Inputs for Simulations
+```{r}
+outcomes = readRDS(here("Simulations","outcomes.RDS"))
+
+sim_type = 
+  # "realistic"   # based on values close to those that you would encounter
+  "accentuated" # based on values that are more extreme to see differences more clearly
+```
+
+
+
+## Set Parameter Values
+```{r}
+c = .25 # constant
+
+parameters = data.frame(parameter = c("Arew" , "Apun" , "K",   "betaF", "betaP"),
+                        base      = c( .5    ,  .5    , .05,    3     ,  1.5)) %>% 
+  mutate(# low A+
+         loApun_negmedbetaF = case_when(parameter == "Apun" ~ base - c,
+                                        parameter == "betaF" ~ base - c*24,
+                                        T ~ base),
+         loApun_lobetaF = case_when(parameter == "Apun" ~ base - c,
+                                    parameter == "betaF" ~ base - c*12,
+                                    T ~ base),
+         loApun_medbetaF = case_when(parameter == "Apun" ~ base - c,
+                                     parameter == "betaF" ~ base,
+                                     T ~ base),
+         loApun_hibetaF = case_when(parameter == "Apun" ~ base - c,
+                                    parameter == "betaF" ~ base + c*12,
+                                    T ~ base),
+         # med A+
+         medApun_negmedbetaF = case_when(parameter == "Apun" ~ base,
+                                         parameter == "betaF" ~ base - c*24,
+                                         T ~ base),
+         medApun_lobetaF = case_when(parameter == "Apun" ~ base,
+                                     parameter == "betaF" ~ base - c*12,
+                                     T ~ base),
+         medApun_medbetaF = case_when(parameter == "Apun" ~ base,
+                                      parameter == "betaF" ~ base,
+                                      T ~ base),
+         medApun_hibetaF = case_when(parameter == "Apun" ~ base,
+                                     parameter == "betaF" ~ base + c*12,
+                                     T ~ base),
+         # high A+
+         hiApun_negmedbetaF = case_when(parameter == "Apun" ~ base + c,
+                                        parameter == "betaF" ~ base - c*24,
+                                        T ~ base),
+         hiApun_lobetaF = case_when(parameter == "Apun" ~ base + c,
+                                    parameter == "betaF" ~ base - c*12,
+                                    T ~ base),
+         hiApun_medbetaF = case_when(parameter == "Apun" ~ base + c,
+                                     parameter == "betaF" ~ base,
+                                     T ~ base),
+         hiApun_hibetaF = case_when(parameter == "Apun" ~ base + c,
+                                    parameter == "betaF" ~ base + c*12,
+                                    T ~ base)) %>% 
+  select(-base)
+```
+
+
+
+## Run Simulation
+```{r, eval = T}
+simulations = bind_rows(simulate_orl(parameters, "loApun_negmedbetaF"),
+                        simulate_orl(parameters, "loApun_lobetaF"),
+                        simulate_orl(parameters, "loApun_medbetaF"),
+                        simulate_orl(parameters, "loApun_hibetaF"),
+                        simulate_orl(parameters, "medApun_negmedbetaF"),
+                        simulate_orl(parameters, "medApun_lobetaF"),
+                        simulate_orl(parameters, "medApun_medbetaF"),
+                        simulate_orl(parameters, "medApun_hibetaF"),
+                        simulate_orl(parameters, "hiApun_negmedbetaF"),
+                        simulate_orl(parameters, "hiApun_lobetaF"),
+                        simulate_orl(parameters, "hiApun_medbetaF"),
+                        simulate_orl(parameters, "hiApun_hibetaF"))
+saveRDS(simulations, here("Simulations", "Apun-BetaF",
+                          paste(sim_type, "simulations.rds", sep = "_")))
+```
+
+
+
+```{r}
+simulations = readRDS(here("Simulations", "Apun-BetaF",
+                           paste(sim_type, "simulations.rds", sep = "_")))
+```
+
+
+
+# ---------------------------------------
+# Plot Simulations
+## Trial-Level Play Proportions
+```{r, eval = T}
+tiff(here("Simulations", "Apun-BetaF",
+          paste("Trial-Level", str_to_title(sim_type), "Simulations.tiff")),
+     width = 4, height = 4, units = "in", res = 300)
+
+  # data
+  simulations %>% 
+    separate(col = "simulation", into = c("Apun", "betaF")) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           Apun = str_remove(Apun, "Apun"),
+           Apun = factor(Apun, levels = c("lo", "med", "hi"),
+                         ordered = T, c("Lo", "Med", "Hi")),
+           betaF = str_remove(betaF, "betaF"),
+           betaF = factor(betaF, levels = c("negmed", "lo", "med", "hi"),
+                          ordered = T, c("-Med", "Lo", "Med", "Hi")),
+           card = recode(card, "1" = "A", "2" = "B", "3" = "C", "4" = "D")) %>% 
+    group_by(Apun, betaF, card, card_trial) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(Apun, betaF, card) %>% 
+    arrange(card_trial) %>% 
+    mutate(running_proportion = rollapply(proportion, width = 5, FUN = mean,
+                                          na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = card_trial, color = card)) +
+      # geoms
+      geom_line(aes(y = running_proportion)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(.25,"lines"),
+            plot.margin = unit(c(.1,.5,.1,.1), "cm")) +
+      facet_rep_grid(betaF~Apun)
+  
+    grid.text(expression(paste("\u0394",italic(A),"-",sep="")),
+              x = .53, y = .875)
+    grid.text(expression(paste("\u03B2",italic(f),sep="")),
+              rot = 270,
+              x = .975, y = .4675)
+  
+dev.off()  
+```
+
+
+
+## Good-Bad Play Proportions
+### Apun x BetaF
+```{r, eval = T}
+tiff(here("Simulations", "Apun-BetaF",
+          paste("Good-Bad (Apun x BetaF)", str_to_title(sim_type), "Simulations.tiff")),
+     width = 4, height = 3.5, units = "in", res = 300)
+
+  # data
+  simulations %>% 
+    separate(col = "simulation", into = c("Apun", "betaF")) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           Apun = str_remove(Apun, "Apun"),
+           Apun = factor(Apun, levels = c("lo", "med", "hi"),
+                         ordered = T, c("Lo", "Med", "Hi")),
+           betaF = str_remove(betaF, "betaF"),
+           betaF = factor(betaF, levels = c("negmed", "lo", "med", "hi"),
+                          ordered = T, c("-Med", "Lo", "Med", "Hi")),
+           card_nam = recode(card, "1" = "A", "2" = "B", "3" = "C", "4" = "D"),
+           valence = case_when(card %in% c(1, 2) ~ 1.5, T ~ 3.5)) %>% 
+    group_by(Apun, betaF, card, card_nam, valence) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(Apun, betaF, valence) %>% 
+    mutate(valence_proportion = mean(proportion)) %>% 
+    # plotting
+    ggplot() +
+      # geoms
+      geom_crossbar(aes(x = valence, y = valence_proportion, 
+                        ymin = valence_proportion, ymax = valence_proportion),
+                    width = 2, color = "red4", size = .25) +
+      geom_point(aes(x = card, y = proportion, color = card_nam)) +
+      # scales
+      scale_x_continuous(limits = c(0.5,4.5), expand = c(0,0),
+                         breaks = seq(1,4,1), labels = c("A", "B", "C", "D")) +
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45")) +
+      # theme
+      labs(x = "Card", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.position = "none",
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(.25,"lines"),
+            plot.margin = unit(c(.5,.5,.1,.1), "cm")) +
+      facet_rep_grid(betaF~Apun)
+  
+    grid.text(expression(paste("\u0394",italic(A),"-",sep="")),
+              x = .53, y = .975)
+    grid.text(expression(paste("\u03B2",italic(f),sep="")),
+              rot = 270,
+              x = .975, y = .4675)
+dev.off()
+```
+
+
+
+### BetaF x Valence
+```{r, eval = T}
+tiff(here("Simulations", "Apun-BetaF",
+          paste("Good-Bad (BetaF x Valence)", str_to_title(sim_type), "Simulations.tiff")),
+     width = 4, height = 3.5, units = "in", res = 300)
+
+  # data
+  simulations %>% 
+    separate(col = "simulation", into = c("Apun", "betaF")) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           Apun = str_remove(Apun, "Apun"),
+           Apun = factor(Apun, levels = c("lo", "med", "hi"),
+                         ordered = T, c("Lo", "Med", "Hi")),
+           betaF = str_remove(betaF, "betaF"),
+           betaF = factor(betaF, levels = c("negmed", "lo", "med", "hi"),
+                          ordered = T, c("-Med", "Lo", "Med", "Hi")),
+           card_nam = recode(card, "1" = "A", "2" = "B", "3" = "C", "4" = "D"),
+           card_num = recode(card, "1" = "AC", "2" = "BD", "3" = "AC", "4" = "BD"),
+           valence = case_when(card %in% c(1, 2) ~ "Bad", T ~ "Good")) %>% 
+    group_by(Apun, betaF, card, card_nam, card_num, valence) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(Apun, betaF, valence) %>% 
+    mutate(valence_proportion = mean(proportion),
+           valence = factor(valence, levels = c("Good", "Bad"), ordered = T)) %>% 
+    # plotting
+    ggplot(aes(x = Apun)) +
+      # geoms
+      geom_crossbar(aes(y = valence_proportion, 
+                        ymin = valence_proportion, ymax = valence_proportion),
+                    width = .5, color = "red4", size = .25) +
+      geom_point(aes(y = proportion, color = card_nam),
+                 position = position_dodge(width = .25)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45")) +
+      # theme
+      labs(x = expression(paste("\u0394",italic(A),"-",sep="")), y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(.25,"lines"),
+            plot.margin = unit(c(0,.5,.1,.1), "cm")) +
+      facet_rep_grid(betaF~valence)
+  
+    grid.text(expression(paste("\u03B2",italic(f),sep="")),
+              rot = 270,
+              x = .975, y = .4675)
+dev.off()
+```
+
+
+
+### Apun x Valence
+```{r, eval = T}
+tiff(here("Simulations", "Apun-BetaF",
+          paste("Good-Bad (Apun x Valence)", str_to_title(sim_type), "Simulations.tiff")),
+     width = 4, height = 3.5, units = "in", res = 300)
+
+  # data
+  simulations %>% 
+    separate(col = "simulation", into = c("Apun", "betaF")) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           Apun = str_remove(Apun, "Apun"),
+           Apun = factor(Apun, levels = c("lo", "med", "hi"),
+                         ordered = T, c("Lo", "Med", "Hi")),
+           betaF = str_remove(betaF, "betaF"),
+           betaF = factor(betaF, levels = c("negmed", "lo", "med", "hi"),
+                          ordered = T, c("-Med", "Lo", "Med", "Hi")),
+           card_nam = recode(card, "1" = "A", "2" = "B", "3" = "C", "4" = "D"),
+           card_num = recode(card, "1" = "AC", "2" = "BD", "3" = "AC", "4" = "BD"),
+           valence = case_when(card %in% c(1, 2) ~ "Bad", T ~ "Good")) %>% 
+    group_by(Apun, betaF, card, card_nam, card_num, valence) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(Apun, betaF, valence) %>% 
+    mutate(valence_proportion = mean(proportion),
+           valence = factor(valence, levels = c("Good", "Bad"), ordered = T)) %>% 
+    # plotting
+    ggplot(aes(x = betaF)) +
+      # geoms
+      geom_crossbar(aes(y = valence_proportion, 
+                        ymin = valence_proportion, ymax = valence_proportion),
+                    width = .5, color = "red4", size = .25) +
+      geom_point(aes(y = proportion, color = card_nam),
+                 position = position_dodge(width = .25)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45")) +
+      # theme
+      labs(x = expression(paste("\u03B2",italic(f),sep="")), y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(.25,"lines"),
+            plot.margin = unit(c(0,.5,.1,.1), "cm")) +
+      facet_rep_grid(Apun~valence)
+  
+    grid.text(expression(paste("\u0394",italic(A),"-",sep="")),
+              rot = 270,
+              x = .975, y = .4675)
+dev.off()
+```
+
+
+
+
+
+
+

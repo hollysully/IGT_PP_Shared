@@ -38,7 +38,7 @@ stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_I
 # -------------------------------------------
 # Check Model
 ```{r, eval = T}
-model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL.stan"), compile = F)
+model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_noK.stan"), compile = F)
 
 model_code$check_syntax(quiet = T)
 ```
@@ -48,7 +48,7 @@ model_code$check_syntax(quiet = T)
 # Fit Model
 ```{r, eval = T}
 # Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL.stan"))
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_noK.stan"))
 
 
 # Fit model
@@ -62,13 +62,13 @@ orl_fit = sampling(orl_model,
 
 
 #save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL", "Joint_ORL_fit.rds"))
+saveRDS(orl_fit, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_noK", "Joint_ORL_noK_fit.rds"))
 ```
 
 
 
 ```{r}
-orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL", "Joint_ORL_fit.rds"))
+orl_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_noK", "Joint_ORL_noK_fit.rds"))
 
 iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```
@@ -80,14 +80,14 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 ```{r, eval = T}
 orl_posteriors <- extract(orl_fit)
 saveRDS(orl_posteriors, here("1_IGT_PP", "Data", "2_Fitted", 
-                             "Joint_ORL", "Joint_ORL_posteriors.rds"))
+                             "Joint_ORL_noK", "Joint_ORL_noK_posteriors.rds"))
 ```
 
 
 
 ```{r}
 orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
-                              "Joint_ORL", "Joint_ORL_posteriors.rds"))
+                              "Joint_ORL_noK", "Joint_ORL_noK_posteriors.rds"))
 
 focal_parameters <- c(
   "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
@@ -107,14 +107,14 @@ person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TR
 rhats = rhat(orl_fit, pars = focal_parameters) %>%
   data.frame() %>% mutate(parameter = rownames(.))
 saveRDS(rhats, here("1_IGT_PP", "Data", "2_Fitted", 
-                    "Joint_ORL", "Joint_ORL_rhats.rds"))
+                    "Joint_ORL_noK", "Joint_ORL_noK_rhats.rds"))
 ```
 
 
 
 ```{r, eval = T}
 rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
-                     "Joint_ORL", "Joint_ORL_rhats.rds"))
+                     "Joint_ORL_noK", "Joint_ORL_noK_rhats.rds"))
 ```
 
 
@@ -122,7 +122,7 @@ rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted",
 ## Traceplots
 ```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", 
-          "Joint_ORL", "Joint_ORL_group_traceplots.tiff"),
+          "Joint_ORL_noK", "Joint_ORL_noK_group_traceplots.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   traceplot(
     orl_fit,
@@ -133,7 +133,7 @@ dev.off()
 
 for(i in person_parameters){
   tiff(here("1_IGT_PP", "Figs_Tables", 
-            "Joint_ORL", "Joint_ORL_", i, "_traceplots.tiff", sep = ""),
+            "Joint_ORL_noK", "Joint_ORL_noK_", i, "_traceplots.tiff", sep = ""),
        width = 35, height = 25, units = "cm", res = 300)
     traceplot(orl_fit,
               pars = i
@@ -149,7 +149,7 @@ for(i in person_parameters){
 ## Means +/- PI
 ```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", 
-          "Joint_ORL", "Joint_ORL_posterior_means.tiff"),
+          "Joint_ORL_noK", "Joint_ORL_noK_posterior_means.tiff"),
      width = 35, height = 25, units = "cm", res = 300)
   plot(orl_fit, pars = group_parameters)
 dev.off()
@@ -160,7 +160,7 @@ dev.off()
 ## Posterior Distributions
 ```{r}
 tiff(here("1_IGT_PP", "Figs_Tables", 
-          "Joint_ORL", "Joint_ORL_posterior_distributions.tiff"),
+          "Joint_ORL_noK", "Joint_ORL_noK_posterior_distributions.tiff"),
      width = 30, height = 20, units = "cm", res = 300)
   par(mfrow = c(5, 5))
   # Mus & Sigmas

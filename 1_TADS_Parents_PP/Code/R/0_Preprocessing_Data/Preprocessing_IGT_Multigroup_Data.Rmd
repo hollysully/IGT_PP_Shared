@@ -147,10 +147,15 @@ create_data = function(data){
 ## Save Data
 ```{r, eval = T}
 orl_stan_data = create_data(mutate(combined_data,
-                                   group = SU))
+                                   # group = SU
+                                   # group = anxiety
+                                   group = depression
+                                   ))
 
-sample = "T1_parent_DD" # group = drug_drink
-sample = "T1_parent_SU" # group = SU
+# sample = "T1_parent_DD" # group = drug_drink
+# sample = "T1_parent_SU" # group = SU
+# sample = "T1_parent_Anx" # group = anxiety
+sample = "T1_parent_Dep" # group = depression
 
 saveRDS(orl_stan_data, here("1_TADS_Parents_PP", "Data", "1_Stan",
                             paste(sample, "IGT_stan_data.RDS", sep = "_")))

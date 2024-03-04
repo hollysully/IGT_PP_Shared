@@ -33,8 +33,10 @@ source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 ## Load Data & Set Groups
 ```{r}
 group1 = "Comparison"
-group2 = "Drug"
-sample = "T1_parent_DD"
+group2 = "Dep"
+# sample = "T1_parent_SU"
+# sample = "T1_parent_Anx"
+sample = "T1_parent_Dep"
 model_name = "Multigroup_ORL"
 
 stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan", 
@@ -45,9 +47,9 @@ stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
 
 # -------------------------------------------
 # Check Model
-```{r, eval = F}
+```{r, eval = T}
 model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan",
-                                paste(model, ".stan", sep = "_")), compile = F)
+                                paste0(model_name, ".stan", sep = "")), compile = F)
 
 model_code$check_syntax(quiet = T)
 ```
@@ -55,7 +57,7 @@ model_code$check_syntax(quiet = T)
 
 
 # Fit Model
-```{r, eval = F}
+```{r, eval = T}
 # Compile model
 orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
                             paste0(model_name, ".stan")))
@@ -64,7 +66,7 @@ orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
 # Fit model
 orl_fit = sampling(orl_model, 
                    data   = stan_data,
-                   iter   = 2000, 
+                   iter   = 5000, 
                    warmup = 1000, 
                    chains = 4, 
                    cores  = 4,
@@ -91,7 +93,7 @@ iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
 
 # -------------------------------------------
 # Model Diagnostics
-```{r, eval = F}
+```{r, eval = T}
 orl_posteriors <- extract(orl_fit)
 saveRDS(orl_posteriors, here("1_TADS_Parents_PP", "Data", "2_Fitted",
                              model_name,
@@ -118,7 +120,7 @@ person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
 
 
 ## Rhat
-```{r, eval = F}
+```{r, eval = T}
 rhats = rhat(orl_fit, pars = focal_parameters) %>%
   data.frame() %>% mutate(parameter = rownames(.))
 saveRDS(rhats, here("1_TADS_Parents_PP", "Data", "2_Fitted",
@@ -128,7 +130,7 @@ saveRDS(rhats, here("1_TADS_Parents_PP", "Data", "2_Fitted",
 
 
 
-```{r, eval = F}
+```{r, eval = T}
 rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
                      model_name,
                      paste(sample, "rhats.rds", sep = "_")))
@@ -137,7 +139,7 @@ rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
 
 
 ## Traceplots
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name,
           paste(sample, "group_traceplots.tiff", sep = "_")),
