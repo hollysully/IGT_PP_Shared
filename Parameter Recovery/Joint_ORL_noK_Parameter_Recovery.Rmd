@@ -32,8 +32,8 @@ library(MASS)
 ## Load Outcomes & Sim Type
 ```{r}
 outcomes = readRDS(here("Simulations","outcomes.RDS"))
-sim_type = "TR_Joint_ORL"
-parameter_names = c("Arew", "Apun", "K", "betaF", "betaP")
+sim_type = "TR_Joint_ORL_noK"
+parameter_names = c("Arew", "Apun", "betaF", "betaB")
 ```
 
 
@@ -60,20 +60,16 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
                     parameter == "Arew" & session == s & ID == i)$estimate
       Apun = filter(parameter_values,
                     parameter == "Apun" & session == s & ID == i)$estimate
-      K = filter(parameter_values,
-                 parameter == "K" & session == s & ID == i)$estimate
       betaF = filter(parameter_values,
                      parameter == "betaF" & session == s & ID == i)$estimate
-      betaP = filter(parameter_values,
-                     parameter == "betaP" & session == s & ID == i)$estimate
+      betaB = filter(parameter_values,
+                     parameter == "betaB" & session == s & ID == i)$estimate
       missing = filter(parameter_values,
                        parameter == "Arew" & session == s & ID == i)$missing
       
       utility = rep(0,4)
       ev = rep(0,4)
       ef = rep(0,4)
-      pers = rep(0,4)
-      K_tr = 3^(K)-1
       
       ef_chosen = 0
       PEval = 0
@@ -85,6 +81,8 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
         outcome = outcomes$outcome[outcomes$trial == t]
         sign = outcomes$sign[outcomes$trial == t]
         card = outcomes$card[outcomes$trial == t]
+        
+        utility = ev + ef * betaF + betaB
         prob = softmax(c(utility[card], 0))
         curr_choice = sample(c(1,2), 1, prob = prob)
         
@@ -103,11 +101,8 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
             ef[card] = ef_chosen + Apun * PEfreq
             ev[card] = ev[card] + Apun * PEval
           }
-          pers[card] = 1;
         }
-        pers = pers / (1 + K_tr)
         
-        utility = ev + ef * betaF + pers * betaP
         card_trial[card] = card_trial[card] + 1
         if(missing){
           outcome = choice = -1
@@ -137,7 +132,7 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
 ## Load Posteriors
 ```{r, eval = F}
 TR_orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
-                                 "Joint_ORL", "Joint_ORL_posteriors.rds"))
+                                 "Joint_ORL_noK", "Joint_ORL_noK_posteriors.rds"))
 ```
 
 
@@ -150,7 +145,7 @@ colnames(mu_p) = parameter_names
 vcovs = list() # covariance matrix for simulation
 group_parameters = data.frame()
 
-for(p in 1:5){
+for(p in 1:4){
   # setup covariance matrix
   R = apply(TR_orl_posteriors[[paste0("R_", parameter_names[p])]], c(2, 3), mean)
   SD = diag(apply(TR_orl_posteriors[[paste0("sigma_", parameter_names[p])]], 2, mean))
@@ -189,12 +184,9 @@ parameters = list(ID = 1:49,
                   missing = missingness)
 for(p in parameter_names){
   parameters[[p]] = mvrnorm(N, mu = mu_p[, p], Sigma = vcovs[[p]])
-  if(p %in% c("Arew", "Apun", "K")){
+  if(p %in% c("Arew", "Apun")){
     parameters[[paste0(p, "_UT")]] = parameters[[p]]
     parameters[[p]] = pnorm(parameters[[p]])
-    if(p == "K"){
-    parameters[[p]] = parameters[[p]]*5
-    }
   }
 }
 saveRDS(parameters, here("Parameter Recovery", 
@@ -274,7 +266,7 @@ stan_data = list(
 # Fit Model
 ```{r, eval = F}
 # Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL.stan"))
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_noK.stan"))
 
 
 # Fit model
@@ -295,7 +287,7 @@ saveRDS(sim_orl_fit, here("Parameter Recovery",
 
 
 
-```{r, eval = F}
+```{r}
 sim_orl_fit = readRDS(here("Parameter Recovery",
                            paste0(sim_type, "_sim_fit.RDS")))
 ```
@@ -327,7 +319,7 @@ group_parameters = readRDS(here("Parameter Recovery",
                                 paste0(sim_type, "_sim_group_parameters.RDS")))
 
 
-for(p in 1:5){
+for(p in 1:4){
   group_parameters = data.frame(parameter = paste0("sim_", parameter_names[p]),
                                 session1_mu = mean(sim_orl_posteriors$mu_p[,1,p]),
                                 session2_mu = mean(sim_orl_posteriors$mu_p[,2,p]),
@@ -347,7 +339,7 @@ for(p in 1:5){
 ## Plot Posterior Means
 ```{r}
 mus = list()
-for(p in 1:5){
+for(p in 1:4){
   mus[[parameter_names[p]]] = group_parameters %>% 
     dplyr::select(-starts_with("R")) %>%
     filter(str_detect(parameter, parameter_names[p])) %>% 
@@ -382,10 +374,9 @@ tiff(here("Parameter Recovery",
 
   egg::ggarrange(mus$Arew, mus$R_Arew, 
                  mus$Apun, mus$R_Apun, 
-                 mus$K, mus$R_K, 
                  mus$betaF, mus$R_betaF, 
-                 mus$betaP, mus$R_betaP,
-                 nrow = 5, widths = c(2, 1))
+                 mus$betaB, mus$R_betaB,
+                 nrow = 4, widths = c(2, 1))
 
 dev.off()
 ```
@@ -405,18 +396,14 @@ recovered_parameters =
                          sim_orl_posteriors$Apun_tilde[,1,],
              Apun_UT.2 = sim_orl_posteriors$mu_p[,2,2] +
                          sim_orl_posteriors$Apun_tilde[,2,],
-             K_UT.1 = sim_orl_posteriors$mu_p[,1,3] +
-                      sim_orl_posteriors$K_tilde[,1,],
-             K_UT.2 = sim_orl_posteriors$mu_p[,2,3] +
-                      sim_orl_posteriors$K_tilde[,2,],
-             betaF.1 = sim_orl_posteriors$mu_p[,1,4] +
+             betaF.1 = sim_orl_posteriors$mu_p[,1,3] +
                        sim_orl_posteriors$betaF_tilde[,1,],
-             betaF.2 = sim_orl_posteriors$mu_p[,2,4] +
+             betaF.2 = sim_orl_posteriors$mu_p[,2,3] +
                        sim_orl_posteriors$betaF_tilde[,2,],
-             betaP.1 = sim_orl_posteriors$mu_p[,1,5] +
-                       sim_orl_posteriors$betaP_tilde[,1,],
-             betaP.2 = sim_orl_posteriors$mu_p[,2,5] +
-                       sim_orl_posteriors$betaP_tilde[,2,]) %>% 
+             betaB.1 = sim_orl_posteriors$mu_p[,1,4] +
+                       sim_orl_posteriors$betaB_tilde[,1,],
+             betaB.2 = sim_orl_posteriors$mu_p[,2,4] +
+                       sim_orl_posteriors$betaB_tilde[,2,]) %>% 
   pivot_longer(everything(),
                names_to = c("parameter", "session", "ID"),
                values_to = "recovered",
@@ -430,7 +417,7 @@ actual_parameters = data.frame(readRDS(here("Parameter Recovery",
   pivot_longer(c(everything(), -ID, -missing), 
                names_to = c("parameter", "session"), values_to = "actual",
                names_sep = "\\.") %>% 
-  filter(!(parameter %in% c("Arew", "Apun", "K"))) %>% 
+  filter(!(parameter %in% c("Arew", "Apun"))) %>% 
   mutate(missing = case_when(session == 1 ~ F, T ~ missing))
 
 combined_parameters = left_join(recovered_parameters, actual_parameters)
@@ -442,7 +429,7 @@ combined_parameters = left_join(recovered_parameters, actual_parameters)
 ```{r}
 PR_correlations = data.frame()
 
-for(p in c("Arew_UT", "Apun_UT", "K_UT", "betaF", "betaP")){
+for(p in c("Arew_UT", "Apun_UT", "betaF", "betaB")){
   for(s in 1:2){
     cur_cor = cor.test(~actual + recovered,
                        data = filter(combined_parameters,

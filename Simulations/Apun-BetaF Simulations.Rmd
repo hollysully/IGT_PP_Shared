@@ -79,7 +79,7 @@ simulate_orl = function(parameter_mus, condition,
       
       if(curr_choice==1) {
         PEval = outcome - ev[card]
-        PEfreq= -1*sign - ef[card]
+        PEfreq= sign - ef[card]
         PEfreq_fic = -1*sign/3 - ef;
         ef_chosen = ef[card];
         
