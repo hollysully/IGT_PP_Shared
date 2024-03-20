@@ -32,7 +32,7 @@ library(MASS)
 ## Load Outcomes & Sim Type
 ```{r}
 outcomes = readRDS(here("Simulations","outcomes.RDS"))
-sim_type = "TR_Joint_ORL_noK"
+sim_type = "TR_Joint_ORL_Bias"
 parameter_names = c("Arew", "Apun", "betaF", "betaB")
 ```
 
@@ -132,7 +132,7 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
 ## Load Posteriors
 ```{r, eval = F}
 TR_orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
-                                 "Joint_ORL_noK", "Joint_ORL_noK_posteriors.rds"))
+                                 "Joint_ORL_Bias", "Joint_ORL_Bias_posteriors.rds"))
 ```
 
 
@@ -266,7 +266,7 @@ stan_data = list(
 # Fit Model
 ```{r, eval = F}
 # Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_noK.stan"))
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_Bias.stan"))
 
 
 # Fit model
