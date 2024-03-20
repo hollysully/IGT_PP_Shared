@@ -65,6 +65,7 @@ orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
   
 
 samples = c("T1_parent_non_diag", "T1_parent_SU", "T1_parent_Dep", "T1_parent_Anx")
+samples = "T1_parent_non_diag"
 
 for(sample in samples) {
   # -----------------------------------------------------------------------------------
@@ -76,7 +77,7 @@ for(sample in samples) {
   # Fit model
   orl_fit = sampling(orl_model, 
                      data   = stan_data, 
-                     iter   = 2000, 
+                     iter   = 5000, 
                      warmup = 1000, 
                      chains = 4, 
                      cores  = 4,

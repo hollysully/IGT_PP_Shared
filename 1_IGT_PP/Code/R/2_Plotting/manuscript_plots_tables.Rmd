@@ -184,9 +184,42 @@ run_cor = function(cur_data, s, cor_type, x_nam, y_nam){
 
 
 # ---------------------------------------
+# Self-Report Descriptive Statistics
+```{r}
+self_report %>% 
+  group_by(session, scale) %>% 
+  summarise(avg = mean(score, na.rm = T), std = sd(score, na.rm = T)) %>% 
+  mutate(m_std = paste0(format(round(avg, digits = 2), nsmall = 2),
+                        " (", format(round(std, digits = 2), nsmall = 2), ")")) %>%
+  select(session, x = scale, -avg, -std, m_std) %>% 
+  pivot_wider(names_from = "session", values_from = c("m_std"), names_prefix = "Session ") %>% 
+  mutate(SR_sort = case_when(x == "bastot" ~ 1, x == "basdrive" ~ 2, x == "basfunsk" ~ 3, 
+                             x == "basrewres" ~ 4, x == "bis" ~ 5, x == "panas_pa" ~ 6, 
+                             x == "panas_na" ~ 7, x == "masqGDA" ~ 8, x == "masqAA" ~ 9, 
+                             x == "masqGDD" ~ 10, x == "masqAD" ~ 11, x == "shaps_tot" ~ 12,
+                             x == "prdep_tot" ~ 13)) %>% 
+  left_join(data.frame(x = c(# Session 1 only
+                              "prdep_tot", "masqGDA", "masqAA", "masqGDD",
+                              "masqAD",                              # Both Sessions
+                              "bastot", "basdrive", "basfunsk", "basrewres",
+                              "bis", "panas_pa", "panas_na", "shaps_tot"),
+                    n_items = c(28, 11, 17, 12, NA, 13, 4, 4, 5, 7, 10, 10, 14),
+                    min_item_score = c(0, 1, 1, 1, NA, 1, 1, 1, 1, 1, 1, 1, 0),
+                    max_item_score = c(4, 5, 5, 5, NA, 4, 4, 4, 4, 4, 5, 5, 1),
+                    n_sessions = c(1, 1, 1, 1, NA, 2, 2, 2, 2, 2, 2, 2, 2)) %>% 
+  mutate(min = n_items * min_item_score,
+         max = n_items * max_item_score,
+         range = paste0("[", min, ",", max, "]"))) %>% 
+  select(x, range, `Session 1`, `Session 2`, SR_sort) %>% 
+  write.csv(here("1_IGT_PP", "Data", "0_Raw", "Self Report Descriptives.csv"))
+```
+
+
+
+# ---------------------------------------
 # Good/Bad Play Proportions
 ## Prep Data
-```{r, eval = T}
+```{r}
 # Recode choice data
 choices = ifelse(stan_data$choice == 2, 0, ifelse(stan_data$choice == 1, 1, NA))
 
@@ -265,7 +298,7 @@ boot.cor.bca(x = apply(good_proportions, 1, mean, na.rm = T),
 
 
 ## Absolute Reliability Plots
-```{r, eval = T}
+```{r, eval = F}
 prop_abs_plot = 
   choice_proportions %>% 
     group_by(type) %>% 
@@ -318,7 +351,7 @@ dev.off()
 
 
 ## Relative Reliability Plots
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "Summary_Rel_Reliability.tiff"),
      width = 7, height = 3.5, units = "cm", res = 300)
@@ -360,7 +393,8 @@ dev.off()
 
 # ---------------------------------------
 # PPC Plot
-```{r, eval = T}
+## Session x Deck
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "PPC.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
@@ -412,6 +446,75 @@ dev.off()
 
 
 
+## Session x Obs/Pred
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "PPC Within-Deck Changes.tiff"),
+     width = 7, height = 7, units = "cm", res = 300)
+
+  # simplify data
+  trial_choice_proportions %>% 
+    group_by(trial, deck, session) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    pivot_longer(c("observed", "mu"), names_to = "type", values_to = "estimate") %>% 
+    mutate(lower50 = case_when(type == "mu" ~ lower50),
+           upper50 = case_when(type == "mu" ~ upper50),
+           lower95 = case_when(type == "mu" ~ lower95),
+           upper95 = case_when(type == "mu" ~ upper95),
+           type = case_when(type == "observed" ~ "Observed", type == "mu" ~ "Predicted")) %>% 
+    group_by(deck, session, type) %>% 
+    arrange(trial) %>% 
+    mutate(running_estimate = rollapply(estimate, width = 5, FUN = mean,
+                                        na.rm = TRUE, fill = NA, partial = T),
+           lower50 = rollapply(lower50, width = 5, FUN = mean,
+                               na.rm = TRUE, fill = NA, partial = T),
+           upper50 = rollapply(upper50, width = 5, FUN = mean,
+                               na.rm = TRUE, fill = NA, partial = T),
+           lower95 = rollapply(lower95, width = 5, FUN = mean,
+                               na.rm = TRUE, fill = NA, partial = T),
+           upper95 = rollapply(upper95, width = 5, FUN = mean,
+                               na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = trial, color = deck, fill = deck)) +
+    # geoms
+    geom_ribbon(aes(ymin = lower50, ymax = upper50), colour = "transparent",
+                linewidth = .35, alpha = .25) +
+    geom_point(aes(y = estimate, group = trial), size = .75) +
+    geom_line(aes(y = running_estimate)) +
+    # scales
+    # regular axis
+    # scale_y_continuous(limits = c(0,1),
+    #                    breaks = seq(0,1,.25)) +
+    # shortened axis
+    scale_y_continuous(limits = c(.25,1),
+                       breaks = seq(.25,1,.25)) +
+    scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45")) +
+    scale_fill_manual(values = c("black", "dodgerblue3", "orange2", "gray45")) +
+    # theme
+    labs(x = "Trial", y = "Proportion Play") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          legend.title = element_blank(),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.position = c(.75,.61), 
+          legend.spacing.x = unit(0, 'cm'),
+          legend.spacing.y = unit(0, 'cm'),
+          legend.text = element_text(size = 8),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(-.5,"lines"),
+          legend.key.size = unit(.25, "cm"),
+          panel.spacing.y = unit(0,"lines")) +
+    guides(color = guide_legend(override.aes = list(size = 1.25))) +
+    facet_rep_grid(session~type,
+                   labeller = labeller(session = c("1" = "Session 1", "2" = "Session 2")))+
+    guides(color = guide_legend(nrow = 2, byrow = TRUE))
+dev.off()
+```
+
+
+
 # ---------------------------------------
 # Ind-Person PPC Plot
 ## Calculations
@@ -425,7 +528,7 @@ size = 6
 
 
 
-```{r, eval = T}
+```{r, eval = F}
 ind_choice_proportions = data.frame()
 
 for(i in 1:N){
@@ -469,7 +572,7 @@ rm(list = c("N", "S", "C", "Trials", "size"))
 
 
 ## Plot 2050 & 2051
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "Individual_PPCs.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
@@ -542,7 +645,7 @@ dev.off()
 
 
 ## Plot 2050
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "2050_PPCs.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
@@ -595,7 +698,7 @@ dev.off()
 
 
 ## Plot 2051
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "2051_PPCs.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
@@ -648,7 +751,7 @@ dev.off()
 
 
 ## Plot All
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "ALL_Individual_PPCs.tiff"),
      width = 15, height = 7*25, units = "cm", res = 300)
@@ -726,7 +829,7 @@ dev.off()
 # ---------------------------------------
 # ORL Parameters
 ## Absolute Reliability
-```{r, eval = T}
+```{r, eval = F}
 orl_abs_data = bind_rows(data.frame(parameter = "Arew", session = orl_posteriors$mu_Arew),
                          data.frame(parameter = "Apun", session = orl_posteriors$mu_Apun),
                          data.frame(parameter = "betaF", session = orl_posteriors$mu_betaF),
@@ -760,16 +863,21 @@ orl_abs_scales =
          scale_x_continuous(limits = c(-.3, .3), expand = expansion(add = c(0, 0)),
                             breaks = seq(-.3, .3, .3), labels = c("-.3", "0", ".3")),
        
+       #################### updated to compare with Arew ####################
        parameter == "Apun" & session != "diff" ~
-         scale_x_continuous(limits = c(.05, .15), expand = expansion(add = c(0, 0)),
-                            breaks = seq(.05, .15, .05), labels = c(".05", ".1", ".15")),
+         scale_x_continuous(limits = c(0, .3), expand = expansion(add = c(0, 0)),
+                            breaks = seq(0, .3, .15), labels = c("0", ".15", ".3")),
+       #################### Old breaks ####################
+       # parameter == "Apun" & session != "diff" ~
+       #   scale_x_continuous(limits = c(.05, .15), expand = expansion(add = c(0, 0)),
+       #                      breaks = seq(.05, .15, .05), labels = c(".05", ".1", ".15")),
        parameter == "Apun" & session == "diff" ~
          scale_x_continuous(limits = c(-.05, .05), expand = expansion(add = c(0, 0)),
                             breaks = seq(-.05, .05, .05), labels = c("-.05", "0", ".05")),
        
        parameter == "betaF" & session != "diff" ~
          scale_x_continuous(limits = c(0, 6), expand = expansion(add = c(0, 0)),
-                            breaks = seq(0, 6, 3), labels = c(".05", ".1", ".15")),
+                            breaks = seq(0, 6, 3), labels = c("0", "3", "6")),
        parameter == "betaF" & session == "diff" ~
          scale_x_continuous(limits = c(-3, 3), expand = expansion(add = c(0, 0)),
                             breaks = seq(-3, 3, 3), labels = c("-3", "0", "3")),
@@ -791,7 +899,7 @@ orl_abs_scales =
 
 
 
-```{r, eval = T}
+```{r, eval = F}
 orl_abs_plot = orl_abs_data %>% 
   ggplot(aes(x = estimate)) +
     # geoms
@@ -827,7 +935,7 @@ orl_abs_plot = orl_abs_data %>%
 
 
 
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "ORL_Abs_Reliability.tiff"),
      width = 7, height = 10, units = "cm", res = 300)
@@ -854,7 +962,7 @@ dev.off()
 
 
 ## Relative Reliability
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "ORL_Rel_Reliability.tiff"),
      width = 14.6, height = 4, units = "cm", res = 300)
@@ -923,19 +1031,6 @@ dev.off()
 
 # ---------------------------------------
 # Prop/ORL/Self-Report Correlations
-## Prep Data
-```{r}
-IDs = matrix(data = NA, nrow = 49, ncol = 2, dimnames = list(NULL, c("subjID", "id")))
-temp_good = matrix(data = NA, nrow = 49, ncol = 1)
-temp_bad = matrix(data = NA, nrow = 49, ncol = 1)
-
-for(i in 1:49){
-  temp_good[i] = mean(choices[i,,][stan_data$card[i,,] == 3 | stan_data$card[i,,] == 4], na.rm = T)
-  temp_bad[i] = mean(choices[i,,][stan_data$card[i,,] == 1 | stan_data$card[i,,] == 2], na.rm = T)
-}
-```
-
-
 ```{r}
 ch_prop_sess = choice_proportions %>%
   pivot_wider(names_from = "type", values_from = "choice_proportion") %>% 
@@ -1090,7 +1185,7 @@ correlations %>%
 # ---------------------------------------
 # Simulate ORL Parameters
 ## Prep Inputs for Simulations
-```{r, eval = T}
+```{r, eval = F}
 # PREP TASK-RELATED INPUTS
 cards = data.frame(card = stan_data$card[1,,1]) %>%
   mutate(trial = 1:n()) %>% 
@@ -1221,7 +1316,7 @@ K_simulations = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL",
 
 
 ## Arew/BetaP Simulation
-```{r, eval = T}
+```{r, eval = F}
 labs = c("Session 1",
          expression(paste("\u0394",italic(A),"+",sep="")),
          expression(paste("\u0394","\u03B2",italic(f),sep="")),
@@ -1273,7 +1368,7 @@ dev.off()
 
 
 ## Arew-Only Simulation
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "Arew_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1319,7 +1414,7 @@ dev.off()
 
 
 ## Apun-Only Simulation
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "Apun_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1365,7 +1460,7 @@ dev.off()
 
 
 ## BetaP-Only Simulation
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "betaP_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1411,7 +1506,7 @@ dev.off()
 
 
 ## BetaF-Only Simulation
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "betaF_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1457,7 +1552,7 @@ dev.off()
 
 
 ## K-Only Simulation
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "K_Simulations.tiff"),
      width = 6.5, height = 3, units = "in", res = 300)
@@ -1503,61 +1598,6 @@ dev.off()
 
 
 # ---------------------------------------
-# Correlations Between Changes
-* These are correlations between changes in parameters
-```{r, eval = T}
-choice_prop_wide = pivot_wider(choice_proportions,
-                               values_from = "choice_proportion",
-                               names_from = "session",
-                               names_prefix = "session_") %>% 
-  mutate(diff = session_2 - session_1) %>% 
-  filter(type == "Good")
-
-ind_orl_diffs = bind_rows(data.frame(parameter = "Arew", estimate = orl_posteriors$Arew, iteration = 1:16000),
-                          data.frame(parameter = "betaP", estimate = orl_posteriors$betaP, iteration = 1:16000)) %>% 
-  pivot_longer(starts_with("estimate"), names_to = c("id", "session"), values_to = "estimate",
-               names_sep = "(\\.)", names_prefix = "estimate.",
-               names_transform = list(id = as.numeric)) %>% 
-  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>% 
-  mutate(diff = session_2 - session_1) %>% 
-  group_by(parameter, id) %>% 
-  reframe(mu_diff = mean(diff))
-
-choice_orl = left_join(choice_prop_wide, ind_orl_diffs)
-choice_Arew = filter(choice_orl, parameter == "Arew")
-choice_betaP = filter(choice_orl, parameter == "betaP")
-cor.test(choice_Arew$diff, choice_Arew$mu_diff)
-cor.test(choice_betaP$diff, choice_betaP$mu_diff)
-```
-
-
-
-```{r, eval = T}
-T1_net = apply((choices*outcomes)[,,1], 1, sum)
-T2_net = apply((choices*outcomes)[,,2], 1, sum)
-
-t.test(T1_net, T2_net, paired = T)
-
-sum(T1_net)
-sum(T2_net,na.rm = T)
-
-negative_outcomes = ifelse(choices*outcomes < 0, 1, 0)
-positive_outcomes = ifelse(choices*outcomes >= 0, 1, 0)
-
-T1_negative_outcomes = apply(negative_outcomes[,,1], 1, sum)
-T2_negative_outcomes = apply(negative_outcomes[,,2], 1, sum)
-
-t.test(T1_negative_outcomes, T2_negative_outcomes, paired = T)
-
-T1_positive_outcomes = apply(positive_outcomes[,,1], 1, sum)
-T2_positive_outcomes = apply(positive_outcomes[,,2], 1, sum)
-
-t.test(T1_positive_outcomes, T2_positive_outcomes, paired = T)
-```
-
-
-
-# ---------------------------------------
 # Correlation with Ratios
 ```{r}
 orl_ratio = data.frame(ID = stan_data$subjIDs,
@@ -1591,15 +1631,15 @@ orlratio_correlations = orlratio_correlations %>%
 
 # ---------------------------------------
 # No Memory Decks Results
-```{r, eval = T}
-nom_orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_noK",
-                                  "Joint_ORL_noK_posteriors.rds"))
+```{r, eval = F}
+nom_orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+                                  "Joint_ORL_Bias_posteriors.rds"))
 ```
 
 
 
 ## Absolute Reliability
-```{r, eval = T}
+```{r, eval = F}
 nom_orl_abs_data = bind_rows(data.frame(parameter = "Arew", session = nom_orl_posteriors$mu_Arew),
                          data.frame(parameter = "Apun", session = nom_orl_posteriors$mu_Apun),
                          data.frame(parameter = "betaF", session = nom_orl_posteriors$mu_betaF),
@@ -1625,37 +1665,47 @@ nom_orl_abs_data = bind_rows(data.frame(parameter = "Arew", session = nom_orl_po
 
 nom_orl_abs_scales =
   list(parameter == "Arew" & session != "diff" ~
-         scale_x_continuous(limits = c(0, .3), expand = expansion(add = c(0, 0)),
-                            breaks = seq(0, .3, .15), labels = c("0", ".15", ".3")),
+         # scale_x_continuous(limits = c(0, .3), expand = expansion(add = c(0, 0)),
+         #                    breaks = seq(0, .3, .15), labels = c("0", ".15", ".3")),
+         scale_x_continuous(limits = c(.05, .25), expand = expansion(add = c(0, 0)),
+                            breaks = seq(.05, .25, .1), labels = c(".05", ".15", ".25")),
        parameter == "Arew" & session == "diff" ~
-         scale_x_continuous(limits = c(-.3, .3), expand = expansion(add = c(0, 0)),
-                            breaks = seq(-.3, .3, .3), labels = c("-.3", "0", ".3")),
+         # scale_x_continuous(limits = c(-.3, .3), expand = expansion(add = c(0, 0)),
+         #                    breaks = seq(-.3, .3, .3), labels = c("-.3", "0", ".3")),
+         scale_x_continuous(limits = c(-.2, .2), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-.2, .2, .2), labels = c("-.2", "0", ".2")),
        
        parameter == "Apun" & session != "diff" ~
-         scale_x_continuous(limits = c(.05, .15), expand = expansion(add = c(0, 0)),
-                            breaks = seq(.05, .15, .05), labels = c(".05", ".1", ".15")),
+         # scale_x_continuous(limits = c(0, .3), expand = expansion(add = c(0, 0)),
+         #                    breaks = seq(0, .3, .15), labels = c("0", ".15", ".3")),
+         scale_x_continuous(limits = c(.05, .25), expand = expansion(add = c(0, 0)),
+                            breaks = seq(.05, .25, .1), labels = c(".05", ".15", ".25")),
        parameter == "Apun" & session == "diff" ~
-         scale_x_continuous(limits = c(-.05, .05), expand = expansion(add = c(0, 0)),
-                            breaks = seq(-.05, .05, .05), labels = c("-.05", "0", ".05")),
+         # scale_x_continuous(limits = c(-.3, .3), expand = expansion(add = c(0, 0)),
+         #                    breaks = seq(-.3, .3, .3), labels = c("-.3", "0", ".3")),
+         scale_x_continuous(limits = c(-.2, .2), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-.2, .2, .2), labels = c("-.2", "0", ".2")),
        
        parameter == "betaF" & session != "diff" ~
-         scale_x_continuous(limits = c(0, 6), expand = expansion(add = c(0, 0)),
-                            breaks = seq(0, 6, 3), labels = c(".05", ".1", ".15")),
+         # scale_x_continuous(limits = c(0, 6), expand = expansion(add = c(0, 0)),
+         #                    breaks = seq(0, 6, 3), labels = c("0", "3", "6")),
+         scale_x_continuous(limits = c(-1, 7), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-1, 7, 4), labels = c("-1", "3", "7")),
        parameter == "betaF" & session == "diff" ~
-         scale_x_continuous(limits = c(-3, 3), expand = expansion(add = c(0, 0)),
-                            breaks = seq(-3, 3, 3), labels = c("-3", "0", "3")),
+         scale_x_continuous(limits = c(-4, 4), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-4, 4, 4), labels = c("-4", "0", "4")),
        
        parameter == "betaB" & session != "diff" ~
-         scale_x_continuous(limits = c(0, 3), expand = expansion(add = c(0, 0)),
-                            breaks = seq(0, 3, 1.5), labels = c("0", "1.5", "3")),
+         scale_x_continuous(limits = c(0, 2.5), expand = expansion(add = c(0, 0)),
+                            breaks = seq(0, 2.5, 1.25), labels = c("0", "1.25", "2.5")),
        parameter == "betaB" & session == "diff" ~
-         scale_x_continuous(limits = c(-2, 2), expand = expansion(add = c(0, 0)),
-                            breaks = seq(-2, 2, 2), labels = c("-2", "0", "2")))
+         scale_x_continuous(limits = c(-1.5, 1.5), expand = expansion(add = c(0, 0)),
+                            breaks = seq(-1.5, 1.5, 1.5), labels = c("-1.5", "0", "1.5")))
 ```
 
 
 
-```{r, eval = T}
+```{r, eval = F}
 nom_orl_abs_plot = nom_orl_abs_data %>% 
   ggplot(aes(x = estimate)) +
     # geoms
@@ -1687,14 +1737,11 @@ nom_orl_abs_plot = nom_orl_abs_data %>%
     facet_rep_wrap(parameter~session, scales = "free",
                    nrow = 5, ncol = 3) +
     facetted_pos_scales(x = nom_orl_abs_scales)
-```
 
 
-
-```{r, eval = T}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "nom_ORL_Abs_Reliability.tiff"),
-     width = 7, height = 10, units = "cm", res = 300)
+     width = 7, height = 8, units = "cm", res = 300)
 
   grid.newpage()
   pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
@@ -1717,7 +1764,7 @@ dev.off()
 
 
 ## Relative Reliability
-```{r, eval = T}
+```{r, eval = F}
 print("R_Arew")
 apply(nom_orl_posteriors$R_Arew, c(2,3), mean)
 apply(nom_orl_posteriors$R_Arew, c(2,3), HDIofMCMC)
@@ -1734,7 +1781,7 @@ apply(nom_orl_posteriors$R_betaP, c(2,3), HDIofMCMC)
 
 
 
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
           "nom_ORL_Rel_Reliability.tiff"),
      width = 14.6, height = 4, units = "cm", res = 300)
@@ -1742,7 +1789,7 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
   bind_rows(data.frame(parameter = "Arew", r = nom_orl_posteriors$R_Arew[,2,1]),
             data.frame(parameter = "Apun", r = nom_orl_posteriors$R_Apun[,2,1]),
             data.frame(parameter = "betaF", r = nom_orl_posteriors$R_betaF[,2,1]),
-            data.frame(parameter = "betaB", r = nom_orl_posteriors$R_betaP[,2,1])) %>% 
+            data.frame(parameter = "betaB", r = nom_orl_posteriors$R_betaB[,2,1])) %>% 
     mutate(parameter = factor(parameter,
                               levels = c("Arew", "Apun", "betaF", "betaB"),
                               labels = c(expression(paste(italic(A),"+",sep="")),
@@ -1752,19 +1799,22 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
     group_by(parameter) %>% 
     mutate(mu_r = mean(r), lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
            below_0 = paste0(round(mean(r<0)*100), "% < 0"), above_0 = paste0(round(mean(r>0)*100), "% > 0"),
+           estimate_lab = paste("r=", ifelse(sign(round(mu_r,2))==1," ","-"),
+                                stri_pad_right(str_remove(abs(round(mu_r,2)), "^0+"),
+                                               width = 3, pad = "0"),sep=""),
            height = max(density(r)$x)*.025) %>% 
     ggplot(aes(x = r)) +
       # geoms
+      geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                     linewidth = .1, bins = 50) +
       geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
                      linewidth = .1, bins = 50) +
       geom_text_npc(aes(npcx = "left", npcy = "top", label = below_0),
                     size = 2, vjust = -1.43) +
       geom_text_npc(aes(npcx = "right", npcy = "top", label = above_0),
                     size = 2, vjust = -1.43) +
-      # geom_text_npc(aes(npcx = "left", npcy = "top", label = below_0),
-      #               size = 2, hjust = -3, vjust = -1.43) +
-      # geom_text_npc(aes(npcx = "right", npcy = "top",
-      #                   label = rCI_lab), size = 2, vjust = -1.05) +
+      geom_text_npc(aes(npcx = "left", npcy = "bottom", label = estimate_lab),
+                    size = 2, hjust = .5) +
       geom_hline(yintercept = 0) +
       geom_vline(aes(xintercept = mu_r), color = "red2", linewidth = .4) +
       geom_errorbarh(aes(xmin = lower, xmax = upper,
@@ -1785,7 +1835,7 @@ tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
             axis.ticks.y = element_blank(),
             axis.line.y = element_blank(),
             plot.margin = unit(c(.1, .3, .1, .3), "cm"),
-            panel.spacing = unit(.25, "cm"),
+            panel.spacing = unit(.5, "cm"),
             strip.background = element_rect(fill = "transparent", colour = "transparent"),
             strip.text.x = element_text(size = 12, vjust = 1.5),
             strip.text.y = element_blank(),
@@ -1799,6 +1849,7 @@ dev.off()
 
 
 ## Self-Report Correlations
+### Prep Data
 ```{r}
 nom_orl_parameters = data.frame(ID = stan_data$subjIDs,
                                 Arew = apply(nom_orl_posteriors$Arew, c(2,3), mean),
@@ -1822,13 +1873,14 @@ nom_averages = self_report %>%
   group_by(ID, scale) %>% 
   reframe(score = mean(score, na.rm = T), session = 0) %>% 
   pivot_wider(names_from = "scale", values_from = "score") %>% 
-  left_join(nom_orl_parameters)
+  left_join(nom_orl_parameters) %>% left_join(ch_prop_sess)
 
-nom_combined = bind_rows(session1_session2, averages)
+nom_combined = bind_rows(nom_session1_session2, nom_averages)
 ```
 
 
 
+### Run Correlations
 ```{r}
 set.seed(20230320)
 
@@ -1854,10 +1906,10 @@ for(s in unique(nom_combined$session)){
 # RUN Play Proportion/ORL CORRELATIONS
 prop_nom_ORL_correlations = data.frame()
 
-for(s in unique(combined$session)){
+for(s in unique(nom_combined$session)){
   for(prop in c("Good", "Bad")){
     for(parameter in c("Arew", "Apun", "betaF", "betaB")){
-      cur_data = combined %>% 
+      cur_data = nom_combined %>% 
         filter(session == s) %>% 
         select(ID, all_of(prop), all_of(parameter)) %>% 
         na.omit()
@@ -1882,15 +1934,15 @@ nom_correlations = bind_rows(SR_nom_ORL_correlations,
                          T ~ ""))
 
 saveRDS(nom_correlations, here("1_IGT_PP", "Data", "2_Fitted",
-                           "Joint_ORL_noK", paste0("Joint_ORL_noK_correlations.rds")))
+                           "Joint_ORL_Bias", paste0("Joint_ORL_Bias_correlations.rds")))
 ```
 
 
 
-## Save Correlations
+### Save Correlations
 ```{r}
 nom_correlations = readRDS(here("1_IGT_PP", "Data", "2_Fitted",
-                            "Joint_ORL_noK", paste0("Joint_ORL_noK_correlations.rds")))
+                            "Joint_ORL_Bias", paste0("Joint_ORL_Bias_correlations.rds")))
 
 nom_correlations %>% 
   mutate(# MAKE NICE LABEL
@@ -1916,7 +1968,34 @@ nom_correlations %>%
                              x == "masqGDD" ~ 10, x == "masqAD" ~ 11, x == "shaps_tot" ~ 12,
                              x == "prdep_tot" ~ 13)) %>% 
   write.csv(here("1_IGT_PP", "Data", "2_Fitted",
-                 "Joint_ORL_noK", paste0("Joint_ORL_noK_correlations.csv")))
+                 "Joint_ORL_Bias", paste0("Joint_ORL_Bias_correlations.csv")))
+```
+
+
+
+## Arew-Apun Correlations
+```{r}
+nom_Arew_Apun = data.frame(iteration = 1:16000,
+                           Arew = nom_orl_posteriors$Arew,
+                           Apun = nom_orl_posteriors$Apun) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun")),
+               names_to = c("parameter", "participant", "session"),
+               values_to = "estimate", names_sep = "\\.",
+               names_transform = list(participant = as.numeric,
+                                      session = as.numeric)) %>% 
+  left_join(data.frame(participant = IDs[,2], ID = IDs[,1])) %>% 
+  pivot_wider(names_from = "parameter", values_from = "estimate")
+
+nom_Arew_Apun_correlations = data.frame()
+for(s in 1:2){
+  for(i in 1:max(nom_Arew_Apun$iteration)){
+    cur_data = filter(nom_Arew_Apun, iteration == i, session == s)
+    nom_Arew_Apun_correlations =
+      data.frame(iteration = i, session = s,
+                 r = cor(cur_data$Arew, cur_data$Apun)) %>% 
+      bind_rows(nom_Arew_Apun_correlations)
+  }
+}
 ```
 
 
@@ -1955,8 +2034,9 @@ sess12_orl_correlations = bind_rows(run_cor(sess12_ORL, "rel", "Sess12", "Arew_1
 
 
 # ---------------------------------------
-# Block-By-Block Changes in Choice Proportions
+# Correlations B/w IGT Measures
 ## Prep Data
+### Prep Choice Data
 ```{r}
 # Recode choice data
 choices = ifelse(stan_data$choice == 2, 0, ifelse(stan_data$choice == 1, 1, NA))
@@ -1981,7 +2061,7 @@ for(i in 1:49){
   }
 }
 
-block_level = trial_level %>% 
+block_diffs = trial_level %>% 
   filter(card > 0) %>% 
   group_by(ID, session, card) %>% 
   arrange(trial) %>% 
@@ -1991,74 +2071,141 @@ block_level = trial_level %>%
          choice = case_when(choice == 2 ~ 0, choice == 1 ~ 1, T ~ NA)) %>% 
   group_by(ID, session, block, valence) %>% 
   summarise(proportion = mean(choice, na.rm = T)) %>% 
-  group_by(session, block, valence) %>% 
-  mutate(grp_proportion = mean(proportion, na.rm = T))
+  pivot_wider(names_from = "block", values_from = "proportion", names_prefix = "block_") %>% 
+  mutate(diff = block_2 - block_1) %>% 
+  group_by(ID, valence) %>% 
+  summarise(diff = mean(diff)) %>% 
+  pivot_wider(names_from = "valence", values_from = "diff") %>% 
+  select(ID, Good_Diff = good, Bad_Diff = bad)
+```
+
+
+
+### Prep & Join Posteriors
+```{r}
+IGT_measures = data.frame(iteration = 1:nrow(orl_posteriors$Arew),
+                          Arew_session = orl_posteriors$Arew,
+                          Apun_session = orl_posteriors$Apun,
+                          K_session = orl_posteriors$K,
+                          betaF_session = orl_posteriors$betaF,
+                          betaP_session = orl_posteriors$betaP) %>% 
+  pivot_longer(contains("session"), names_to = c("parameter", "participant_session"),
+               names_sep = "_", values_to = "estimate") %>% 
+  mutate(participant_session = str_remove(participant_session, "session."),
+         session = case_when(str_detect(participant_session, "\\.1") ~ 1,
+                             str_detect(participant_session, "\\.2") ~ 2),
+         participant = as.numeric(str_remove(participant_session, "\\.1|\\.2"))) %>% 
+  select(-participant_session) %>% 
+  pivot_wider(names_from = "session", values_from = "estimate", names_prefix = "session_") %>% 
+  mutate(session_0 = (session_1 + session_2) / 2) %>% 
+  select(iteration, participant, parameter, estimate = session_0) %>% 
+  left_join(data.frame(participant = IDs[,2], ID = IDs[,1])) %>% 
+  left_join(ch_prop_avg) %>% left_join(block_diffs)
+```
+
+
+
+## Correlations
+### Run Correlations
+```{r, eval = F}
+IGT_measure_correlations = data.frame()
+for(p in c("Arew", "Apun", "K", "betaF", "betaP")) {
+  for(i in 1:max(IGT_measures$iteration)) {
+    cur_data = IGT_measures %>% 
+      filter(iteration == i & parameter == p) %>% 
+      na.omit()
+    IGT_measure_correlations = data.frame(iteration = i,
+                                          parameter = p,
+                                          r_good = cor(cur_data$estimate, cur_data$Good),
+                                          r_bad = cor(cur_data$estimate, cur_data$Bad),
+                                          r_good_diff = cor(cur_data$estimate, cur_data$Good_Diff),
+                                          r_bad_diff = cor(cur_data$estimate, cur_data$Bad_Diff)) %>% 
+      bind_rows(IGT_measure_correlations)
+  }
+}
+
+saveRDS(IGT_measure_correlations, 
+        here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL",
+             "IGT_measure_correlations.rds"))
 ```
 
 
 
 ```{r}
-prop_block_plot = 
-  block_level %>% 
-  mutate(session = factor(session, levels = c(1, 2), labels = c("Session 1", "Session 2")),
-         valence = factor(valence, levels = c("good", "bad"), ordered = T,
-                          labels = c("Good", "Bad"))) %>% 
-    # plot
-    ggplot(aes(x = block, y = proportion, color = valence,
-               fill = valence)) +
-      # geoms
-      geom_violin(aes(group = interaction(valence, factor(block))),
-                  binaxis = "y", stackdir = "center", alpha = .25,
-                  position = position_dodge(width = .8)) +
-      geom_point(aes(y = grp_proportion), position = position_dodge(width = .8)) +
-      geom_line(aes(y = grp_proportion), position = position_dodge(width = .8)) +
-      # scales
-      scale_color_manual(values = c("dodgerblue3", "goldenrod3")) +
-      scale_fill_manual(values = c("dodgerblue3", "goldenrod3")) +
-      scale_y_continuous(limits = c(0, 1), expand = c(.01, .01), breaks = seq(0, 1, .25)) +
-      # themes
-      labs(x = "Block", y = "Proportion of Plays") +
-      coord_cartesian(clip = "off") +
-      theme_classic() +
-      theme(axis.text.x = element_text(color = "black", size = 10),
-            axis.text.y = element_text(color = "black", size = 9),
-            axis.title.y = element_text(size = 10),
-            panel.spacing.x = unit(0, "lines"),
-            panel.spacing.y = unit(0, "lines"),
-            strip.background = element_blank(),
-            plot.margin = unit(c(1.25,.25,0,0), "lines"),
-            legend.position = c(.5, 1.225),
-            legend.background = element_blank(),
-            legend.direction = "horizontal",
-            legend.title = element_blank()) +
-      facet_rep_grid(.~session)
-
-
-tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "Block-By-Block Play Proportions.tiff"),
-     width = 7, height = 6, units = "cm", res = 300)
-
-  grid.newpage()
-  pushViewport(viewport(x = .5, y = .5, width = .9, height = .9))
-  grid.draw(prop_block_plot)
-  
-  # text
-  
-dev.off()
+IGT_measure_correlations = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL",
+                                        "IGT_measure_correlations.rds"))
 ```
 
 
 
+## Plot
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "IGT Measure Correlations.tiff"),
+     width = 14.6, height = 10, units = "cm", res = 300)
 
-
-
-
-
-
-
-
-
-
+  IGT_measure_correlations %>% 
+    pivot_longer(starts_with("r"), names_to = "measure", values_to = "r",
+                 names_prefix = "r_") %>% 
+    mutate(measure = factor(measure, levels = c("good", "bad", "good_diff", "bad_diff"),
+                            ordered = T, labels = c("Good", "Bad",
+                                                    expression(paste("\u0394", " Good",sep="")),
+                                                    expression(paste("\u0394", " Bad",sep=""))
+                                                    )),
+           parameter = factor(parameter,
+                              levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                              labels = c(expression(paste(italic(A),"+",sep="")),
+                                         expression(paste(italic(A),"-",sep="")),
+                                         expression(paste("\u03B2",italic(f),sep="")),
+                                         expression(paste("\u03B2",italic(p),sep="")),
+                                         expression(italic(K))))) %>% 
+    group_by(parameter, measure) %>% 
+    mutate(mu_r = mean(r),
+           estimate_lab = paste("r=", ifelse(sign(round(mu_r,2))==1," ","-"), stri_pad_right(str_remove(abs(round(mu_r,2)), "^0+"),
+                                                                                             width = 3, pad = "0"),sep=""),
+           lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
+           below_0 = paste0(round(mean(r<0)*100), "% < 0"), above_0 = paste0(round(mean(r>0)*100), "% > 0"),
+           height_ci = max(density(r)$x)*.025, height_m = max(density(r)$x)*1.5) %>% 
+    ggplot(aes(x = r)) +
+      # geoms
+      geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                     linewidth = .1, bins = 50) +
+      geom_text_npc(aes(npcx = "left", npcy = "top", label = below_0),
+                    size = 2, vjust = -1.43) +
+      geom_text_npc(aes(npcx = "right", npcy = "top", label = above_0),
+                    size = 2, vjust = -1.43) +
+      geom_text_npc(aes(npcx = "left", npcy = "bottom", label = estimate_lab),
+                    size = 2, hjust = .25) +
+      geom_hline(yintercept = 0) +
+      geom_vline(aes(xintercept = mu_r), color = "red2", linewidth = .4) +
+      geom_errorbarh(aes(xmin = lower, xmax = upper,
+                         y = height_ci),
+                         color = "red", linewidth = .4) +
+      # scales
+      scale_x_continuous(limits = c(-1,1), expand = c(0,0), breaks = seq(-1,1,.5),
+                         labels = c("-1","-.5","0",".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+      # themes
+      labs(x = "Correlation Coefficient", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black"),
+            axis.ticks.x = element_line(color = "black"),
+            axis.line.x = element_line(color = "transparent"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.x = element_text(size = 12, vjust = 1.5),
+            strip.text.y = element_text(size = 12),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(measure~parameter, scales = "free",
+                     labeller = label_parsed)
+dev.off()
+```
 
 
 
