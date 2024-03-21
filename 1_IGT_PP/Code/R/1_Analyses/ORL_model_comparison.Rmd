@@ -26,32 +26,38 @@ library(loo)
 # -------------------------------------------
 # IGT
 ```{r}
-joint_orl = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL",
-                         "Joint_ORL_fit.rds"))
+model1 = "Joint_ORL"
+model2 = "Joint_ORL_Bias"
 
-joint_orl_noK = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_noK",
-                             "Joint_ORL_noK_fit.rds"))
+model1_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", model1,
+                          paste0(model1, "_fit.rds")))
+
+model2_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", model2,
+                          paste0(model2, "_fit.rds")))
 ```
 
 
 
 ```{r}
-log_lik_orl_joint = extract_log_lik(joint_orl)
-log_lik_orl_joint_noK = extract_log_lik(joint_orl_noK)
+model1_log_lik = extract_log_lik(model1_fit)
+model2_log_lik = extract_log_lik(model2_fit)
 ```
 
 
 
 ```{r}
-loo_orl_joint = loo(log_lik_orl_joint)
-loo_orl_joint_noK = loo(log_lik_orl_joint_noK)
+model1_loo = loo(model1_log_lik)
+model2_loo = loo(model2_log_lik)
 ```
 
 
 
 ```{r}
-comparison = loo_compare(list("Joint ORL" = loo_orl_joint,
-                              "Joint ORL no K" = loo_orl_joint_noK))
+models = list()
+models[[model1]] = model1_loo
+models[[model2]] = model2_loo
+
+comparison = loo_compare(models)
 
 print(comparison, simplify = F)
 ```
