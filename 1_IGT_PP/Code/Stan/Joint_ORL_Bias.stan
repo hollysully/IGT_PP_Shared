@@ -61,10 +61,10 @@ parameters {
 // Declare parameters
   // Hyper(group)-parameters
   matrix[S, 4] mu_p;   // S (number of sessions) x 5 (number of parameters) matrix of mus
-  vector<lower=0>[2] sigma_Arew;
-  vector<lower=0>[2] sigma_Apun;
-  vector<lower=0>[2] sigma_betaF;
-  vector<lower=0>[2] sigma_betaB;
+  vector<lower=0>[S] sigma_Arew;
+  vector<lower=0>[S] sigma_Apun;
+  vector<lower=0>[S] sigma_betaF;
+  vector<lower=0>[S] sigma_betaB;
 
   // Subject-level "raw" parameters - i.e., independent/uncorrelated & normally distributed person-level (random-)effects
     // Note, these are S (number of sessions) x N (number of subjects) matrices
@@ -74,10 +74,10 @@ parameters {
   matrix[S,N] betaB_pr;
   
   // Correlation matrices for correlating between sessions
-  cholesky_factor_corr[2] R_chol_Arew;
-  cholesky_factor_corr[2] R_chol_Apun;
-  cholesky_factor_corr[2] R_chol_betaF;
-  cholesky_factor_corr[2] R_chol_betaB;
+  cholesky_factor_corr[S] R_chol_Arew;
+  cholesky_factor_corr[S] R_chol_Apun;
+  cholesky_factor_corr[S] R_chol_betaF;
+  cholesky_factor_corr[S] R_chol_betaB;
 }
 
 transformed parameters {
@@ -138,8 +138,10 @@ model {
   R_chol_betaB  ~ lkj_corr_cholesky(1);
   
   // Hyperparameters for RL learning algorithm
-  mu_p[1,:]   ~ normal(0, 1);
-  mu_p[2,:]   ~ normal(0, 1);
+  for(s in 1:S){
+    mu_p[s,:]   ~ normal(0, 1);
+    mu_p[s,:]   ~ normal(0, 1);
+  }
   sigma_Arew  ~ normal(0, 0.2);
   sigma_Apun  ~ normal(0, 0.2);
   sigma_betaF ~ cauchy(0, 1);
@@ -200,20 +202,20 @@ model {
 
 generated quantities {
   // Hyper(group)-parameters - these are 5 (number of parameters) x S (number of sessions) matrix of mus & sigmas, respectively, for each parameter
-  vector<lower=0,upper=1>[2] mu_Arew;
-  vector<lower=0,upper=1>[2] mu_Apun;
-  vector[2] mu_betaF;
-  vector[2] mu_betaB;
+  vector<lower=0,upper=1>[S] mu_Arew;
+  vector<lower=0,upper=1>[S] mu_Apun;
+  vector[S] mu_betaF;
+  vector[S] mu_betaB;
   real log_lik[N];
 
   // For posterior predictive check
   real choice_pred[N,T,S];
 
   // test-retest correlations
-  corr_matrix[2] R_Arew;
-  corr_matrix[2] R_Apun;
-  corr_matrix[2] R_betaF;
-  corr_matrix[2] R_betaB;
+  corr_matrix[S] R_Arew;
+  corr_matrix[S] R_Apun;
+  corr_matrix[S] R_betaF;
+  corr_matrix[S] R_betaB;
   
   // Reconstruct correlation matrix from cholesky factor
     // Note that we're multipling the cholesky factor by its transpose which gives us the correlation matrix

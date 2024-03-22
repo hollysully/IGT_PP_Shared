@@ -1141,17 +1141,17 @@ orl_abs_data %>%
                            round(unique(lower95), 2), ",",
                            round(unique(upper95), 2), "]")) %>% 
   select(everything(), estimate = session) %>% 
-  pivot_wider(names_from = "parameter", values_from = "label") %>% 
-  View(title = "ORL Parameter Descriptives")
-
-bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
+  bind_rows(bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
             data.frame(parameter = "Apun", r = orl_posteriors$R_Apun[,2,1]),
             data.frame(parameter = "betaF", r = orl_posteriors$R_betaF[,2,1]),
             data.frame(parameter = "betaB", r = orl_posteriors$R_betaB[,2,1])) %>% 
     group_by(parameter) %>% 
   summarise(label = paste0(round(mean(r), 2), " [",
                            round(HDIofMCMC(r)[1], 2), ",",
-                           round(HDIofMCMC(r)[2], 2), "]"))
+                           round(HDIofMCMC(r)[2], 2), "]")) %>% 
+  mutate(estimate = "r")) %>% 
+  pivot_wider(names_from = "parameter", values_from = "label") %>% 
+  View(title = "ORL Parameter Descriptives")
 ```
 
 

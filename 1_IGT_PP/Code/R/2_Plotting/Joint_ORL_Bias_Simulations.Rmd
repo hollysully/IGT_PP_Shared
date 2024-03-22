@@ -1,0 +1,451 @@
+---
+title: "Manuscript Plots"
+output: html_document
+date: "2023-03-09"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(foreach)
+library(tidybayes)
+library(patchwork)
+library(abind)
+library(zoo)
+library(here)
+library(ggpubr)
+library(egg)
+library(grid)
+library(tidyverse)
+library(lemon)
+library(ggpp)
+library(wBoot)
+library(stringi)
+library(ggh4x)
+library(hBayesDM)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+
+## Load Data
+```{r include=FALSE}
+stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed",
+                         "stan_ready_ORL_IGT.rds"))
+
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+                              "Joint_ORL_Bias_posteriors.rds"))
+self_report = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed",
+                           "self_report.rds"))
+```
+
+
+
+## Functions
+```{r}
+#------------------------------------------------------------------------------
+# USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
+softmax = function(values){
+  return(exp(values) / sum(exp(values)))
+}
+
+
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_orl = function(parameter_mus, condition,
+                        custom_seed = 20230928, n_iterations = 1000) {
+  set.seed(seed = custom_seed)
+  data = data.frame()
+  
+  # parameters for sim
+  Arew = filter(parameter_mus, parameter == "Arew")[[condition]]
+  Apun = filter(parameter_mus, parameter == "Apun")[[condition]]
+  betaF = filter(parameter_mus, parameter == "betaF")[[condition]]
+  betaB = filter(parameter_mus, parameter == "betaB")[[condition]]
+  
+  for(i in 1:n_iterations){
+    utility = rep(0,4)
+    ev = rep(0,4)
+    ef = rep(0,4)
+    
+    ef_chosen = 0
+    PEval = 0
+    PEfreq = 0
+    PEfreq_fic = rep(0,4)
+    card_trial = rep(0,4)
+    
+    for(t in 1:120){
+      outcome = outcomes$outcome[outcomes$trial == t]
+      sign = outcomes$sign[outcomes$trial == t]
+      card = outcomes$card[outcomes$trial == t]
+      prob = softmax(c(utility[card], 0))
+      curr_choice = sample(c(1,2), 1, prob = prob)
+      
+      if(curr_choice==1) {
+        PEval = outcome - ev[card]
+        PEfreq = sign - ef[card]
+        PEfreq_fic = -1*sign/3 - ef;
+        ef_chosen = ef[card];
+        
+        if(outcome >= 0) {
+          ef = ef + Apun * PEfreq_fic
+          ef[card] = ef_chosen + Arew * PEfreq
+          ev[card] = ev[card] + Arew * PEval
+        } else {
+          ef = ef + Arew * PEfreq_fic
+          ef[card] = ef_chosen + Apun * PEfreq;
+          ev[card] = ev[card] + Apun * PEval;
+        }
+      }
+      
+      utility = ev + ef * betaF + betaB
+      card_trial[card] = card_trial[card] + 1
+      data = data.frame(simulation = condition,
+                        iteration = i,
+                        card = card,
+                        trial = t,
+                        card_trial = card_trial[card],
+                        choice = curr_choice) %>% 
+        bind_rows(data)
+    }
+  }
+  data %>%
+    return()
+}
+```
+
+
+
+# ---------------------------------------
+# Simulate ORL Parameters
+## Prep Inputs for Simulations
+```{r, eval = T}
+# PREP TASK-RELATED INPUTS
+cards = data.frame(card = stan_data$card[1,,1]) %>%
+  mutate(trial = 1:n()) %>% 
+  group_by(card) %>% 
+  mutate(card_trial = 1:n())
+
+outcomes = read.csv(here("1_IGT_PP", "Data", "0_Raw", "outcomes.csv")) %>% 
+  mutate(card_trial = 1:n()) %>% 
+  pivot_longer(starts_with("Deck"), names_to = "card",
+               values_to = "outcome", names_prefix = "Deck_") %>% 
+  mutate(card = case_when(card == "A" ~ 1, card == "B" ~ 2,
+                          card == "C" ~ 3, card == "D" ~ 4),
+         sign = sign(outcome),
+         outcome = outcome / 100) %>% 
+  left_join(cards) %>% na.omit()
+
+#------------------------------------------------------------------------------
+# PARAMETER VALUES FOR SIMULATION
+c = .2 # constant for accentuated simulations
+parameters = data.frame(Arew = orl_posteriors$mu_Arew,
+                        Apun = orl_posteriors$mu_Apun,
+                        betaF = orl_posteriors$mu_betaF,
+                        betaB = orl_posteriors$mu_betaB) %>%
+  pivot_longer(everything(), names_to = c("parameter", "session"), names_sep = "\\.",
+               values_to = "estimate") %>%
+  group_by(parameter, session) %>%
+  reframe(mu = mean(estimate)) %>%
+  pivot_wider(names_from = "session", values_from = "mu", names_prefix = "session_") %>%
+  mutate(# Databased simulations ########################################################
+         # Session 1 - baseline
+         session_1 = session_1,
+         # Change in parameters except betaB - main effect of session on A+
+         ME_Arew = case_when(parameter == "betaB" ~ session_1, T ~ session_2),
+         # Change in parameters except Arew - main effect of session on BetaB
+         ME_betaB = case_when(parameter == "Arew" ~ session_1, T ~ session_2),
+         # Session 2 - interaction
+         session_2 = session_2,
+         # Accentuated simulations ######################################################
+         BL = case_when(parameter == "Arew" ~ .25, parameter == "Apun" ~ .25,
+                        parameter == "betaF" ~ 2.5, parameter == "betaB" ~ 2),
+         
+         loArew = case_when(parameter == "Arew" ~ BL - c, T ~ BL),
+         hiArew = case_when(parameter == "Arew" ~ BL + c, T ~ BL),
+         
+         loApun = case_when(parameter == "Apun" ~ BL - c, T ~ BL),
+         hiApun = case_when(parameter == "Apun" ~ BL + c, T ~ BL),
+         
+         negbetaF = case_when(parameter == "betaF" ~ -BL, T ~ BL),
+         lobetaF = case_when(parameter == "betaF" ~ BL - (c*10), T ~ BL),
+         hibetaF = case_when(parameter == "betaF" ~ BL + (c*10), T ~ BL),
+         
+         negbetaB = case_when(parameter == "betaB" ~ -BL, T ~ BL),
+         lobetaB = case_when(parameter == "betaB" ~ BL - (c*5), T ~ BL),
+         hibetaB = case_when(parameter == "betaB" ~ BL + (c*5), T ~ BL),
+         
+         loArew_hibetaB = case_when(parameter == "Arew" ~ BL - c,
+                                    parameter == "betaB" ~ BL + (c*5), 
+                                    T ~ BL))
+
+#------------------------------------------------------------------------------
+# RUN SIMULATIONS
+# Simulation of observed changes in Arew & betaB with interaction
+# databased_simulations = bind_rows(simulate_orl(parameters, "session_1"),
+#                                   simulate_orl(parameters, "ME_Arew"),
+#                                   simulate_orl(parameters, "ME_betaB"),
+#                                   simulate_orl(parameters, "session_2"))
+# saveRDS(databased_simulations, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+#                                     "databased_simulations.rds"))
+
+#------------------------------------------------------------------------------
+# Simulation of accentuated parameters
+accentuated_simulations = bind_rows(simulate_orl(parameters, "BL"),
+                                    simulate_orl(parameters, "loArew"),
+                                    simulate_orl(parameters, "hiArew"),
+                                    simulate_orl(parameters, "loApun"),
+                                    simulate_orl(parameters, "hiApun"),
+                                    simulate_orl(parameters, "negbetaF"),
+                                    simulate_orl(parameters, "lobetaF"),
+                                    simulate_orl(parameters, "hibetaF"),
+                                    simulate_orl(parameters, "negbetaB"),
+                                    simulate_orl(parameters, "lobetaB"),
+                                    simulate_orl(parameters, "hibetaB"),
+                                    simulate_orl(parameters, "loArew_hibetaB"))
+saveRDS(accentuated_simulations, here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+                                       "accentuated_simulations.rds"))
+```
+
+
+
+```{r}
+databased_simulations = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+                                     "databased_simulations.rds"))
+accentuated_simulations = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+                                       "accentuated_simulations.rds"))
+```
+
+
+
+## Arew/BetaP Simulation
+```{r, eval = T}
+labs = c("Session 1",
+         expression(paste("\u0394",italic(A),"+",sep="")),
+         expression(paste("\u0394","\u03B2",italic(b),sep="")),
+         "Session 2")
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Databased Simulations.tiff"),
+     width = 6.5, height = 2.5, units = "in", res = 300)
+
+  # data
+  databased_simulations %>% 
+    select(everything(), deck = card) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           simulation = factor(simulation,
+                               levels = c("session_1", "ME_Arew",
+                                          "ME_betaP", "session_2"))) %>% 
+    group_by(simulation, card_trial, deck) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(simulation, deck) %>% 
+    arrange(card_trial) %>% 
+    mutate(proportion = rollapply(proportion, width = 5, FUN = mean,
+                                  na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = card_trial, color = simulation)) +
+      # geoms
+      geom_line(aes(y = proportion)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45"),
+                         labels = labs) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(0,"lines"),
+            plot.margin = unit(c(.1,.25,.1,.1), "cm")) +
+      facet_rep_grid(.~deck,
+                     labeller = labeller(deck = c("1" = "Deck A", "2" = "Deck B",
+                                                  "3" = "Deck C", "4" = "Deck D")))
+dev.off()  
+```
+
+
+
+## Arew Accentuated Simulation
+```{r, eval = T}
+labs = c("BL",
+         expression(paste("\u0394",italic(A),"+",sep="")))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Accentuated Arew Simulations.tiff"),
+     width = 6.5, height = 2.5, units = "in", res = 300)
+
+  # data
+  accentuated_simulations %>%
+    filter(simulation %in% c("BL", "loArew")) %>% 
+    select(everything(), deck = card) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           simulation = factor(simulation,
+                               levels = c("BL", "loArew"))) %>% 
+    group_by(simulation, card_trial, deck) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(simulation, deck) %>% 
+    arrange(card_trial) %>% 
+    mutate(proportion = rollapply(proportion, width = 5, FUN = mean,
+                                  na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = card_trial, color = simulation)) +
+      # geoms
+      geom_line(aes(y = proportion)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45"),
+                         labels = labs) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(0,"lines"),
+            plot.margin = unit(c(.1,.25,.1,.1), "cm")) +
+      facet_rep_grid(.~deck,
+                     labeller = labeller(deck = c("1" = "Deck A", "2" = "Deck B",
+                                                  "3" = "Deck C", "4" = "Deck D")))
+dev.off()  
+```
+
+
+
+## BetaB Accentuated Simulation
+```{r, eval = T}
+labs = c("BL",
+         expression(paste("\u0394","\u03B2",italic(b),sep="")))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Accentuated BetaB Simulations.tiff"),
+     width = 6.5, height = 2.5, units = "in", res = 300)
+
+  # data
+  accentuated_simulations %>%
+    filter(simulation %in% c("BL", "hibetaB")) %>% 
+    select(everything(), deck = card) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           simulation = factor(simulation,
+                               levels = c("BL", "hibetaB"))) %>% 
+    group_by(simulation, card_trial, deck) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(simulation, deck) %>% 
+    arrange(card_trial) %>% 
+    mutate(proportion = rollapply(proportion, width = 5, FUN = mean,
+                                  na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = card_trial, color = simulation)) +
+      # geoms
+      geom_line(aes(y = proportion)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "orange2"),
+                         labels = labs) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(0,"lines"),
+            plot.margin = unit(c(.1,.25,.1,.1), "cm")) +
+      facet_rep_grid(.~deck,
+                     labeller = labeller(deck = c("1" = "Deck A", "2" = "Deck B",
+                                                  "3" = "Deck C", "4" = "Deck D")))
+dev.off()  
+```
+
+
+
+## BetaF Accentuated Simulation
+```{r, eval = T}
+labs = c("BL",
+         expression(paste("-","\u03B2",italic(f),sep="")),
+         expression(paste("Lo ","\u03B2",italic(f),sep="")),
+         expression(paste("Hi ","\u03B2",italic(f),sep="")))
+
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Accentuated BetaF Simulations.tiff"),
+     width = 6.5, height = 2.5, units = "in", res = 300)
+
+  # data
+  accentuated_simulations %>%
+    filter(simulation %in% c("BL", "negbetaF", "lobetaF", "hibetaF")) %>% 
+    select(everything(), deck = card) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           simulation = factor(simulation, ordered = T,
+                               levels = c("BL", "negbetaF", "lobetaF", "hibetaF"),
+                               labels = c("Baseline",
+                                          expression(paste0("-","\u03B2",italic(f))),
+                                          expression(paste0("Lo ","\u03B2",italic(f))),
+                                          expression(paste0("Hi ","\u03B2",italic(f)))))) %>% 
+    group_by(simulation, card_trial, deck) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(simulation, deck) %>% 
+    arrange(card_trial) %>% 
+    mutate(proportion = rollapply(proportion, width = 5, FUN = mean,
+                                  na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = card_trial, color = simulation)) +
+      # geoms
+      geom_line(aes(y = proportion)) +
+      # scales
+      scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "dodgerblue3", "orange2", "gray45"),
+                         labels = labs) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black"),
+            legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = "top",
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(0,"lines"),
+            plot.margin = unit(c(.1,.25,.1,.1), "cm")) +
+      facet_rep_grid(.~deck,
+                     labeller = labeller(deck = c("1" = "Deck A", "2" = "Deck B",
+                                                  "3" = "Deck C", "4" = "Deck D")))
+dev.off()  
+```
+
+
+
+# ---------------------------------------
+
+
+
+
+
+
+
