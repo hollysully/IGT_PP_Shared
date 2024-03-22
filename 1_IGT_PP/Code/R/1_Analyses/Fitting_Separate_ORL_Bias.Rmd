@@ -1,0 +1,266 @@
+---
+title: "Fitting Joint ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(wBoot)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+
+## Load Data
+```{r}
+stan_data = readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+
+sess1_data = list(N = stan_data$N,   
+                  T = stan_data$T,  
+                  S = 1,
+                  Tsubj = matrix(stan_data$Tsubj[,1], nrow = length(stan_data$Tsubj[,1]), ncol = 1),  
+                  choice = array(stan_data$choice[,,1], dim = c(nrow(stan_data$choice[,,1]), ncol(stan_data$choice[,,1]), 1)),
+                  card = array(stan_data$card[,,1], dim = c(nrow(stan_data$card[,,1]), ncol(stan_data$card[,,1]), 1)),
+                  outcome = array(stan_data$outcome[,,1], dim = c(nrow(stan_data$outcome[,,1]), ncol(stan_data$outcome[,,1]), 1)),
+                  sign = array(stan_data$sign[,,1], dim = c(nrow(stan_data$sign[,,1]), ncol(stan_data$sign[,,1]), 1)),
+                  subjIDs = stan_data$subjIDs)
+
+sess2_data = list(N = stan_data$N,   
+                  T = stan_data$T,  
+                  S = 1,
+                  Tsubj = matrix(stan_data$Tsubj[,2], nrow = length(stan_data$Tsubj[,2]), ncol = 1),  
+                  choice = array(stan_data$choice[,,2], dim = c(nrow(stan_data$choice[,,2]), ncol(stan_data$choice[,,2]), 1)),
+                  card = array(stan_data$card[,,2], dim = c(nrow(stan_data$card[,,2]), ncol(stan_data$card[,,2]), 1)),
+                  outcome = array(stan_data$outcome[,,2], dim = c(nrow(stan_data$outcome[,,2]), ncol(stan_data$outcome[,,2]), 1)),
+                  sign = array(stan_data$sign[,,2], dim = c(nrow(stan_data$sign[,,2]), ncol(stan_data$sign[,,2]), 1)),
+                  subjIDs = stan_data$subjIDs)
+```
+
+
+
+# -------------------------------------------
+# Check Model
+```{r, eval = T}
+model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_Bias.stan"), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+# Fit Model
+```{r, eval = T}
+# Compile model
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_Bias.stan"))
+
+
+# Fit model to session 1 data
+sess1_fit = sampling(orl_model, 
+                     data   = sess1_data, 
+                     iter   = 5000, 
+                     warmup = 1000, 
+                     chains = 4, 
+                     cores  = 4,
+                     seed   = 43210)
+saveRDS(sess1_fit, here("1_IGT_PP", "Data", "2_Fitted", "Separate_ORL_Bias", "Sess1_ORL_Bias_fit.rds"))
+
+
+# Fit model to session 2 data
+sess2_orl_fit = sampling(orl_model, 
+                         data   = sess2_data, 
+                         iter   = 5000, 
+                         warmup = 1000, 
+                         chains = 4, 
+                         cores  = 4,
+                         seed   = 43210)
+saveRDS(sess2_fit, here("1_IGT_PP", "Data", "2_Fitted", "Separate_ORL_Bias", "Sess2_ORL_Bias_fit.rds"))
+```
+
+
+
+```{r}
+sess1_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Separate_ORL_Bias", "Sess1_ORL_Bias_fit.rds"))
+sess2_fit = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Separate_ORL_Bias", "Sess2_ORL_Bias_fit.rds"))
+```
+
+
+
+# -------------------------------------------
+# Model Diagnostics
+```{r, eval = T}
+sess1_posteriors <- extract(sess1_fit)
+saveRDS(sess1_posteriors, here("1_IGT_PP", "Data", "2_Fitted", 
+                               "Separate_ORL_Bias", "Sess1_ORL_Bias_posteriors.rds"))
+
+
+sess2_posteriors <- extract(sess2_fit)
+saveRDS(sess2_posteriors, here("1_IGT_PP", "Data", "2_Fitted", 
+                               "Separate_ORL_Bias", "Sess2_ORL_Bias_posteriors.rds"))
+```
+
+
+
+```{r}
+sess1_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                                "Separate_ORL_Bias", "Sess1_ORL_Bias_posteriors.rds"))
+
+
+sess2_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                                "Separate_ORL_Bias", "Sess2_ORL_Bias_posteriors.rds"))
+
+
+focal_parameters <- c(
+  "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+  "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+  "Arew", "Apun", "betaF", "betaB"
+)
+
+
+group_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Rhat
+```{r, eval = T}
+sess1_rhats = rhat(sess1_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(sess1_rhats, here("1_IGT_PP", "Data", "2_Fitted", 
+                          "Separate_ORL_Bias", "Sess1_ORL_Bias_rhats.rds"))
+
+
+sess2_rhats = rhat(sess2_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(sess2_rhats, here("1_IGT_PP", "Data", "2_Fitted", 
+                          "Separate_ORL_Bias", "Sess2_ORL_Bias_rhats.rds"))
+```
+
+
+
+```{r, eval = T}
+sess1_rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                           "Separate_ORL_Bias", "Sess1_ORL_Bias_rhats.rds"))
+
+
+sess2_rhats = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                           "Separate_ORL_Bias", "Sess2_ORL_Bias_rhats.rds"))
+```
+
+
+
+## Traceplots
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Separate_ORL_Bias", "Sess1_ORL_Bias_group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot( sess1_fit, pars = group_parameters)
+dev.off()
+for(i in person_parameters){
+  tiff(here("1_IGT_PP", "Figs_Tables", 
+            "Separate_ORL_Bias", "Sess1_ORL_Bias_", i, "_traceplots.tiff", sep = ""),
+       width = 35, height = 25, units = "cm", res = 300)
+    traceplot(sess1_fit, pars = i) %>% print()
+  dev.off()
+}
+
+
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Separate_ORL_Bias", "Sess2_ORL_Bias_group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot( sess2_fit, pars = group_parameters)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_IGT_PP", "Figs_Tables", 
+            "Separate_ORL_Bias", "Sess2_ORL_Bias_", i, "_traceplots.tiff", sep = ""),
+       width = 35, height = 25, units = "cm", res = 300)
+    traceplot(sess2_fit, pars = i) %>% print()
+  dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Inspect Parameters
+## Means +/- PI
+```{r, eval = T}
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Separate_ORL_Bias", "Sess1_ORL_Bias_posterior_means.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  plot(sess1_fit, pars = group_parameters)
+dev.off()
+
+
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Separate_ORL_Bias", "Sess2_ORL_Bias_posterior_means.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  plot(sess2_fit, pars = group_parameters)
+dev.off()
+```
+
+
+
+## Posterior Distributions
+```{r}
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Separate_ORL_Bias", "Sess1_ORL_Bias_posterior_distributions.tiff"),
+     width = 30, height = 20, units = "cm", res = 300)
+  par(mfrow = c(5, 5))
+  # Mus & Sigmas
+    for(i in grep("mu|sigma", group_parameters, value = T)){
+      plot(density(sess1_posteriors[[i]][,1]), main = paste(i, 1))
+      abline(v = mean(sess1_posteriors[[i]][,1]))
+    }
+dev.off()
+
+
+tiff(here("1_IGT_PP", "Figs_Tables", 
+          "Separate_ORL_Bias", "Sess2_ORL_Bias_posterior_distributions.tiff"),
+     width = 30, height = 20, units = "cm", res = 300)
+  par(mfrow = c(5, 5))
+  # Mus & Sigmas
+    for(i in grep("mu|sigma", group_parameters, value = T)){
+      plot(density(sess2_posteriors[[i]][,1]), main = paste(i, 1))
+      abline(v = mean(sess2_posteriors[[i]][,1]))
+    }
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
