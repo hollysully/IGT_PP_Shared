@@ -140,7 +140,6 @@ model {
   // Hyperparameters for RL learning algorithm
   for(s in 1:S){
     mu_p[s,:]   ~ normal(0, 1);
-    mu_p[s,:]   ~ normal(0, 1);
   }
   sigma_Arew  ~ normal(0, 0.2);
   sigma_Apun  ~ normal(0, 0.2);

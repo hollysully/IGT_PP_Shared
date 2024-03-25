@@ -30,17 +30,17 @@ library(grid)
 
 ## RMD Setup
 ```{r}
-model_name = "Covariate_Joint_ORL_noK"
+model_name = "Covariate_Joint_ORL_Bias"
 sample = "T1_parent_SU_Dep_Anx"
 
 stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
                          paste("design", sample, "IGT.RDS", sep = "_")))
 
 focal_parameters = c(
-  "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaP", 
-  "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaP", 
-  "Arew", "Apun", "betaF", "betaP", 
-  "R_Arew", "R_Apun", "R_betaF", "R_betaP"
+  "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+  "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+  "Arew", "Apun", "betaF", "betaB", 
+  "R_Arew", "R_Apun", "R_betaF", "R_betaB"
 )
 
 
@@ -52,7 +52,7 @@ person_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE, invert=TRU
 
 # -------------------------------------------
 # Check Model
-```{r, eval = F}
+```{r, eval = T12124}
 model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
                                 paste0(model_name, ".stan")), compile = F)
 

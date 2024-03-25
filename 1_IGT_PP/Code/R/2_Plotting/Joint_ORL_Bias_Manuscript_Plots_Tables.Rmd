@@ -304,7 +304,7 @@ prop_abs_plot =
 
 
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "Summary_Abs_Reliability.tiff"),
+          "Manuscript_1 Summary_Abs_Reliability.tiff"),
      width = 7, height = 4, units = "cm", res = 300)
 
   grid.newpage()
@@ -328,7 +328,7 @@ dev.off()
 ## Relative Reliability Plots
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "Summary_Rel_Reliability.tiff"),
+          "Manuscript_2 Summary_Rel_Reliability.tiff"),
      width = 7, height = 3.5, units = "cm", res = 300)
   
   (prop_rel_plot = 
@@ -372,7 +372,7 @@ dev.off()
 ## Session x Deck
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "PPC.tiff"),
+          "Manuscript_3 Group-Level PPC.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
 
   # simplify data
@@ -425,7 +425,7 @@ dev.off()
 ## Session x Obs/Pred
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "PPC Within-Deck Changes.tiff"),
+          "Excluded_1 PPC Within-Deck Changes.tiff"),
      width = 7, height = 7, units = "cm", res = 300)
 
   # simplify data
@@ -551,7 +551,7 @@ rm(list = c("N", "S", "C", "Trials", "size"))
 ## Plot 2050
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "2050_PPCs.tiff"),
+          "Manuscript_6 2050_PPCs.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
 
   # simplify data
@@ -604,7 +604,7 @@ dev.off()
 ## Plot 2051
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "2051_PPCs.tiff"),
+          "Manuscript_5 2051_PPCs.tiff"),
      width = 15, height = 7, units = "cm", res = 300)
 
   # simplify data
@@ -725,7 +725,7 @@ for(cur_IDs in ID_groups){
     
     
   tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-            paste0(paste0("ID #", cur_IDs, collapse = " ")," PPCs.tiff")),
+            paste0(paste0("Supplement_0 ID #", cur_IDs, collapse = " ")," PPCs.tiff")),
        width = 15, height = 14, units = "cm", res = 300)
       print(cur_plot)
   dev.off()
@@ -827,7 +827,7 @@ orl_abs_plot = orl_abs_data %>%
     facetted_pos_scales(x = orl_abs_scales)
 
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "ORL_Abs_Reliability.tiff"),
+          "Manuscript_4 ORL_Abs_Reliability.tiff"),
      width = 7, height = 8, units = "cm", res = 300)
 
   grid.newpage()
@@ -853,7 +853,7 @@ dev.off()
 ## Relative Reliability
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "ORL_Rel_Reliability.tiff"),
+          "Manuscript_7 ORL_Rel_Reliability.tiff"),
      width = 14.6, height = 4, units = "cm", res = 300)
 
   bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
@@ -1156,6 +1156,9 @@ orl_abs_data %>%
 
 
 
+# ---------------------------------------
+# ---------------------------------------
+# ---------------------------------------
 # ---------------------------------------
 # Simulate ORL Parameters
 ## Prep Inputs for Simulations

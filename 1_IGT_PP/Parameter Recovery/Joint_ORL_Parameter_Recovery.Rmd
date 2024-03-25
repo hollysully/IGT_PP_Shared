@@ -1,7 +1,6 @@
 ---
-title: "Fitting Joint ORL"
+title: "Parameter Recovery for Joint ORL"
 output: html_document
-date: "2023-03-07"
 ---
 
 
@@ -31,9 +30,9 @@ library(MASS)
 
 ## Load Outcomes & Sim Type
 ```{r}
-outcomes = readRDS(here("Simulations","outcomes.RDS"))
-sim_type = "TR_Joint_ORL_Bias"
-parameter_names = c("Arew", "Apun", "betaF", "betaB")
+outcomes = readRDS(here("1_IGT_PP", "Data","outcomes.RDS"))
+sim_type = "Joint_ORL"
+parameter_names = c("Arew", "Apun", "K", "betaF", "betaP")
 ```
 
 
@@ -60,16 +59,20 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
                     parameter == "Arew" & session == s & ID == i)$estimate
       Apun = filter(parameter_values,
                     parameter == "Apun" & session == s & ID == i)$estimate
+      K = filter(parameter_values,
+                 parameter == "K" & session == s & ID == i)$estimate
       betaF = filter(parameter_values,
                      parameter == "betaF" & session == s & ID == i)$estimate
-      betaB = filter(parameter_values,
-                     parameter == "betaB" & session == s & ID == i)$estimate
+      betaP = filter(parameter_values,
+                     parameter == "betaP" & session == s & ID == i)$estimate
       missing = filter(parameter_values,
                        parameter == "Arew" & session == s & ID == i)$missing
       
       utility = rep(0,4)
       ev = rep(0,4)
       ef = rep(0,4)
+      pers = rep(0,4)
+      K_tr = 3^(K)-1
       
       ef_chosen = 0
       PEval = 0
@@ -81,8 +84,6 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
         outcome = outcomes$outcome[outcomes$trial == t]
         sign = outcomes$sign[outcomes$trial == t]
         card = outcomes$card[outcomes$trial == t]
-        
-        utility = ev + ef * betaF + betaB
         prob = softmax(c(utility[card], 0))
         curr_choice = sample(c(1,2), 1, prob = prob)
         
@@ -101,8 +102,11 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
             ef[card] = ef_chosen + Apun * PEfreq
             ev[card] = ev[card] + Apun * PEval
           }
+          pers[card] = 1;
         }
+        pers = pers / (1 + K_tr)
         
+        utility = ev + ef * betaF + pers * betaP
         card_trial[card] = card_trial[card] + 1
         if(missing){
           outcome = choice = -1
@@ -131,41 +135,41 @@ simulate_orl = function(parameter_values, N, custom_seed = 20230928) {
 # Set Parameter Values
 ## Load Posteriors
 ```{r, eval = F}
-TR_orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
-                                 "Joint_ORL_Bias", "Joint_ORL_Bias_posteriors.rds"))
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", 
+                              "Joint_ORL", "Joint_ORL_posteriors.rds"))
 ```
 
 
 
 ## Set Mus
 ```{r, eval = F}
-mu_p = apply(TR_orl_posteriors$mu_p, c(2, 3), mean) # Untransformed
+mu_p = apply(orl_posteriors$mu_p, c(2, 3), mean) # Untransformed
 colnames(mu_p) = parameter_names
 
 vcovs = list() # covariance matrix for simulation
 group_parameters = data.frame()
 
-for(p in 1:4){
+for(p in 1:5){
   # setup covariance matrix
-  R = apply(TR_orl_posteriors[[paste0("R_", parameter_names[p])]], c(2, 3), mean)
-  SD = diag(apply(TR_orl_posteriors[[paste0("sigma_", parameter_names[p])]], 2, mean))
+  R = apply(orl_posteriors[[paste0("R_", parameter_names[p])]], c(2, 3), mean)
+  SD = diag(apply(orl_posteriors[[paste0("sigma_", parameter_names[p])]], 2, mean))
   vcovs[[parameter_names[p]]] = SD%*%R%*%SD
   
   # setup means
   group_parameters = data.frame(parameter = parameter_names[p],
-                                session1_mu = mean(TR_orl_posteriors$mu_p[,1,p]),
-                                session2_mu = mean(TR_orl_posteriors$mu_p[,2,p]),
-                                session1_lower = HDIofMCMC(TR_orl_posteriors$mu_p[,1,p])[1],
-                                session1_upper = HDIofMCMC(TR_orl_posteriors$mu_p[,1,p])[2],
-                                session2_lower = HDIofMCMC(TR_orl_posteriors$mu_p[,2,p])[1],
-                                session2_upper = HDIofMCMC(TR_orl_posteriors$mu_p[,2,p])[2],
+                                session1_mu = mean(orl_posteriors$mu_p[,1,p]),
+                                session2_mu = mean(orl_posteriors$mu_p[,2,p]),
+                                session1_lower = HDIofMCMC(orl_posteriors$mu_p[,1,p])[1],
+                                session1_upper = HDIofMCMC(orl_posteriors$mu_p[,1,p])[2],
+                                session2_lower = HDIofMCMC(orl_posteriors$mu_p[,2,p])[1],
+                                session2_upper = HDIofMCMC(orl_posteriors$mu_p[,2,p])[2],
                                 R_mu = R[1,2],
-                                R_lower = HDIofMCMC(TR_orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1])[1],
-                                R_upper = HDIofMCMC(TR_orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1])[2]) %>%
+                                R_lower = HDIofMCMC(orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1])[1],
+                                R_upper = HDIofMCMC(orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1])[2]) %>%
     bind_rows(group_parameters)
   
 }
-saveRDS(group_parameters, here("Parameter Recovery", 
+saveRDS(group_parameters, here("1_IGT_PP", "Parameter Recovery", 
                                paste0(sim_type, "_sim_group_parameters.RDS")))
 ```
 
@@ -184,12 +188,15 @@ parameters = list(ID = 1:49,
                   missing = missingness)
 for(p in parameter_names){
   parameters[[p]] = mvrnorm(N, mu = mu_p[, p], Sigma = vcovs[[p]])
-  if(p %in% c("Arew", "Apun")){
+  if(p %in% c("Arew", "Apun", "K")){
     parameters[[paste0(p, "_UT")]] = parameters[[p]]
     parameters[[p]] = pnorm(parameters[[p]])
+    if(p == "K"){
+    parameters[[p]] = parameters[[p]]*5
+    }
   }
 }
-saveRDS(parameters, here("Parameter Recovery", 
+saveRDS(parameters, here("1_IGT_PP", "Parameter Recovery", 
                          paste0(sim_type, "_sim_parameters.RDS")))
 parameter_values = data.frame(parameters) %>% 
   cbind(data.frame(ID = 1:N, missing = missingness)) %>% 
@@ -206,14 +213,14 @@ parameter_values = data.frame(parameters) %>%
 ```{r, eval = F}
 sim_data = simulate_orl(parameter_values, N, custom_seed = 20240304)
 
-saveRDS(sim_data, here("Parameter Recovery", 
+saveRDS(sim_data, here("1_IGT_PP", "Parameter Recovery", 
                        paste0(sim_type, "_sim_data.RDS")))
 ```
 
 
 
 ```{r}
-sim_data = readRDS(here("Parameter Recovery", 
+sim_data = readRDS(here("1_IGT_PP", "Parameter Recovery", 
                         paste0(sim_type, "_sim_data.RDS")))
 ```
 
@@ -266,7 +273,7 @@ stan_data = list(
 # Fit Model
 ```{r, eval = F}
 # Compile model
-orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_Bias.stan"))
+orl_model = stan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL.stan"))
 
 
 # Fit model
@@ -281,14 +288,14 @@ sim_orl_fit = sampling(orl_model,
 
 
 #save the fitted model as an .rds file
-saveRDS(sim_orl_fit, here("Parameter Recovery",
+saveRDS(sim_orl_fit, here("1_IGT_PP", "Parameter Recovery",
                           paste0(sim_type, "_sim_fit.RDS")))
 ```
 
 
 
-```{r}
-sim_orl_fit = readRDS(here("Parameter Recovery",
+```{r, eval = F}
+sim_orl_fit = readRDS(here("1_IGT_PP", "Parameter Recovery",
                            paste0(sim_type, "_sim_fit.RDS")))
 ```
 
@@ -297,7 +304,7 @@ sim_orl_fit = readRDS(here("Parameter Recovery",
 ```{r, eval = F}
 sim_orl_posteriors <- extract(sim_orl_fit)
 saveRDS(sim_orl_posteriors,
-        here("Parameter Recovery",
+        here("1_IGT_PP", "Parameter Recovery",
              paste0(sim_type, "_sim_posteriors.RDS")))
 ```
 
@@ -305,119 +312,36 @@ saveRDS(sim_orl_posteriors,
 
 ```{r}
 sim_orl_posteriors =
-  readRDS(here("Parameter Recovery",
+  readRDS(here("1_IGT_PP", "Parameter Recovery",
                paste0(sim_type, "_sim_posteriors.RDS")))
 ```
 
 
 
 # -------------------------------------------
-# Group-Level Parameters
-## Prep Data
-```{r}
-group_parameters = readRDS(here("Parameter Recovery", 
-                                paste0(sim_type, "_sim_group_parameters.RDS")))
-
-
-for(p in 1:4){
-  group_parameters = data.frame(parameter = paste0("sim_", parameter_names[p]),
-                                session1_mu = mean(sim_orl_posteriors$mu_p[,1,p]),
-                                session2_mu = mean(sim_orl_posteriors$mu_p[,2,p]),
-                                session1_lower = HDIofMCMC(sim_orl_posteriors$mu_p[,1,p])[1],
-                                session1_upper = HDIofMCMC(sim_orl_posteriors$mu_p[,1,p])[2],
-                                session2_lower = HDIofMCMC(sim_orl_posteriors$mu_p[,2,p])[1],
-                                session2_upper = HDIofMCMC(sim_orl_posteriors$mu_p[,2,p])[2],
-                                R_mu = mean(sim_orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1]),
-                                R_lower = HDIofMCMC(sim_orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1])[1],
-                                R_upper = HDIofMCMC(sim_orl_posteriors[[paste0("R_", parameter_names[p])]][,2,1])[2]) %>%
-    bind_rows(group_parameters)
-}
-```
-
-
-
-## Plot Posterior Means
-```{r}
-mus = list()
-for(p in 1:4){
-  mus[[parameter_names[p]]] = group_parameters %>% 
-    dplyr::select(-starts_with("R")) %>%
-    filter(str_detect(parameter, parameter_names[p])) %>% 
-    pivot_longer(c(everything(), -parameter), names_to = c("session", "type"), names_sep = "_",
-                 values_to = "estimate") %>% 
-    pivot_wider(names_from = "type", values_from = "estimate") %>% 
-    mutate(parameter = case_when(str_detect(parameter, "sim") ~ "sim", T ~ "actual"),
-           parameter = factor(parameter, levels = c("actual", "sim"), ordered = T)) %>% 
-    ggplot(aes(x = mu, y = parameter)) +
-      geom_point() +
-      geom_errorbar(aes(xmin = lower, xmax = upper)) +
-      labs(x = "Mu Estimate", y = parameter_names[p]) +
-      theme_classic() +
-      facet_rep_grid(.~session)
-  
-  mus[[paste0("R_", parameter_names[p])]] = group_parameters %>% 
-    dplyr::select(parameter, starts_with("R")) %>%
-    filter(str_detect(parameter, parameter_names[p])) %>% 
-    mutate(parameter = case_when(str_detect(parameter, "sim") ~ "sim", T ~ "actual"),
-           parameter = factor(parameter, levels = c("actual", "sim"), ordered = T)) %>% 
-    ggplot(aes(x = R_mu, y = parameter)) +
-      geom_point() +
-      geom_errorbar(aes(xmin = R_lower, xmax = R_upper)) +
-      scale_x_continuous(limits = c(-1, 1)) +
-      labs(x = "R Estimate", y = parameter_names[p]) +
-      theme_classic()
-}
-
-tiff(here("Parameter Recovery",
-          paste0(sim_type, "_group_mus.tiff")),
-     width = 15, height = 16, units = "cm", res = 300)
-
-  egg::ggarrange(mus$Arew, mus$R_Arew, 
-                 mus$Apun, mus$R_Apun, 
-                 mus$betaF, mus$R_betaF, 
-                 mus$betaB, mus$R_betaB,
-                 nrow = 4, widths = c(2, 1))
-
-dev.off()
-```
-
-
-
-# -------------------------------------------
-# Person-Level Parameters
+# Plot Recovered Parameters
 ## Prep Data
 ```{r}
 recovered_parameters =
-  data.frame(Arew_UT.1 = sim_orl_posteriors$mu_p[,1,1] +
-                         sim_orl_posteriors$Arew_tilde[,1,],
-             Arew_UT.2 = sim_orl_posteriors$mu_p[,2,1] +
-                         sim_orl_posteriors$Arew_tilde[,2,],
-             Apun_UT.1 = sim_orl_posteriors$mu_p[,1,2] +
-                         sim_orl_posteriors$Apun_tilde[,1,],
-             Apun_UT.2 = sim_orl_posteriors$mu_p[,2,2] +
-                         sim_orl_posteriors$Apun_tilde[,2,],
-             betaF.1 = sim_orl_posteriors$mu_p[,1,3] +
-                       sim_orl_posteriors$betaF_tilde[,1,],
-             betaF.2 = sim_orl_posteriors$mu_p[,2,3] +
-                       sim_orl_posteriors$betaF_tilde[,2,],
-             betaB.1 = sim_orl_posteriors$mu_p[,1,4] +
-                       sim_orl_posteriors$betaB_tilde[,1,],
-             betaB.2 = sim_orl_posteriors$mu_p[,2,4] +
-                       sim_orl_posteriors$betaB_tilde[,2,]) %>% 
+  data.frame(Arew = sim_orl_posteriors$Arew,
+             Apun = sim_orl_posteriors$Apun,
+             betaF = sim_orl_posteriors$betaF,
+             betaP = sim_orl_posteriors$betaP,
+             K = sim_orl_posteriors$K) %>% 
   pivot_longer(everything(),
-               names_to = c("parameter", "session", "ID"),
+               names_to = c("parameter", "ID", "session"),
                values_to = "recovered",
                names_sep = "\\.", names_transform = list(ID = as.numeric)) %>% 
   group_by(parameter, session, ID) %>% 
   summarise(recovered = mean(recovered))
 
 
-actual_parameters = data.frame(readRDS(here("Parameter Recovery", 
+actual_parameters = data.frame(readRDS(here("1_IGT_PP", "Parameter Recovery",  
                                             paste0(sim_type, "_sim_parameters.RDS")))) %>%
   pivot_longer(c(everything(), -ID, -missing), 
                names_to = c("parameter", "session"), values_to = "actual",
                names_sep = "\\.") %>% 
-  filter(!(parameter %in% c("Arew", "Apun"))) %>% 
+  filter(!(parameter %in% c("Arew_UT", "Apun_UT"))) %>% 
   mutate(missing = case_when(session == 1 ~ F, T ~ missing))
 
 combined_parameters = left_join(recovered_parameters, actual_parameters)
@@ -427,48 +351,80 @@ combined_parameters = left_join(recovered_parameters, actual_parameters)
 
 ## Run Correlations
 ```{r}
+set.seed(20240323)
 PR_correlations = data.frame()
 
-for(p in c("Arew_UT", "Apun_UT", "betaF", "betaB")){
+for(p in c("Arew", "Apun", "betaF", "betaP", "K")){
   for(s in 1:2){
-    cur_cor = cor.test(~actual + recovered,
-                       data = filter(combined_parameters,
-                                     !missing,
-                                     parameter == p,
-                                     session == s))
+    cur_data = filter(combined_parameters,
+                      !missing, parameter == p, session == s)
+    cur_cor = boot.cor.bca(
+      x = cur_data$actual, y = cur_data$recovered,
+      alternative = c("two.sided", "less", "greater"),
+      null.hyp = NULL, conf.level = 0.95, type = NULL, R = 9999)
     PR_correlations = data.frame(parameter = p,
                                  session = s,
-                                 r = cur_cor$estimate,
-                                 p = cur_cor$p.value,
-                                 sig = ifelse(cur_cor$p.value < .05, "*", ""),
-                                 lower = cur_cor$conf.int[1],
-                                 upper = cur_cor$conf.int[2]) %>% 
+                                 estimate = cur_cor$Observed,
+                                 CI = cur_cor$Confidence.interval) %>% 
       bind_rows(PR_correlations)
   }
 }
+PR_correlations = PR_correlations %>% 
+  separate(col = "CI", into = c("lower", "upper"), sep = ",") %>% 
+  mutate(estimate = round(estimate,2),
+         estimate_lab = paste("r = ", ifelse(sign(estimate)==1," ","-"),
+                              stri_pad_right(str_remove(abs(estimate), "^0+"),
+                                             width = 3, pad = "0"),sep=""),
+         parameter = factor(parameter,
+                            levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                            labels = c(expression(paste(italic(A),"+",sep="")),
+                                       expression(paste(italic(A),"-",sep="")),
+                                       expression(paste("\u03B2",italic(f),sep="")),
+                                       expression(paste("\u03B2",italic(p),sep="")),
+                                       expression(italic(K)))),
+         session = factor(as.character(session), levels = c("1", "2"),
+                          ordered = T, labels = c(expression(paste("Session 1")),
+                                                  expression(paste("Session 2")))))
 ```
 
 
 
 ## Plot Parameter Recovery Correlations
 ```{r}
-tiff(here("Parameter Recovery",
-          paste0(sim_type, "_PR_correlations.tiff")),
-     width = 10, height = 16, units = "cm", res = 300)
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          paste0("Supplement_5 ", sim_type, "_Parameter Recovery.tiff")),
+     width = 14.6, height = 10, units = "cm", res = 300)
   combined_parameters %>% 
     filter(!missing) %>%
     group_by(session, parameter) %>% 
     mutate(z_actual = (actual - mean(actual)) / sd(actual),
-           z_recovered = (recovered - mean(recovered)) / sd(recovered)) %>% 
+           z_recovered = (recovered - mean(recovered)) / sd(recovered),
+           session = factor(as.character(session), levels = c("1", "2"),
+                            ordered = T, labels = c(expression(paste("Session 1")),
+                                                    expression(paste("Session 2")))),
+           parameter = factor(
+             parameter,
+             levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+             labels = c(expression(paste(italic(A),"+",sep="")),
+                        expression(paste(italic(A),"-",sep="")),
+                        expression(paste("\u03B2",italic(f),sep="")),
+                        expression(paste("\u03B2",italic(p),sep="")),
+                        expression(italic(K))))) %>% 
     ggplot(aes(x = z_actual, y = z_recovered)) +
       geom_text_npc(data = PR_correlations, aes(npcx = "left", npcy = "top",
-                                                label = paste("r =", round(r, 2)))) +
-      geom_point() +
-      geom_smooth(method = "lm", se = FALSE) +
+                                                label = estimate_lab),
+                    vjust = .5, size = 3) +
+        geom_point(size = 1, shape = 21, color = "black", fill = "gray50") +
+        geom_smooth(method = "lm", formula = "y ~ x", color = "black",
+                    se = F, size = .5, fullrange = T) +
       theme_classic() +
+      theme(aspect.ratio = 1,
+            axis.text = element_text(color = "black"),
+            strip.background = element_blank()) +
       labs(x = "Actual", y = "Recovered",
            caption = "X- and Y-axis values are z-scored") +
-      facet_rep_grid(parameter~session)
+      facet_rep_grid(session~parameter,
+                     labeller = label_parsed)
 dev.off()
 ```
 

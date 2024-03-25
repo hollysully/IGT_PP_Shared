@@ -57,7 +57,7 @@ sess2_data = list(N = stan_data$N,
 
 # -------------------------------------------
 # Check Model
-```{r, eval = T}
+```{r, eval = F}
 model_code = cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_Bias.stan"), compile = F)
 
 model_code$check_syntax(quiet = T)
@@ -83,13 +83,13 @@ saveRDS(sess1_fit, here("1_IGT_PP", "Data", "2_Fitted", "Separate_ORL_Bias", "Se
 
 
 # Fit model to session 2 data
-sess2_orl_fit = sampling(orl_model, 
-                         data   = sess2_data, 
-                         iter   = 5000, 
-                         warmup = 1000, 
-                         chains = 4, 
-                         cores  = 4,
-                         seed   = 43210)
+sess2_fit = sampling(orl_model, 
+                     data   = sess2_data, 
+                     iter   = 5000, 
+                     warmup = 1000, 
+                     chains = 4, 
+                     cores  = 4,
+                     seed   = 43210)
 saveRDS(sess2_fit, here("1_IGT_PP", "Data", "2_Fitted", "Separate_ORL_Bias", "Sess2_ORL_Bias_fit.rds"))
 ```
 
@@ -224,8 +224,8 @@ dev.off()
 ```{r}
 tiff(here("1_IGT_PP", "Figs_Tables", 
           "Separate_ORL_Bias", "Sess1_ORL_Bias_posterior_distributions.tiff"),
-     width = 30, height = 20, units = "cm", res = 300)
-  par(mfrow = c(5, 5))
+     width = 25, height = 10, units = "cm", res = 300)
+  par(mfrow = c(2, 4))
   # Mus & Sigmas
     for(i in grep("mu|sigma", group_parameters, value = T)){
       plot(density(sess1_posteriors[[i]][,1]), main = paste(i, 1))
@@ -236,8 +236,8 @@ dev.off()
 
 tiff(here("1_IGT_PP", "Figs_Tables", 
           "Separate_ORL_Bias", "Sess2_ORL_Bias_posterior_distributions.tiff"),
-     width = 30, height = 20, units = "cm", res = 300)
-  par(mfrow = c(5, 5))
+     width = 25, height = 10, units = "cm", res = 300)
+  par(mfrow = c(2, 4))
   # Mus & Sigmas
     for(i in grep("mu|sigma", group_parameters, value = T)){
       plot(density(sess2_posteriors[[i]][,1]), main = paste(i, 1))
@@ -248,6 +248,103 @@ dev.off()
 
 
 
+# -------------------------------------------
+# Test-Retest Reliability
+## Run Correlations
+```{r, eval = T}
+orl_parameters = data.frame(ID = sess1_data$subjIDs,
+                            Arew_1 = apply(sess1_posteriors$Arew, 2, mean),
+                            Apun_1 = apply(sess1_posteriors$Apun, 2, mean),
+                            betaF_1 = apply(sess1_posteriors$betaF, 2, mean),
+                            betaB_1 = apply(sess1_posteriors$betaB, 2, mean),
+                            Arew_2 = apply(sess2_posteriors$Arew, 2, mean),
+                            Apun_2 = apply(sess2_posteriors$Apun, 2, mean),
+                            betaF_2 = apply(sess2_posteriors$betaF, 2, mean),
+                            betaB_2 = apply(sess2_posteriors$betaB, 2, mean)) %>% 
+  pivot_longer(ends_with(c("_1", "_2")), values_to = "estimate", 
+               names_to = c("parameter", "session"), names_sep = "_") %>% 
+  pivot_wider(values_from = "estimate", 
+              names_from = "session", names_prefix = "session_") %>% 
+  group_by(parameter) %>% 
+  mutate(session_1 = (session_1 - mean(session_1)) / sd(session_1),
+         session_2 = (session_2 - mean(session_2)) / sd(session_2))
+  
+
+correlations = data.frame()
+for(p in c("Arew", "Apun", "betaF", "betaB")) {
+  cur_data = filter(orl_parameters, parameter == p)
+  cur_cor = cor.test(cur_data$session_1, cur_data$session_2)
+  correlations = data.frame(parameter = p,
+                            estimate = cur_cor$estimate,
+                            lower = cur_cor$conf.int[1],
+                            upper = cur_cor$conf.int[2]) %>% 
+    bind_rows(correlations)
+}
+
+correlations = correlations %>% 
+  mutate(estimate = round(estimate,2),
+         estimate_lab = paste(ifelse(sign(estimate)==1," ","-"),
+                              stri_pad_right(str_remove(abs(estimate), "^0+"),
+                                                           width = 3, pad = "0"),sep=""),
+         lower = round(as.numeric(str_remove(lower, "\\(")),2),
+         upper = round(as.numeric(str_remove(upper, "\\)")),2),
+         lower_lab = paste(ifelse(sign(lower)==1,"","-"),
+                           stri_pad_right(str_remove(abs(lower), "^0+"),
+                                          width = 3, pad = "0"),sep=""),
+         upper_lab = paste(ifelse(sign(upper)==1,"","-"),
+                           stri_pad_right(str_remove(abs(upper), "^0+"),
+                                          width = 3, pad = "0"),sep=""),
+         estimate_CI = paste("r =",estimate_lab," [",lower_lab,",",upper_lab,"]",sep=""),
+         parameter = factor(parameter,
+                            levels = c("Arew", "Apun", "betaF", "betaB"),
+                            labels = c(expression(paste(italic(A),"+",sep="")),
+                                       expression(paste(italic(A),"-",sep="")),
+                                       expression(paste("\u03B2",italic(f),sep="")),
+                                       expression(paste("\u03B2",italic(b),sep="")))))
+
+orl_parameters = mutate(
+  orl_parameters,
+  parameter = factor(parameter,
+                     levels = c("Arew", "Apun", "betaF", "betaB"),
+                     labels = c(expression(paste(italic(A),"+",sep="")),
+                                expression(paste(italic(A),"-",sep="")),
+                                expression(paste("\u03B2",italic(f),sep="")),
+                                expression(paste("\u03B2",italic(b),sep="")))))
+```
+
+
+
+## Plot Correlations
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
+          "Supplement_Separate_ORL_Reliability.tiff"),
+     width = 14.6, height = 3.5, units = "cm", res = 300)
+  
+    orl_parameters %>% 
+      ggplot(aes(x = session_1, y = session_2)) +
+        # geoms
+        geom_point(size = 1, shape = 21, color = "black", fill = "gray50") +
+        geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F, size = .5,
+                    fullrange = T) +
+        geom_text_npc(data = correlations, aes(npcx = "center", npcy = "top",
+                                            label = estimate_CI), size = 2.25, vjust = 0) +
+        # scales
+        scale_y_continuous(limits = c(-2.5, 6)) +
+        # themes
+        labs(x = "Session 1", y = "Session 2") +
+        coord_cartesian(clip = "off") +
+        theme_classic() +
+        theme(axis.text = element_text(color = "black"),
+              text = element_text(color = "black", size = 10),
+              panel.spacing.y = unit(-1, "lines"),
+              strip.background = element_rect(color = "transparent", fill = NA),
+              strip.text.x = element_text(size = 13, vjust = 1),
+              plot.margin = unit(c(-.25,0.1,0.1,0.1), "lines"),
+              aspect.ratio = 1) +
+        facet_rep_grid(.~parameter, labeller = label_parsed)
+  
+dev.off()
+```
 
 
 
