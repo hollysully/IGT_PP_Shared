@@ -1,0 +1,800 @@
+---
+title: "Fitting Binomial Model"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggpubr)
+library(ggh4x)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+library(egg)
+# source(here("Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+
+## RMD Setup
+```{r}
+sample = "T1_parent_SU_Dep_Anx"
+
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         paste("design", sample, "Binomial", "IGT.RDS", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Deck Model
+## Setup
+```{r, eval = F}
+model_name = "Covariate_Deck_Binomial"
+sample = "T1_parent_SU_Dep_Anx"
+
+focal_parameters = c(
+  "mu_A", "mu_B", "mu_C", "mu_D",
+  "sigma_A", "sigma_B", "sigma_C", "sigma_D",
+  "tilde_A", "tilde_B", "tilde_C", "tilde_D",
+  "mu_A_theta", "mu_B_theta", "mu_C_theta", "mu_D_theta",
+  "A_theta", "B_theta", "C_theta", "D_theta"
+)
+
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Check Model
+```{r, eval = F}
+model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
+                                paste0(model_name, ".stan")), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+## Fit Model
+```{r, eval = F}
+# Compile model
+deck_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                             paste0(model_name, ".stan")))
+  
+
+# -----------------------------------------------------------------------------------
+# Fit model
+deck_fit = sampling(deck_model, 
+                    data   = stan_data, 
+                    iter   = 5000, 
+                    warmup = 1000, 
+                    chains = 4, 
+                    cores  = 4,
+                    seed   = 43210,
+                    save_warmup = F)
+saveRDS(deck_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                       model_name,
+                       paste(sample, model_name, "fit.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+saveRDS(extract(deck_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                    model_name,
+                                    paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# save rhats
+rhat(deck_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               model_name,
+               paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Good/Bad Model
+# ----------------
+# Setup
+```{r, eval = T}
+model_name = "Covariate_Good_Bad_Binomial"
+sample = "T1_parent_SU_Dep_Anx"
+
+focal_parameters = c(
+  "mu_good", "mu_bad",
+  "sigma_good", "sigma_bad",
+  "tilde_good", "tilde_bad",
+  "mu_good_theta", "mu_bad_theta",
+  "good_theta", "bad_theta"
+)
+
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+# Model-Fitting
+## Check Model
+```{r, eval = F}
+model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
+                                paste0(model_name, ".stan")), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+## Fit Model
+```{r, eval = F}
+# Compile model
+good_bad_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                                 paste0(model_name, ".stan")))
+  
+
+# -----------------------------------------------------------------------------------
+# Fit model
+good_bad_fit = sampling(good_bad_model, 
+                        data   = stan_data, 
+                        iter   = 5000, 
+                        warmup = 1000, 
+                        chains = 4, 
+                        cores  = 4,
+                        seed   = 43210,
+                        save_warmup = F)
+saveRDS(good_bad_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                           model_name,
+                           paste(sample, model_name, "fit.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+saveRDS(extract(good_bad_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                    model_name,
+                                    paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# save rhats
+rhat(good_bad_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               model_name,
+               paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+# Process Model Data
+## Import Data
+```{r}
+# subset participant to exclude
+sub_keep = stan_data$ID_participant[stan_data$X[,1] == 0]
+
+model_name = "Covariate_Good_Bad_Binomial"
+
+# -----------------------------------------------------------------------------------
+# read in model fit
+good_bad_fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                            model_name,
+                            paste(sample, model_name, "fit.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# read in posteriors
+good_bad_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                   model_name,
+                                   paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# read in rhats
+good_bad_rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                              model_name,
+                              paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+## Prep Data
+### Group-Level Data
+```{r, eval = T}
+good_bad_grp_thetas = data.frame(iteration = 1:((good_bad_fit@sim$iter -
+                                                   good_bad_fit@sim$warmup) *
+                                                  good_bad_fit@sim$chains),
+                                 good_mu = good_bad_posteriors$mu_good_theta,
+                                 good_beta = good_bad_posteriors$mu_good,
+                                 bad_mu = good_bad_posteriors$mu_bad_theta,
+                                 bad_beta = good_bad_posteriors$mu_bad) %>% 
+  pivot_longer(starts_with(c("good", "bad")), names_to = c("valence", "group"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  filter(!(str_detect(valence, "beta") & group == 1)) %>% 
+  separate(col = "valence", into = c("valence", "parameter"), sep = "_") %>% 
+  mutate(group = case_when(group == 1 & parameter == "mu" ~ "Con",
+                           group == 2 & parameter == "mu" ~ "SU",
+                           group == 3 & parameter == "mu" ~ "Dep",
+                           group == 4 & parameter == "mu" ~ "Anx",
+                           group == 2 & parameter == "beta" ~ "SU-Con",
+                           group == 3 & parameter == "beta" ~ "Dep-Con",
+                           group == 4 & parameter == "beta" ~ "Anx-Con")) %>% 
+  group_by(valence, parameter, group) %>% 
+  mutate(mu = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2],
+         valence = factor(valence, levels = c("good", "bad"), ordered = T),
+         group = factor(group, levels = c("Con", "SU", "Dep", "Anx",
+                                          "SU-Con", "Dep-Con", "Anx-Con")),
+         group_mean = case_when(group %in% c("Con", "SU", "Dep", "Anx") ~ group,
+                                T ~ "Comparison"),
+         group_mean = factor(group_mean, ordered = T,
+                             levels = c("Con", "SU", "Dep", "Anx", "Comparison")),
+         comparison = case_when(group %in% c("Con", "SU", "Dep", "Anx") ~ "Group Mean",
+                                T ~ group),
+         comparison = factor(comparison, ordered = T,
+                             levels = c("Group Mean", "SU-Con", "Dep-Con", "Anx-Con")))
+```
+
+
+
+### Individual-Subject Data
+```{r, eval = T}
+good_bad_ind_data = data.frame(ID = stan_data$ID_OG,
+                               ID_participant = stan_data$ID_participant,
+                               SU = stan_data$X[,2],
+                               Dep = stan_data$X[,3],
+                               Anx = stan_data$X[,4],
+                               obs_good = (stan_data$C_plays +
+                                           stan_data$D_plays) /
+                                          (stan_data$C_trials +
+                                           stan_data$D_trials),
+                               obs_bad = (stan_data$A_plays +
+                                          stan_data$B_plays) /
+                                         (stan_data$A_trials +
+                                          stan_data$B_trials),
+                               pred_good = apply(good_bad_posteriors$good_pred, 2, mean) /
+                                 (stan_data$C_trials + stan_data$D_trials),
+                               pred_bad = apply(good_bad_posteriors$bad_pred, 2, mean) /
+                                 (stan_data$A_trials + stan_data$B_trials)) %>% 
+  pivot_longer(ends_with(c("good", "bad")), names_to = c("type", "valence"),
+               values_to = "estimate", names_sep = "_") %>% 
+  pivot_wider(names_from = "type", values_from = "estimate")
+```
+
+
+
+# Distribution Plots
+## Group-Level Posterior Distributions
+```{r}
+# build plot
+good_bad_group_plot = good_bad_grp_thetas %>% 
+  filter(comparison == "Group Mean") %>% 
+  mutate(valence = factor(valence, levels = c("good", "bad"),
+                            ordered = T)) %>% 
+  ggplot(aes(x = estimate, fill = group)) +
+    # geoms
+    geom_text_npc(data = data.frame(valence = factor(c("good", "bad"), ordered = T),
+                                    lab_ = c("Good", "Bad")),
+                  aes(label = lab_), npcx = 1, npcy = .5, angle = 270, size = 4, vjust = 1) +
+    geom_density(alpha = .5, linewidth = .25) +
+    geom_hline(yintercept = 0) +
+    # scales
+    scale_x_continuous(limits = c(.55,.95), expand = c(0, 0), breaks = seq(.6, .9, .1)) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73"),
+                      limits = c("Con", "SU", "Dep", "Anx")) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          axis.title = element_blank(),
+          legend.text = element_text(size = 6),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+          legend.position = c(.25, .75),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(0, .2, 0, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(-.25, "cm"),
+          strip.text = element_blank(),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_grid(valence~., scales = "free",
+                   labeller = labeller(valence = c("good" = "Good", "bad" = "Bad")))# +
+    # guides(fill = guide_legend(nrow = 2))
+```
+
+
+
+## Make Person-Level Plots
+```{r}
+make_plot = function(data, grp_diag, grp_color = "gray45",
+                     good_lab = NA_character_, bad_lab = NA_character_) {
+  colnames(data)[colnames(data)==grp_diag] = "group"
+  
+  plot = data %>% 
+    mutate(valence = factor(valence, levels = c("good", "bad"), labels = c("Good", "Bad"),
+                            ordered = T),
+           lab_ = case_when(valence == "Good" ~ grp_diag, T ~ NA_character_)) %>%
+           # lab_ = case_when(valence == "Good" ~ good_lab, T ~ bad_lab)) %>% 
+    filter(group == 1) %>% 
+    ggplot() +
+    # geoms
+    geom_text_npc(aes(label = lab_), npcx = 0, npcy = 1) +
+    geom_histogram(aes(x = obs, y = ..density..), color = "black", fill = grp_color,
+                   alpha = .5, linewidth = .25) +
+    geom_density(aes(x = pred), fill = grp_color, linewidth = .5, alpha = .5) +
+    # scales
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25),
+                       labels = c("0", ".25", ".50", ".75", "1")) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05))) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.x = element_line(color = "black"),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          axis.title = element_blank(),
+          legend.text = element_text(size = 6),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.1, "lines"),
+          legend.position = c(.1, .945), legend.direction = "vertical",
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(0, .2, 0, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(-.25, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_grid(valence~., scales = "free")
+    
+  return(plot)
+}
+```
+
+
+
+## Combine & Save Plots
+```{r}
+# -----------------------------------------------------------------------------------
+# save plot
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Distribution Plots.tiff", sep = " ")),
+     width = 14.6, height = 4, units = "cm", res = 300)
+  
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(ggarrange(make_plot(good_bad_ind_data, "SU",  "#E69F00", "Good", "Bad"),
+                      make_plot(good_bad_ind_data, "Dep", "#56B4E9"),
+                      make_plot(good_bad_ind_data, "Anx", "#009E73"),
+                      good_bad_group_plot,
+                      ncol = 4) %>% 
+               annotate_figure(left = textGrob("Density", rot = 90, hjust = .5),
+                              bottom = textGrob("Estimate")))
+  
+dev.off()
+```
+
+
+
+## -----------
+## SU
+### Person-Level Plots
+```{r}
+SU_ind_plot = 
+  good_bad_ind_data %>% 
+  mutate(valence = factor(valence, levels = c("good", "bad"), labels = c("Good", "Bad"),
+                          ordered = T),
+         SU = factor(SU)) %>% 
+  ggplot(aes(fill = SU)) +
+    # geoms
+    geom_histogram(aes(x = obs, y = ..density..), color = "black",
+                   linewidth = .1, bins = 75) +
+    geom_density(aes(x = pred, color = SU), linewidth = .5) +
+    # scales
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25),
+                       labels = c("0", ".25", ".50", ".75", "1")) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05))) +
+    scale_fill_manual(values = alpha(c("gray45", "goldenrod3"), alpha = .5),
+                      labels = c("Con", "SU")) +
+    scale_color_manual(values = alpha(c("gray45", "goldenrod3"), alpha = .5),
+                      labels = c("Con", "SU")) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.x = element_line(color = "black"),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          legend.text = element_text(size = 6),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.1, "lines"),
+          legend.position = c(.1, .945), legend.direction = "vertical",
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(.5, .5, .3, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(.5, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(valence~., scales = "free",
+                   nrow = 2, ncol = 1)
+# -----------------------------------------------------------------------------------
+# save plot
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Con-SU Ind Distributions.tiff", sep = " ")),
+     width = 6, height = 6, units = "cm", res = 300)
+  
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(SU_ind_plot)
+  # popViewport()
+  
+dev.off()
+```
+
+
+
+### Group-Level Plots
+```{r}
+# -----------------------------------------------------------------------------------
+# Mu Plots
+# prep specific data for this plot
+SU_mus_plot =
+  good_bad_grp_thetas %>% 
+  filter(group %in% c("Con", "SU")) %>% 
+  mutate(valence = factor(valence, levels = c("good", "bad"), labels = c("Good", "Bad"),
+                          ordered = T)) %>% 
+  # build plot
+  ggplot(aes(x = estimate, fill = group)) +
+    # geoms
+    geom_density(alpha = .5) +
+    geom_hline(yintercept = 0) +
+    # scales
+    scale_x_continuous(limits = c(.5, 1), expand = c(0, 0), breaks = seq(.5,1, .25)) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    scale_fill_manual(values = alpha(c("gray45", "goldenrod3"), alpha = .5)) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10, vjust = 3),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          legend.text = element_text(size = 7),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.1, "lines"),
+          legend.position = c(.1, .925), legend.direction = "vertical",
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(.125, .4, .2, .125), "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(valence~., scales = "free",
+                   nrow = 2, ncol = 1)
+# -----------------------------------------------------------------------------------
+# Good Beta Plot
+# prep specific data for this plot
+SU_good_beta_plot =
+  good_bad_grp_thetas %>% 
+  filter(group == "SU-Con" & valence == "good") %>% 
+  # build plot
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_density(fill = "gray45", linewidth = .25) +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper), color = "red", linetype = "dashed", linewidth = .25) +
+    # scales
+    scale_x_continuous(breaks = 0) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    # themes
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black", size = 6),
+          axis.title = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.1, .4, .2, .1), "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent"))
+# -----------------------------------------------------------------------------------
+# Bad Beta Plot
+# prep specific data for this plot
+SU_bad_beta_plot =
+  good_bad_grp_thetas %>% 
+  filter(group == "SU-Con" & valence == "bad") %>% 
+  # build plot
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_density(fill = "gray45", linewidth = .25) +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper), color = "red", linetype = "dashed", linewidth = .25) +
+    # scales
+    scale_x_continuous(breaks = 0) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    # themes
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black", size = 6),
+          axis.title = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.1, .4, .2, .1), "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent"))
+# -----------------------------------------------------------------------------------
+# save plot
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Con-SU Mus & Beta Posterior Distributions.tiff", sep = " ")),
+     width = 4, height = 6, units = "cm", res = 300)
+  
+  grid.newpage()
+  # main plot
+  grid.draw(ggplotGrob(SU_mus_plot))
+  
+  # top inset
+  pushViewport(viewport(x = .825, y = .8, width = .375, height = .2))
+  grid.draw(ggplotGrob(SU_good_beta_plot))
+  popViewport()
+  
+  # bottom inset
+  pushViewport(viewport(x = .825, y = .35, width = .375, height = .2))
+  grid.draw(ggplotGrob(SU_bad_beta_plot))
+  
+  popViewport()
+  
+dev.off()
+```
+
+
+
+## -----------
+## Dep
+### Person-Level Plots
+```{r}
+Dep_ind_plot = 
+  good_bad_ind_data %>% 
+  mutate(valence = factor(valence, levels = c("good", "bad"), labels = c("Good", "Bad"),
+                          ordered = T)) %>% 
+  ggplot() +
+    # geoms
+    geom_histogram(aes(x = obs, y = ..density.., fill = factor(Dep)), color = "black",
+                   linewidth = .1, bins = 75,) +
+    geom_density(aes(x = pred, fill = factor(Dep)), linewidth = .5) +
+    # scales
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25),
+                       labels = c("0", ".25", ".50", ".75", "1")) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05))) +
+    scale_fill_manual(values = alpha(c("gray45", "goldenrod3"), alpha = .5),
+                      labels = c("Con", "Dep")) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          legend.text = element_text(size = 6),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.1, "lines"),
+          legend.position = c(.1, .945), legend.direction = "vertical",
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(.5, .5, .3, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(.5, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(valence~factor(Dep), scales = "free",
+                   nrow = 2, ncol = 2)
+# -----------------------------------------------------------------------------------
+# save plot
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Con-Dep Ind Distributions.tiff", sep = " ")),
+     width = 6, height = 6, units = "cm", res = 300)
+  
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(Dep_ind_plot)
+  # popViewport()
+  
+dev.off()
+```
+
+
+
+### Group-Level Plots
+```{r}
+# -----------------------------------------------------------------------------------
+# Mu Plots
+# prep specific data for this plot
+Dep_mus_plot =
+  good_bad_grp_thetas %>% 
+  filter(group %in% c("Con", "Dep")) %>% 
+  mutate(valence = factor(valence, levels = c("good", "bad"), labels = c("Good", "Bad"),
+                          ordered = T)) %>% 
+  # build plot
+  ggplot(aes(x = estimate, fill = group)) +
+    # geoms
+    geom_density(alpha = .5) +
+    geom_hline(yintercept = 0) +
+    # scales
+    scale_x_continuous(limits = c(.5, 1), expand = c(0, 0), breaks = seq(.5,1, .25)) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    scale_fill_manual(values = alpha(c("gray45", "goldenrod3"), alpha = .5)) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10, vjust = 3),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          legend.text = element_text(size = 7),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.1, "lines"),
+          legend.position = c(.1, .925), legend.direction = "vertical",
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(.125, .4, .2, .125), "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(valence~., scales = "free",
+                   nrow = 2, ncol = 1)
+# -----------------------------------------------------------------------------------
+# Good Beta Plot
+# prep specific data for this plot
+Dep_good_beta_plot =
+  good_bad_grp_thetas %>% 
+  filter(group == "Dep-Con" & valence == "good") %>% 
+  # build plot
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_density(fill = "gray45", linewidth = .25) +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper), color = "red", linetype = "dashed", linewidth = .25) +
+    # scales
+    scale_x_continuous(breaks = 0) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    # themes
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black", size = 6),
+          axis.title = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.1, .4, .2, .1), "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent"))
+# -----------------------------------------------------------------------------------
+# Bad Beta Plot
+# prep specific data for this plot
+Dep_bad_beta_plot =
+  good_bad_grp_thetas %>% 
+  filter(group == "Dep-Con" & valence == "bad") %>% 
+  # build plot
+  ggplot(aes(x = estimate)) +
+    # geoms
+    geom_density(fill = "gray45", linewidth = .25) +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mu), color = "red2", linewidth = .25) +
+    geom_vline(aes(xintercept = lower), color = "red", linetype = "dashed", linewidth = .25) +
+    geom_vline(aes(xintercept = upper), color = "red", linetype = "dashed", linewidth = .25) +
+    # scales
+    scale_x_continuous(breaks = 0) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    # themes
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black", size = 6),
+          axis.title = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          plot.margin = unit(c(.1, .4, .2, .1), "cm"),
+          panel.spacing.y = unit(0, "cm"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent"))
+# -----------------------------------------------------------------------------------
+# save plot
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Con-Dep Mus & Beta Posterior Distributions.tiff", sep = " ")),
+     width = 4, height = 6, units = "cm", res = 300)
+  
+  grid.newpage()
+  # main plot
+  grid.draw(ggplotGrob(Dep_mus_plot))
+  
+  # top inset
+  pushViewport(viewport(x = .825, y = .8, width = .375, height = .2))
+  grid.draw(ggplotGrob(Dep_good_beta_plot))
+  popViewport()
+  
+  # bottom inset
+  pushViewport(viewport(x = .825, y = .35, width = .375, height = .2))
+  grid.draw(ggplotGrob(Dep_bad_beta_plot))
+  
+  popViewport()
+  
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

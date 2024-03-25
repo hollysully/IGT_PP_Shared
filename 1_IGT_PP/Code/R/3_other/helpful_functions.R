@@ -6,6 +6,10 @@ calculate_proportions = function(posteriors, stan_data, data_type = "list_of_mat
   library(foreach)
   library(abind)
   
+  # Set iterations
+  iterations = nrow(posteriors$mu_p)
+  
+  
   # Card matrix
   cards = stan_data$card
   

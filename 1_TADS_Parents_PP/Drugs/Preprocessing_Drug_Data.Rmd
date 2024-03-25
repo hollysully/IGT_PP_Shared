@@ -1,0 +1,75 @@
+---
+title: "Drug Data Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(plyr)
+```
+
+
+
+# --------------------------------------
+# SCID Data
+## Select Function
+```{r}
+custom_select = function(data){
+  new_data = data %>% 
+    select(ID, session = VisitN, participant = Participant, date = Date,
+           ldep, # depression
+           lanx, # anxiety
+           lsub, # substance use (everything except marijuana and alcohol)
+           lpot, # marijuana use
+           lalc  # alcohol use
+           )
+  return(new_data)
+}
+```
+
+
+
+## Import Data
+```{r, warning=F}
+SCID_dad = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Finalized Scored Data/T1/Interviews/SCID/Dad/5.23.2022_DadSCIDT1_diagnosesandsymptoms.csv") %>% 
+  custom_select()
+SCID_mom = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Finalized Scored Data/T1/Interviews/SCID/Mom/5.23.2022_MomSCIDT1_diagnosesandsymptoms.csv") %>% 
+  custom_select()
+```
+
+
+
+## Process Data
+```{r}
+SCID = bind_rows(SCID_mom, SCID_dad) %>% 
+  mutate(SU = case_when(lsub > 0 | lpot > 0 | lalc > 0 ~ 1, T ~ 0)) %>% 
+  mutate(drug_drink = case_when(lsub > 0 | lalc > 0 ~ 1, T ~ 0)) %>% 
+  select(everything(), depression = ldep, anxiety = lanx, -lsub, -lpot, -lalc)
+
+
+saveRDS(SCID, "processed_SCID_data.RDS")
+```
+
+
+
+## Inspect Data
+```{r, eval = F}
+data.frame(freq = unlist(sapply(select(SCID, depression, anxiety, SU), table)))
+```
+
+
+
+
+
+
+
+
+
+

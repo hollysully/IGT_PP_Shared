@@ -90,10 +90,10 @@ orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted",
                               "Joint_ORL", "Joint_ORL_posteriors.rds"))
 
 focal_parameters <- c(
-  "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
-  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
-  "Arew", "Apun", "K", "betaF", "betaP",
-  "R_Arew[1,2]", "R_Apun[1,2]", "R_K[1,2]", "R_betaF[1,2]", "R_betaP[1,2]"
+  "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+  "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+  "Arew", "Apun", "betaF", "betaB",
+  "R_Arew[1,2]", "R_Apun[1,2]", "R_betaF[1,2]", "R_betaB[1,2]"
 )
 
 group_parameters <- grep("mu|sigma|R_", focal_parameters, value=TRUE)

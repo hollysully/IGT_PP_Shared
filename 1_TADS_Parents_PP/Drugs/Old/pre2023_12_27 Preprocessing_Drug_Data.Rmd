@@ -1,0 +1,234 @@
+---
+title: "Drug Data Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(plyr)
+```
+
+
+
+# --------------------------------------
+# SCID Data
+## Select Function
+```{r}
+custom_select = function(data){
+  new_data = data %>% 
+    select(ID, session = VisitN, participant = Participant, date = Date,
+           # SUDs
+           aud_life = SSlalc,   # Alcohol Use Disorder (Lifetime Prevalence) 
+           aud_symp = SScalc,   # Alcohol Use Disorder (Symptomatic in Past 12 Months)
+           sed_life = SSlsed,   # Sedative-Hypnotic-Anxiolytic Use Disorder (Lifetime Prevalence)
+           sed_symp = SScsed,   # Sedative-Hypnotic-Anxiolytic Use Disorder (Symptomatic in Past 12 Months)
+           pot_life = SSlpot,   # Cannabis Use Disorder (Lifetime Prevalence)
+           pot_symp = SScpot,   # Cannabis Use Disorder (Symptomatic in Past 12 Months)
+           stim_life = SSlstim, # Stimulants/Cocaine Use Disorder (Lifetime Prevalence)
+           stim_symp = SScstim, # Stimulants/Cocaine Use Disorder (Symptomatic in Past 12 Months)
+           opi_life = SSlopi,   # Opioids Use Disorder (Lifetime Prevalence)
+           opi_symp = SScopi,   # Opioids Use Disorder (Symptomatic in Past 12 Months)
+           pcp_life = SSlpcp,   # PCP Use Disorder (Lifetime Prevalence)
+           pcp_symp = SScpcp,   # PCP Use Disorder (Symptomatic in Past 12 Months)
+           hal_life = SSlhal,   # Other Hallucinogens  Use Disorder (Lifetime Prevalence) 
+           hal_symp = SSchal,   # Other Hallucinogens Use Disorder  (Symptomatic in Past 12 Months) 
+           inh_life = SSlinh,   # Inhalants Use Disorder (Lifetime Prevalence)
+           inh_symp = SScinh,   # Inhalants Use Disorder (Symptomatic in Past 12 Months)
+           osub_life = SSlosub, # Other/Unknown Substance Use Disorder (Lifetime Prevalence)
+           osub_symp = SScosub, # Other/Unknown Substance Use Disorder (Symptomatic in Past 12 Months)
+           
+           # OCD
+           ocd_life = SSlocd, # Obsessive Compulsive Disorder (Lifetime Prevalence)
+           ocd_symp = SScocd, # Obsessive Compulsive Disorder (Symptomatic in Past Month)
+           osocd_life = SSlosocd, # Other Specified Obsessive Compulsive and Related Disorder (Lifetime Prevalence)
+           osocd_symp = Sscosocd, # Other Specified Obsessive Compulsive and Related Disorder (Symptomatic in Past Month)
+           ocgc_life = SSlocgc, # Obsessive-Compulsive and Related Disorder Due to Another Medical Condition (Lifetime Prevalence)
+           ocgc_symp = SScocgc, # Obsessive-Compulsive and Related Disorder Due to Another Medical Condition (Symptomatic in Past Month)
+           ocgcsp_sub = SSlocgcsp, # Specify Medical Condition 
+           ocsub_life = Sslocsub, # Substance/Medication-Induced Obsessive Compulsive and Related Disorder (Lifetime Prevalence)
+           ocsub_symp = Sscocsub, # Substance/Medication-Induced Obsessive Compulsive and Related Disorder (Symptomatic in Past Month)
+           ocsubsp_sub = Sslocsubsp, # Specify Substance
+           )
+  return(new_data)
+}
+```
+
+
+
+## Import Data
+```{r, warning=F}
+SCID_dad = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Finalized Scored Data/T1/Interviews/SCID/Dad/5.23.2022_DadSCIDT1_diagnosesandsymptoms.csv") %>% 
+  custom_select()
+SCID_mom = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Finalized Scored Data/T1/Interviews/SCID/Mom/5.23.2022_MomSCIDT1_diagnosesandsymptoms.csv") %>% 
+  custom_select()
+```
+
+
+
+## Process Data
+```{r}
+sud_names = c("aud_life","aud_symp","sed_life","sed_symp",
+              "pot_life","pot_symp","stim_life","stim_symp",
+              "opi_life","opi_symp","pcp_life","pcp_symp",
+              "hal_life","hal_symp","inh_life","inh_symp",
+              "osub_life","osub_symp","ocd_life","ocd_symp",
+              "osocd_life","osocd_symp","ocgc_life","ocgc_symp",
+              "ocgcsp_sub","ocsub_life","ocsub_symp","ocsubsp_sub")
+
+SCID = bind_rows(SCID_mom, SCID_dad) %>% 
+  mutate_at(sud_names, function(x) case_when(x == 1 ~ 0,   # Absent
+                                             x == 2 ~ 1,   # Sub Threshold
+                                             x == 3 ~ 2,   # Threshold
+                                             T ~ 3 # Inadequate Info
+                                             ))
+
+saveRDS(SCID, "processed_SCID_data.RDS")
+```
+
+
+
+## Inspect Data
+```{r, eval = F}
+data.frame(freq = unlist(sapply(select(SCID, sud_names), table))) %>% 
+  mutate(variable = rownames(.)) %>% 
+  separate(variable, into = c("sud", "diag"), sep = "\\.") %>% 
+  pivot_wider(names_from = "diag", values_from = "freq", names_prefix = "diag_",
+              values_fill = 0) %>% 
+  select(sud, absent = diag_0, subthreshold = diag_1, threshold = diag_2, na = diag_3) %>% 
+  View(title = "Counts by SUD & Diag")
+
+
+SCID %>%
+  pivot_longer(cols = sud_names, names_to = "sud", values_to = "diag") %>% 
+  # mutate(threshold = case_when(diag == 2 ~ 1, T ~ 0)) %>% # Threshold only
+  mutate(threshold = case_when(diag == 1 | diag == 2 ~ 1, T ~ 0)) %>% # Threshold & Sub-Threshold
+  group_by(ID, participant) %>% 
+  reframe(thresholds = sum(threshold)) %>% 
+  mutate(threshold_present = case_when(thresholds > 0 ~ 1, T ~ 0),
+         threshold_not_present = case_when(threshold_present == 0 ~ 1, T ~ 0)) %>% 
+  ungroup() %>% 
+  reframe(total_present = sum(threshold_present),
+          total_not_present = sum(threshold_not_present),
+          total_participants = n()) %>% 
+  View(title = "Counts by Present/Not Present")
+
+
+SCID %>%
+  pivot_longer(cols = sud_names, names_to = "sud", values_to = "diag") %>% 
+  mutate(threshold = case_when(diag == 2 ~ 1, T ~ 0),
+         big_groups = case_when(str_detect(sud, "aud") ~ "alcohol",
+                                str_detect(sud, "pot") ~ "marijuana",
+                                T ~ "other")) %>% # Threshold only
+  # mutate(threshold = case_when(diag == 1 | diag == 2 ~ 1, T ~ 0)) %>% # Threshold & Sub-Threshold
+  group_by(ID, participant, big_groups) %>% 
+  reframe(thresholds = sum(threshold)) %>% 
+  mutate(threshold_present = case_when(thresholds > 0 ~ 1, T ~ 0),
+         threshold_not_present = case_when(threshold_present == 0 ~ 1, T ~ 0)) %>% 
+  ungroup() %>% 
+  group_by(big_groups) %>% 
+  reframe(total_present = sum(threshold_present),
+          total_not_present = sum(threshold_not_present),
+          total_participants = n()) %>% 
+  View(title = "Counts by Present/Not Present")
+```
+
+
+
+# --------------------------------------
+## Make Drug/Alc Data
+```{r}
+drug_alc_use = SCID %>% 
+  mutate(# Threshold
+    threshold_aud = case_when(aud_life == 2 | aud_symp == 2 ~ 1,
+                              aud_life == 3 | aud_symp == 3 ~ NA,
+                              T ~ 0),
+    threshold_drug = case_when(stim_life == 2 | stim_symp == 2 |
+                                 opi_life == 2 | opi_symp == 2 |
+                                 pcp_life == 2 | pcp_symp == 2 |
+                                 inh_life == 2 | inh_symp == 2 |
+                                 osub_life == 2 | osub_symp == 2 ~ 1,
+                               stim_life == 3 | stim_symp == 3 |
+                                 opi_life == 3 | opi_symp == 3 |
+                                 pcp_life == 3 | pcp_symp == 3 |
+                                 inh_life == 3 | inh_symp == 3 |
+                                 osub_life == 3 | osub_symp == 3 ~ NA,
+                               T ~ 0),
+    # Sub-threshold
+    subthreshold_aud = case_when(aud_life == 1 | aud_symp == 1 |
+                                   aud_life == 2 | aud_symp == 2 ~ 1,
+                                 aud_life == 3 | aud_symp == 3 ~ NA,
+                                 T ~ 0),
+    subthreshold_drug = case_when(stim_life == 1 | stim_symp == 1 |
+                                    stim_life == 2 | stim_symp == 2 |
+                                    # pot_life == 1 | pot_symp == 1 |
+                                    # pot_life == 2 | pot_symp == 2 |
+                                    # hal_life == 1 | hal_symp == 1 |
+                                    # hal_life == 2 | hal_symp == 2 |
+                                    # sed_life == 1 | sed_symp == 1 |
+                                    # sed_life == 2 | sed_symp == 2 |
+                                    opi_life == 1 | opi_symp == 1 |
+                                    opi_life == 2 | opi_symp == 2 |
+                                    pcp_life == 1 | pcp_symp == 1 |
+                                    pcp_life == 2 | pcp_symp == 2 |
+                                    inh_life == 1 | inh_symp == 1 |
+                                    inh_life == 2 | inh_symp == 2 |
+                                    osub_life == 1 | osub_symp == 1 |
+                                    osub_life == 2 | osub_symp == 2 ~ 1,
+                                  stim_life == 3 | stim_symp == 3 |
+                                    opi_life == 3 | opi_symp == 3 |
+                                    pcp_life == 3 | pcp_symp == 3 |
+                                    inh_life == 3 | inh_symp == 3 |
+                                    osub_life == 3 | osub_symp == 3 ~ NA,
+                                  T ~ 0),
+    participant = tolower(participant)) %>% 
+  rowwise() %>% 
+  mutate(threshold_aud_drug = case_when(sum(threshold_aud, threshold_drug, na.rm = T) > 0 ~ 1, T ~ 0),
+         threshold_aud_drug_type = case_when(sum(threshold_aud, threshold_drug, na.rm = T) > 1 ~ "both",
+                                             threshold_aud == 1 ~ "aud", threshold_drug == 1 ~ "drug", T ~ "none"),
+         subthreshold_aud_drug = case_when(sum(subthreshold_aud, subthreshold_drug, na.rm = T) > 0 ~ 1, T ~ 0),
+         subthreshold_aud_drug_type = case_when(sum(subthreshold_aud, subthreshold_drug, na.rm = T) > 1 ~ "both",
+                                                subthreshold_aud == 1 ~ "aud", subthreshold_drug == 1 ~ "drug", T ~ "none")) %>% 
+  select(ID, participant,
+         threshold_aud, threshold_drug, threshold_aud_drug, threshold_aud_drug_type,
+         subthreshold_aud, subthreshold_drug, subthreshold_aud_drug, subthreshold_aud_drug_type)
+
+saveRDS(drug_alc_use, "drug_alc_use_data.RDS")
+```
+
+
+
+```{r}
+drug_alc_use %>% 
+  summarise(`threshold: aud` = sum(threshold_aud),
+            `subthreshold: aud` = sum(subthreshold_aud),
+            `threshold: drug` = sum(threshold_drug),
+            `subthreshold: drug` = sum(subthreshold_drug),
+            `threshold: aud & drug` = sum(threshold_aud_drug),
+            `subthreshold: aud & drug` = sum(subthreshold_aud_drug)) %>% 
+  View(title = "Counts")
+data.frame(threshold = sum())
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

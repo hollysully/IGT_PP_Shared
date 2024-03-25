@@ -1,0 +1,800 @@
+---
+title: "Fitting Binomial Model"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggpubr)
+library(ggh4x)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+library(egg)
+# source(here("Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+
+## RMD Setup
+```{r}
+sample = "T1_parent_SU_Dep_Anx"
+
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         paste("design", sample, "IGT.RDS", sep = "_")))
+
+model_name = "Covariate_Deck_Block_Binomial"
+
+focal_parameters = c(
+  "mu_A", "mu_B", "mu_C", "mu_D",
+  "sigma_A", "sigma_B", "sigma_C", "sigma_D",
+  "tilde_A", "tilde_B", "tilde_C", "tilde_D",
+  "mu_A_theta", "mu_B_theta", "mu_C_theta", "mu_D_theta",
+  "A_theta", "B_theta", "C_theta", "D_theta"
+)
+
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+# -------------------------------------------
+# Model-Fitting
+## Check Model
+```{r, eval = F}
+model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
+                                paste0(model_name, ".stan")), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+## Fit Model
+```{r, eval = F}
+# Compile model
+deck_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                             paste0(model_name, ".stan")))
+
+
+# -----------------------------------------------------------------------------------
+# Fit model
+deck_fit = sampling(deck_model, 
+                    data   = stan_data, 
+                    iter   = 5000, 
+                    warmup = 1000, 
+                    chains = 4, 
+                    cores  = 4,
+                    seed   = 43210,
+                    save_warmup = F)
+saveRDS(deck_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                       model_name,
+                       paste(sample, model_name, "fit.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+saveRDS(extract(deck_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                model_name,
+                                paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# save rhats
+rhat(deck_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               model_name,
+               paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Process Model Data
+## Import Data
+```{r}
+# subset participant to exclude
+sub_keep = stan_data$ID_participant[stan_data$X[,1,1] == 0]
+
+# -----------------------------------------------------------------------------------
+# read in model fit
+deck_fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                        model_name,
+                        paste(sample, model_name, "fit.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# read in posteriors
+deck_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                               model_name,
+                               paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+# -----------------------------------------------------------------------------------
+# read in rhats
+deck_rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                          model_name,
+                          paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+## Prep Data
+### Group-Level Data
+```{r, eval = T}
+deck_grp_thetas = data.frame(iteration = 1:((deck_fit@sim$iter -
+                                               deck_fit@sim$warmup) *
+                                              deck_fit@sim$chains),
+                             A_mu = deck_posteriors$mu_A_theta,
+                             A_beta = deck_posteriors$mu_A,
+                             B_mu = deck_posteriors$mu_B_theta,
+                             B_beta = deck_posteriors$mu_B,
+                             C_mu = deck_posteriors$mu_C_theta,
+                             C_beta = deck_posteriors$mu_C,
+                             D_mu = deck_posteriors$mu_D_theta,
+                             D_beta = deck_posteriors$mu_D) %>% 
+  pivot_longer(starts_with(c("A", "B", "C", "D")), names_to = c("deck", "group", "block"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  filter(!(str_detect(deck, "beta") & group == 1)) %>% 
+  separate(col = "deck", into = c("deck", "parameter"), sep = "_") %>% 
+  mutate(group = case_when(group == 1 & parameter == "mu" ~ "Con",
+                           group == 2 & parameter == "mu" ~ "SU",
+                           group == 3 & parameter == "mu" ~ "Dep",
+                           group == 4 & parameter == "mu" ~ "Anx",
+                           group == 2 & parameter == "beta" ~ "SU-Con",
+                           group == 3 & parameter == "beta" ~ "Dep-Con",
+                           group == 4 & parameter == "beta" ~ "Anx-Con")) %>% 
+  group_by(deck, parameter, group, block) %>% 
+  mutate(mu = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2],
+         group = factor(group, levels = c("Con", "SU", "Dep", "Anx",
+                                          "SU-Con", "Dep-Con", "Anx-Con")),
+         group_mean = case_when(group %in% c("Con", "SU", "Dep", "Anx") ~ group,
+                                T ~ "Comparison"),
+         group_mean = factor(group_mean, ordered = T,
+                             levels = c("Con", "SU", "Dep", "Anx", "Comparison")),
+         comparison = case_when(group %in% c("Con", "SU", "Dep", "Anx") ~ "Group Mean",
+                                T ~ group),
+         comparison = factor(comparison, ordered = T,
+                             levels = c("Group Mean", "SU-Con", "Dep-Con", "Anx-Con")))
+```
+
+
+
+### Block-Differences
+```{r}
+deck_grp_diffs = deck_grp_thetas %>% 
+  select(iteration, deck, parameter, block, group_mean, comparison, group, estimate) %>% 
+  pivot_wider(names_from = "block", values_from = "estimate", names_prefix = "block_") %>% 
+  mutate(diff = block_3 - block_1) %>% 
+  group_by(deck, parameter, group) %>% 
+  mutate(mu = mean(diff),
+         lower = HDIofMCMC(diff)[1],
+         upper = HDIofMCMC(diff)[2])
+```
+
+
+
+### Individual-Subject Data
+```{r, eval = T}
+deck_ind_data = data.frame(ID = stan_data$ID_OG,
+                           ID_participant = stan_data$ID_participant,
+                           SU = stan_data$X[,2,1],
+                           Dep = stan_data$X[,3,1],
+                           Anx = stan_data$X[,4,1],
+                           obs_A = apply(deck_posteriors$A_plays_data, c(2,3), mean) /
+                             apply(deck_posteriors$A_trials_data, c(2,3), mean),
+                           obs_B = apply(deck_posteriors$B_plays_data, c(2,3), mean) /
+                             apply(deck_posteriors$B_trials_data, c(2,3), mean),
+                           obs_C = apply(deck_posteriors$C_plays_data, c(2,3), mean) /
+                             apply(deck_posteriors$C_trials_data, c(2,3), mean),
+                           obs_D = apply(deck_posteriors$D_plays_data, c(2,3), mean) /
+                             apply(deck_posteriors$D_trials_data, c(2,3), mean),
+                           pred_A = apply(deck_posteriors$A_pred, c(2,3), mean) /
+                             apply(deck_posteriors$A_trials_data, c(2,3), mean),
+                           pred_B = apply(deck_posteriors$B_pred, c(2,3), mean) / 
+                             apply(deck_posteriors$B_trials_data, c(2,3), mean),
+                           pred_C = apply(deck_posteriors$C_pred, c(2,3), mean) / 
+                             apply(deck_posteriors$C_trials_data, c(2,3), mean),
+                           pred_D = apply(deck_posteriors$D_pred, c(2,3), mean) / 
+                             apply(deck_posteriors$D_trials_data, c(2,3), mean)) %>% 
+  pivot_longer(contains(c("_A.", "_B.", "_C.", "_D.")), names_to = c("type", "deck", "block"),
+               values_to = "estimate", names_pattern = "(.*)_(.*)\\.(.*)") %>% 
+  pivot_wider(names_from = "type", values_from = "estimate")
+```
+
+
+
+# -------------------------------------------
+# Traceplots
+```{r, eval = F}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          "group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+traceplot(
+  deck_fit,
+  pars = group_parameters
+)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+            model_name,
+            "traceplots.tiff"),
+       width = 100, height = 100, units = "cm", res = 300)
+  traceplot(deck_fit,
+            pars = i
+  ) %>% print()
+  dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Distribution Plots
+## Mu x Group Posterior Distributions
+```{r}
+# build plot
+deck_group_plot = deck_grp_thetas %>% 
+  filter(comparison == "Group Mean") %>% 
+  ggplot(aes(x = estimate, fill = group)) +
+  # geoms
+  geom_text_npc(data = data.frame(block = rep(1, 4),
+                                  deck = factor(c("A", "B", "C", "D"),
+                                                levels = c("A", "B", "C", "D"),
+                                                ordered = T),
+                                  lab_ = c("A", "B", "C", "D")),
+                aes(label = lab_), npcx = 0, npcy = 1.1, size = 4, vjust = 1) +
+  geom_density(alpha = .5, linewidth = .25) +
+  geom_hline(yintercept = 0) +
+  # scales
+  scale_x_continuous(limits = c(.4, 1), expand = c(0, 0), breaks = seq(.4, 1, .2),
+                     labels = c(".4", ".6", ".8", "1")) +
+  scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+  scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73"),
+                    limits = c("Con", "SU", "Dep", "Anx")) +
+  # themes
+  labs(x = "Estimate", y = "Density") +
+  coord_cartesian(clip = "off") +
+  theme_classic() +
+  theme(axis.text.x = element_text(color = "black"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        # axis.title = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+        legend.position = c(.8575, .15),
+        legend.background = element_rect(fill = "transparent", colour = "transparent"),
+        legend.title = element_blank(),
+        plot.margin = unit(c(.1, .4, 0, .2), "cm"),
+        panel.spacing.x = unit(.25, "cm"),
+        panel.spacing.y = unit(.1, "cm"),
+        strip.text = element_blank(),
+        strip.background = element_rect(fill = "transparent", colour = "transparent"),
+        panel.background = element_rect(fill = "transparent", colour = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_rep_wrap(block~deck, scales = "free",
+                 nrow = 3, ncol = 4)
+
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Mu Distribution Plots.tiff", sep = " ")),
+     width = 7, height = 7, units = "cm", res = 300)
+
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(deck_group_plot)
+
+  # text
+  grid.text(c("Trials 1-10", "Trials 11-20", "Trials 21-30"),
+            x = .98, y = c(.85, .6, .24), rot = 270,
+            gp = gpar(fontsize = 9.5))
+
+dev.off()
+```
+
+
+
+## Mu x Block Posterior Distributions
+```{r}
+# build plot
+deck_group_plot = deck_grp_thetas %>% 
+  filter(comparison == "Group Mean") %>% 
+  group_by(group, block) %>%
+  mutate(mu_height = max(density(estimate)$x)*max(estimate)) %>%
+  ggplot(aes(x = estimate, fill = block)) +
+  # geoms
+  geom_text_npc(data = data.frame(group = factor(rep("Con", 4),
+                                                 levels = c("Con", "SU", "Dep", "Anx"),
+                                                 ordered = T),
+                                  deck = factor(c("A", "B", "C", "D"),
+                                                levels = c("A", "B", "C", "D"),
+                                                ordered = T),
+                                  lab_ = c("A", "B", "C", "D")),
+                aes(label = lab_), npcx = 0, npcy = 1.1, size = 4, vjust = 1) +
+  geom_density(alpha = .5, linewidth = .25) +
+  geom_hline(yintercept = 0) +
+  geom_vline(aes(xintercept = mu, color = block), linewidth = .25) +
+  # scales
+  scale_x_continuous(limits = c(.4, 1), expand = c(0, 0), breaks = seq(.4, 1, .2),
+                     labels = c(".4", ".6", ".8", "1")) +
+  scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+  # scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73"),
+  #                   limits = c("Con", "SU", "Dep", "Anx")) +
+  # themes
+  labs(x = "Estimate", y = "Density") +
+  coord_cartesian(clip = "off") +
+  theme_classic() +
+  theme(axis.text.x = element_text(color = "black"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        axis.title = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+        legend.position = c(.8575, .15),
+        legend.background = element_rect(fill = "transparent", colour = "transparent"),
+        legend.title = element_blank(),
+        plot.margin = unit(c(.1, .4, 0, .2), "cm"),
+        panel.spacing.x = unit(.25, "cm"),
+        panel.spacing.y = unit(.1, "cm"),
+        strip.text = element_blank(),
+        strip.background = element_rect(fill = "transparent", colour = "transparent"),
+        panel.background = element_rect(fill = "transparent", colour = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_rep_wrap(group~deck, scales = "free",
+                 nrow = 4, ncol = 4)
+
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Mu x Block Distribution Plots.tiff", sep = " ")),
+     width = 7, height = 7, units = "cm", res = 300)
+
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(deck_group_plot)
+
+  # text
+  grid.text(c("Con", "SU", "Dep", "Anx"),
+            x = .98, y = c(.925, .75, .475, .175), rot = 270,
+            gp = gpar(fontsize = 9.5))
+
+dev.off()
+```
+
+
+
+## Beta Posterior Distributions
+```{r}
+# build plot
+deck_group_plot = deck_grp_thetas %>% 
+  filter(group_mean == "Comparison") %>% 
+  mutate(group = factor(group, levels = c("SU-Con", "Dep-Con", "Anx-Con"), ordered = T)) %>% 
+  ggplot(aes(x = estimate, fill = group)) +
+  # geoms
+  geom_text_npc(data = data.frame(block = rep(1, 4),
+                                  deck = factor(c("A", "B", "C", "D"),
+                                                levels = c("A", "B", "C", "D"),
+                                                ordered = T),
+                                  lab_ = c("A", "B", "C", "D")),
+                aes(label = lab_), npcx = 0, npcy = 1.1, size = 4, vjust = 1) +
+  geom_density(alpha = .5, linewidth = .25) +
+  geom_hline(yintercept = 0) +
+  # scales
+  scale_x_continuous(limits = c(-1, 1), expand = c(0, 0), breaks = c(-1, 0, 1),
+                     labels = c("1", "0", "1")) +
+  scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9", "#009E73"),
+                    limits = c("SU-Con", "Dep-Con", "Anx-Con")) +
+  # themes
+  labs(x = "Estimate", y = "Density") +
+  coord_cartesian(clip = "off") +
+  theme_classic() +
+  theme(axis.text.x = element_text(color = "black"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        # axis.title = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+        legend.position = c(.875, .25),
+        legend.background = element_rect(fill = "transparent", colour = "transparent"),
+        legend.title = element_blank(),
+        plot.margin = unit(c(.1, .4, 0, .2), "cm"),
+        panel.spacing.x = unit(.25, "cm"),
+        panel.spacing.y = unit(.1, "cm"),
+        strip.text = element_blank(),
+        strip.background = element_rect(fill = "transparent", colour = "transparent"),
+        panel.background = element_rect(fill = "transparent", colour = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_rep_wrap(block~deck, scales = "free",
+                 nrow = 3, ncol = 4)
+
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Beta Distribution Plots.tiff", sep = " ")),
+     width = 7, height = 5, units = "cm", res = 300)
+
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(deck_group_plot)
+
+  # text
+  grid.text(c("Trials 1-15", "Trials 16-30"),
+            x = .98, y = c(.8, .35), rot = 270,
+            gp = gpar(fontsize = 9.5))
+
+dev.off()
+```
+
+
+
+## Mu Block-Difference Posterior Distributions
+### Significant changes
+```{r}
+deck_grp_diffs %>% 
+  group_by(deck, parameter, group) %>%
+  summarise(mu_diff = mean(diff),
+            lower95 = HDIofMCMC(diff)[1], upper95 = HDIofMCMC(diff)[2],
+            lower90 = HDIofMCMC(diff, credMass = .9)[1], upper90 = HDIofMCMC(diff, credMass = .9)[2],
+              sig = case_when(lower95 < 0 & upper95 < 0 ~ "*", upper95 > 0 & lower95 > 0 ~ "*", 
+                              lower90 < 0 & upper90 < 0 ~ ".", upper90 > 0 & lower90 > 0 ~ ".", 
+                              T ~ "")) %>% 
+  View(title = "Mu Diffs")
+```
+
+
+
+### Plot
+```{r}
+# build plot
+deck_mu_diffs_plot = deck_grp_diffs %>% 
+  filter(comparison == "Group Mean") %>% 
+  mutate(group = factor(group, levels = c("Con", "SU", "Dep", "Anx"), ordered = T)) %>% 
+  ggplot(aes(x = diff, fill = group)) +
+  # geoms
+  geom_text_npc(data = data.frame(group = factor(rep("Con", 4),
+                                                 levels = c("Con", "SU", "Dep", "Anx"), ordered = T),
+                                  deck = factor(c("A", "B", "C", "D"),
+                                                levels = c("A", "B", "C", "D"),
+                                                ordered = T),
+                                  lab_ = c("A", "B", "C", "D")),
+                aes(label = lab_), npcx = 0, npcy = 1.1, size = 4, vjust = 1) +
+  geom_density(alpha = .5, linewidth = .25) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0, linewidth = .25) +
+  # scales
+  scale_x_continuous(limits = c(-.3, .3), expand = c(0, 0), breaks = c(-.25, 0, .25),
+                     labels = c("-.25", "0", ".25")) +
+  scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+  scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73"),
+                    limits = c("Con", "SU", "Dep", "Anx")) +
+  # themes
+  labs(x = "Mu Estimate (Block 2-Block 1)", y = "Density") +
+  coord_cartesian(clip = "off") +
+  theme_classic() +
+  theme(axis.text.x = element_text(color = "black"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+        legend.position = "none",
+        legend.background = element_rect(fill = "transparent", colour = "transparent"),
+        legend.title = element_blank(),
+        plot.margin = unit(c(.1, .4, 0, .2), "cm"),
+        panel.spacing.x = unit(.375, "cm"),
+        panel.spacing.y = unit(.1, "cm"),
+        strip.text = element_blank(),
+        strip.background = element_rect(fill = "transparent", colour = "transparent"),
+        panel.background = element_rect(fill = "transparent", colour = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_rep_wrap(group~deck, scales = "free",
+                 nrow = 4, ncol = 4)
+
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Mu Diffs Distribution Plots.tiff", sep = " ")),
+     width = 7, height = 7, units = "cm", res = 300)
+
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(deck_mu_diffs_plot)
+
+  # text
+  grid.text(c("Con", "SU", "Dep", "Anx"),
+            x = .98, y = c(.9, .675, .445, .2), rot = 270,
+            gp = gpar(fontsize = 9.5))
+
+dev.off()
+```
+
+
+
+## Beta Block-Difference Posterior Distributions
+```{r}
+# build plot
+deck_beta_diffs_plot = deck_grp_diffs %>% 
+  filter(group_mean == "Comparison") %>% 
+  mutate(group = factor(group, levels = c("SU-Con", "Dep-Con", "Anx-Con"), ordered = T)) %>% 
+  ggplot(aes(x = diff, fill = group)) +
+  # geoms
+  geom_text_npc(data = data.frame(group = factor(rep("SU-Con", 4),
+                                                 levels = c("SU-Con", "Dep-Con", "Anx-Con"),
+                                                 ordered = T),
+                                  deck = factor(c("A", "B", "C", "D"),
+                                                levels = c("A", "B", "C", "D"),
+                                                ordered = T),
+                                  lab_ = c("A", "B", "C", "D")),
+                aes(label = lab_), npcx = 0, npcy = 1.1, size = 4, vjust = 1) +
+  geom_density(alpha = .5, linewidth = .25) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0, linewidth = .25) +
+  # scales
+  scale_x_continuous(limits = c(-1, 1), expand = c(0, 0), breaks = c(-1, 0, 1),
+                     labels = c("1", "0", "1")) +
+  scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9", "#009E73"),
+                    limits = c("SU-Con", "Dep-Con", "Anx-Con")) +
+  # themes
+  labs(x = "Beta Estimate (Block 2-Block 1)", y = "Density") +
+  coord_cartesian(clip = "off") +
+  theme_classic() +
+  theme(axis.text.x = element_text(color = "black"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+        legend.position = "none",
+        legend.background = element_rect(fill = "transparent", colour = "transparent"),
+        legend.title = element_blank(),
+        plot.margin = unit(c(.1, .4, 0, .2), "cm"),
+        panel.spacing.x = unit(.375, "cm"),
+        panel.spacing.y = unit(.1, "cm"),
+        strip.text = element_blank(),
+        strip.background = element_rect(fill = "transparent", colour = "transparent"),
+        panel.background = element_rect(fill = "transparent", colour = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_rep_wrap(group~deck, scales = "free",
+                 nrow = 3, ncol = 4)
+
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Beta Diffs Distribution Plots.tiff", sep = " ")),
+     width = 7, height = 5.5, units = "cm", res = 300)
+
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(deck_beta_diffs_plot)
+
+  # text
+  grid.text(c("SU-Con", "Dep-Con", "Anx-Con"),
+            x = .98, y = c(.87, .575, .27), rot = 270,
+            gp = gpar(fontsize = 8.75))
+
+dev.off()
+```
+
+
+
+## Make Person-Level Plots
+```{r}
+make_distribution_plot = function(data, grp_diag, grp_color = "gray45") {
+  colnames(data)[colnames(data)==grp_diag] = "group"
+  
+  plot = data %>% 
+    filter(group == 1) %>% 
+    ggplot() +
+    # geoms
+    geom_text_npc(data = data.frame(block = rep(1, 4),
+                                    deck = factor(c("A", "B", "C", "D"),
+                                                  levels = c("A", "B", "C", "D"),
+                                                  ordered = T),
+                                    lab_ = c("A", "B", "C", "D")),
+                  aes(label = lab_), npcx = 0, npcy = 1.1, size = 4, vjust = 1) +
+    geom_histogram(aes(x = obs, y = ..density..), color = "black", fill = grp_color,
+                   alpha = .5, linewidth = .25) +
+    geom_density(aes(x = pred), fill = grp_color, linewidth = .5, alpha = .5) +
+    # scales
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25),
+                       labels = c("0", ".25", ".50", ".75", "1")) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05))) +
+    # themes
+    labs(x = "Estimate", y = "Density") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          # axis.title = element_blank(),
+          legend.text = element_text(size = 6),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+          legend.position = c(.875, .25),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(.1, .4, 0, .2), "cm"),
+          panel.spacing.x = unit(.25, "cm"),
+          panel.spacing.y = unit(.1, "cm"),
+          strip.text = element_blank(),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(block~deck, scales = "free",
+                   nrow = 2, ncol = 4)
+  
+  return(plot)
+}
+
+grps = c("SU", "Dep", "Anx")
+grp_colors = c("#E69F00", "#56B4E9", "#009E73")
+for(g in 1:3) {
+  tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+            model_name,
+            paste(grps[g], sample, "Distribution Plots.tiff", sep = " ")),
+       width = 7, height = 5, units = "cm", res = 300)
+  
+    grid.newpage()
+    pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+    grid.draw(make_distribution_plot(deck_ind_data, grps[g], grp_colors[g]))
+
+    grid.text(c("Trials 1-15", "Trials 16-30"),
+              x = .98, y = c(.8, .35), rot = 270,
+              gp = gpar(fontsize = 9.5))
+  
+  dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Dot Plots
+## Make Person-Level Plots
+```{r}
+make_dot_plot = function(ind_data, grp_data,
+                         grp_diag, grp_color = "gray45") {
+  colnames(ind_data)[colnames(ind_data)==grp_diag] = "group"
+  mus = grp_data %>% filter(comparison == "Group Mean") %>% 
+    filter(group %in% c("Con", grp_diag)) %>% 
+    group_by(deck, group) %>%
+    summarise(mu = mean(mu), lower = mean(lower), upper = mean(upper),
+              group = case_when(group == "Con" ~ 0, T ~ 1),
+              group = factor(group, levels = c(0, 1), labels = c("Con", grp_diag), ordered = T))
+  
+  plot = ind_data %>% 
+    mutate(group = factor(group, levels = c(0, 1), labels = c("Con", grp_diag), ordered = T)) %>%
+    ggplot() +
+    # geoms
+    geom_dotplot(aes(x = group, y = obs, fill = group, color = group),
+                 binaxis = "y", stackdir = "center",
+                 position = position_dodge(width = .8), alpha = .5) +
+    geom_pointrange(data = mus, aes(x = group, y = mu, ymin = lower, ymax = upper),
+                    color = "black", size = .05,
+                    position = position_dodge(width = .8)) +
+    # scales
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25),
+                       labels = c("0", ".25", ".50", ".75", "1")) +
+    scale_color_manual(values = c("gray45", grp_color)) +
+    scale_fill_manual(values = c("gray45", grp_color)) +
+    # themes
+    labs(y = "Proportion of Plays") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.x = element_line(color = "black"),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          axis.title = element_blank(),
+          legend.position = "none",
+          plot.margin = unit(c(.2, .2, 0, .1), "cm"),
+          panel.spacing.x = unit(.5, "cm"),
+          panel.spacing.y = unit(-.25, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          strip.text.x = element_blank(),
+          strip.text.y = element_blank(),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_grid(deck~., scales = "free")
+  
+  return(plot)
+}
+```
+
+
+
+## Combine & Save Plots
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          paste(sample, "Dot Plots.tiff", sep = " ")),
+     width = 14.6, height = 7, units = "cm", res = 300)
+
+grid.newpage()
+# main plot
+pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+grid.draw(ggarrange(make_dot_plot(deck_ind_data, deck_grp_thetas,
+                                  "SU",  "#E69F00"),
+                    make_dot_plot(deck_ind_data, deck_grp_thetas,
+                                  "Dep", "#56B4E9"),
+                    make_dot_plot(deck_ind_data, deck_grp_thetas,
+                                  "Anx", "#009E73"),
+                    deck_group_plot,
+                    ncol = 4) %>% 
+            annotate_figure(left = textGrob("Proportion Plays", rot = 90, hjust = .35),
+                            bottom = textGrob("Estimate")))
+
+dev.off()
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
