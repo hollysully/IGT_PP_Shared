@@ -317,7 +317,7 @@ orl_parameters = mutate(
 ## Plot Correlations
 ```{r, eval = F}
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "Supplement_Separate_ORL_Reliability.tiff"),
+          "Supplement_1 Separate_ORL_Reliability.tiff"),
      width = 14.6, height = 3.5, units = "cm", res = 300)
   
     orl_parameters %>% 

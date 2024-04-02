@@ -66,9 +66,10 @@ full %>%
 # --------------------------------------
 # Prep Data
 ```{r}
-sample = "T1_parent_SU"
+sample = "T12_parent_SU_Dep_Anx"
 
-IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom) %>% 
+IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom,
+                        T2_IGT_dad, T2_IGT_mom) %>% 
   select(ID = id, -date, everything())
 
 SCID_prepped = SCID %>%
@@ -77,9 +78,9 @@ SCID_prepped = SCID %>%
 
 combined_data = inner_join(IGT_prepped, SCID_prepped) %>% 
   # I'm removing this participant because they responded on < half of the trials and their estimates did not converge
-  filter(!(ID == 5183 & participant == "dad")) %>% 
+  # filter(!(ID == 5183 & participant == "dad")) %>%
   # Subset specific diagnostic groups
-  filter(SU == 1) %>% 
+  # filter(SU == 1) %>% 
   # This ensures that we exclude all non-participant data (e.g., test data)
   filter(ID >= 5000 & ID < 6000)
 
@@ -215,6 +216,7 @@ make_ORL_stan_data = function(data, covariate_names){
 ```{r, eval = T}
 parent_stan = make_ORL_stan_data(data = bind_rows(combined_data),
                                  covariate_names = c("SU", "depression", "anxiety"))
+                                 # covariate_names = c()) # no covariates
 
 saveRDS(parent_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", 
                           paste("design", sample, "IGT.RDS", sep = "_")))

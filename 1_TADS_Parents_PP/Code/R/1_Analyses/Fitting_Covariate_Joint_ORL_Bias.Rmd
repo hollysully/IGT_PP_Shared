@@ -31,15 +31,12 @@ library(grid)
 ## RMD Setup
 ```{r}
 model_name = "Covariate_Joint_ORL_Bias"
-sample = "T1_parent_SU_Dep_Anx"
-
-stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
-                         paste("design", sample, "IGT.RDS", sep = "_")))
 
 focal_parameters = c(
   "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
   "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
   "Arew", "Apun", "betaF", "betaB", 
+  "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB", 
   "R_Arew", "R_Apun", "R_betaF", "R_betaB"
 )
 
@@ -52,7 +49,7 @@ person_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE, invert=TRU
 
 # -------------------------------------------
 # Check Model
-```{r, eval = T12124}
+```{r, eval = T}
 model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
                                 paste0(model_name, ".stan")), compile = F)
 
@@ -67,34 +64,41 @@ model_code$check_syntax(quiet = T)
 orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
                             paste0(model_name, ".stan")))
   
-
-# -----------------------------------------------------------------------------------
-# Fit model
-orl_fit = sampling(orl_model, 
-                   data   = stan_data, 
-                   iter   = 5000, 
-                   warmup = 1000, 
-                   chains = 4, 
-                   cores  = 4,
-                   seed   = 43210,
-                   save_warmup = F)
-saveRDS(orl_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
-                      model_name,
-                      paste(sample, model_name, "fit.rds", sep = "_")))
-
-# -----------------------------------------------------------------------------------
-# save posteriors
-saveRDS(extract(orl_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
-                               model_name,
-                               paste(sample, model_name, "posteriors.rds", sep = "_")))
-
-# -----------------------------------------------------------------------------------
-# save rhats
-rhat(orl_fit, pars = focal_parameters) %>%
-  data.frame() %>% mutate(parameter = rownames(.)) %>% 
-  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
-               model_name,
-               paste(sample, model_name, "rhats.rds", sep = "_")))
+# for(sample in c("T1_parent", "T2_parent", "T3_parent", "T4_parent", "T5_parent")) {
+for(sample in c("T12_parent_SU_Dep_Anx")) {
+  # -----------------------------------------------------------------------------------
+  # load data
+  stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                           paste("design", sample, "IGT.RDS", sep = "_")))
+  
+  # -----------------------------------------------------------------------------------
+  # Fit model
+  orl_fit = sampling(orl_model, 
+                     data   = stan_data, 
+                     iter   = 5000, 
+                     warmup = 1000, 
+                     chains = 4, 
+                     cores  = 4,
+                     seed   = 43210,
+                     save_warmup = F)
+  saveRDS(orl_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                        model_name,
+                        paste(sample, model_name, "fit.rds", sep = "_")))
+  
+  # -----------------------------------------------------------------------------------
+  # save posteriors
+  saveRDS(extract(orl_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                 model_name,
+                                 paste(sample, model_name, "posteriors.rds", sep = "_")))
+  
+  # -----------------------------------------------------------------------------------
+  # save rhats
+  rhat(orl_fit, pars = focal_parameters) %>%
+    data.frame() %>% mutate(parameter = rownames(.)) %>% 
+    saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                 model_name,
+                 paste(sample, model_name, "rhats.rds", sep = "_")))
+}
 ```
 
 

@@ -126,7 +126,7 @@ simulate_orl = function(parameter_mus, condition,
 # ---------------------------------------
 # Simulate ORL Parameters
 ## Prep Inputs for Simulations
-```{r, eval = T}
+```{r, eval = F}
 # PREP TASK-RELATED INPUTS
 cards = data.frame(card = stan_data$card[1,,1]) %>%
   mutate(trial = 1:n()) %>% 
@@ -191,16 +191,16 @@ labs = c("Session 1",
          "Session 2")
 
 tiff(here("1_IGT_PP", "Figs_Tables", "Manuscript_Plots",
-          "Supplement_2 Simulations.tiff"),
+          "Supplement_3 Simulations.tiff"),
      width = 6.5, height = 2.5, units = "in", res = 300)
 
   # data
-  databased_simulations %>% 
-    select(everything(), deck = card) %>% 
+  simulations %>% 
+    dplyr::select(everything(), deck = card) %>% 
     mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
-           simulation = factor(simulation,
+           simulation = factor(simulation, ordered = T,
                                levels = c("session_1", "ME_Arew",
-                                          "ME_betaP", "session_2"))) %>% 
+                                          "ME_betaB", "session_2"))) %>% 
     group_by(simulation, card_trial, deck) %>% 
     reframe(proportion = mean(choice)) %>% 
     group_by(simulation, deck) %>% 
