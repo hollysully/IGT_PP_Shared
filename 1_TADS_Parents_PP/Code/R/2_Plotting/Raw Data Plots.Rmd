@@ -37,7 +37,7 @@ source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 ## Load Binomial Data
 ```{r include=FALSE}
-sample = "T1_parent_SU_Dep_Anx"
+sample = "T12345_parent"
 
 combined_data = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", 
                              paste(sample, "IGT.RDS", sep = "_")))

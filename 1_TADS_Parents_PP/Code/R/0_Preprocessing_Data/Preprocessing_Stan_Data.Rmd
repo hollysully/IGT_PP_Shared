@@ -64,25 +64,66 @@ full %>%
 
 
 # --------------------------------------
+# Inspect Data
+```{r, eval = F}
+bind_rows(T1_IGT_dad, T1_IGT_mom,
+          T2_IGT_dad, T2_IGT_mom,
+          T3_IGT_dad, T3_IGT_mom,
+          T4_IGT_dad, T4_IGT_mom,
+          T5_IGT_dad, T5_IGT_mom) %>% 
+  filter(id >= 5000 & id < 6000) %>% 
+  mutate(missing = case_when(card_RT == 4000 ~ 1, T ~ 0)) %>% 
+  group_by(id, time, participant) %>% 
+  summarise(`proportion trials missing` = mean(missing, na.rm = T)) %>% 
+  View(title = "Missingness")
+```
+
+
+
+# --------------------------------------
+# Initialize Variables
+```{r}
+sample = "T5_parent"
+covariates = c()
+# covariate_names = c("anxiety", "depression", "SU")
+
+IGT_prepped = bind_rows(
+                        # T1_IGT_dad, T1_IGT_mom
+                        # T2_IGT_dad, T2_IGT_mom
+                        # T3_IGT_dad, T3_IGT_mom
+                        # T4_IGT_dad, T4_IGT_mom
+                        T5_IGT_dad, T5_IGT_mom
+                        ) %>% 
+  select(ID = id, -date, everything())
+```
+
+
+
 # Prep Data
 ```{r}
-sample = "T12_parent_SU_Dep_Anx"
-
-IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom,
-                        T2_IGT_dad, T2_IGT_mom) %>% 
-  select(ID = id, -date, everything())
-
 SCID_prepped = SCID %>%
   mutate(participant = tolower(participant)) %>% 
   select(-date)
 
 combined_data = inner_join(IGT_prepped, SCID_prepped) %>% 
-  # I'm removing this participant because they responded on < half of the trials and their estimates did not converge
-  # filter(!(ID == 5183 & participant == "dad")) %>%
+  # exclude participants that responded on < 50% trials
+  filter(!(ID == 5183 & participant == "dad" & time == "T1")) %>%
+  filter(!(ID == 5064 & participant == "dad" & time == "T4")) %>%
   # Subset specific diagnostic groups
   # filter(SU == 1) %>% 
   # This ensures that we exclude all non-participant data (e.g., test data)
-  filter(ID >= 5000 & ID < 6000)
+  filter(ID >= 5000 & ID < 6000) %>%
+  # Do some prepartion for creating stan data
+  mutate(# create variable that assigns numbers to participant types (1 = child, 2 = mom, 3 = dad)
+         participant_num = match(participant, c("child", "dad", "mom")[1:3]),
+         # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
+         card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4])) %>% 
+  # create new ID variable for consecutive IDs (this is just the "id" variable but with consecutive numbers) 
+  group_by(ID) %>% mutate(ID_num = cur_group_id()) %>% 
+  # create unique ID for individual participants - this helps make sure that
+    # we have a unique ID for moms & dads ("participant" variable) with the
+    # same kid ("id" variable)
+  group_by(ID, participant) %>% mutate(ID_part = cur_group_id())
 
 saveRDS(combined_data, here("1_TADS_Parents_PP", "Data", "0_Raw", 
                             paste(sample, "IGT.RDS", sep = "_")))
@@ -99,24 +140,9 @@ make_ORL_stan_data = function(data, covariate_names){
   library(dplyr)
   library(stringr)
   
-  
-  ##################################################################
-  # prep data
-  data = data %>%
-    mutate(# create variable that assigns numbers to participant types (1 = child, 2 = mom, 3 = dad)
-           participant_num = match(participant, c("child", "mom", "dad")[1:3]),
-           # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
-           card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4])) %>% 
-    # create new ID variable for consecutive IDs (this is just the "id" variable but with consecutive numbers) 
-    group_by(ID) %>% mutate(ID_num = cur_group_id()) %>% 
-    # create unique ID for individual participants - this helps make sure that
-      # we have a unique ID for moms & dads ("participant" variable) with the
-      # same kid ("id" variable)
-    group_by(ID, participant) %>% mutate(ID_part = cur_group_id())
-  
   ##################################################################
   # setup stan variables
-  ID_participant = unique(data$ID_part) # vector of unique ID 
+  ID_participant = sort(unique(data$ID_part)) # vector of unique ID 
   N = length(ID_participant)            # number of unique IDs
   sessions = unique(data$time)          # vector of unique sessions
   S = length(sessions)                  # number of unique sessions
@@ -141,7 +167,7 @@ make_ORL_stan_data = function(data, covariate_names){
   ##################################################################
   # fill vectors and arrays with data
   for(i in 1:N){ # loop through persons
-    cur_i = filter(data, ID_part == ID_participant[i]) # subset individual
+    cur_i = filter(data, ID_part == i) # subset individual
     
     # assign original ID & double-check it gives whole number (it should)
     ID_OG[i] = mean(cur_i$ID)
@@ -215,8 +241,7 @@ make_ORL_stan_data = function(data, covariate_names){
 ## Make Parent Data
 ```{r, eval = T}
 parent_stan = make_ORL_stan_data(data = bind_rows(combined_data),
-                                 covariate_names = c("SU", "depression", "anxiety"))
-                                 # covariate_names = c()) # no covariates
+                                 covariate_names = covariates)
 
 saveRDS(parent_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", 
                           paste("design", sample, "IGT.RDS", sep = "_")))
@@ -232,14 +257,6 @@ for(i in names(parent_stan)){
 
 
 
-## Make Combined Data
-```{r, eval = F}
-full_stan = make_stan(full)
-saveRDS(full_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", "full_IGT.RDS"))
-```
-
-
-
 # --------------------------------------
 # Make Binomial Stan Data
 ## Function
@@ -248,21 +265,6 @@ saveRDS(full_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", "full_IGT.RDS"))
 make_binomial_stan_data = function(data, covariate_names){
   library(dplyr)
   library(stringr)
-  
-  
-  ##################################################################
-  # prep data
-  data = data %>%
-    mutate(# create variable that assigns numbers to participant types (1 = child, 2 = mom, 3 = dad)
-           participant_num = match(participant, c("child", "mom", "dad")[1:3]),
-           # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
-           card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4])) %>% 
-    # create new ID variable for consecutive IDs (this is just the "id" variable but with consecutive numbers) 
-    group_by(ID) %>% mutate(ID_num = cur_group_id()) %>% 
-    # create unique ID for individual participants - this helps make sure that
-      # we have a unique ID for moms & dads ("participant" variable) with the
-      # same kid ("id" variable)
-    group_by(ID, participant) %>% mutate(ID_part = cur_group_id())
   
   ##################################################################
   # setup stan variables
@@ -295,7 +297,7 @@ make_binomial_stan_data = function(data, covariate_names){
   ##################################################################
   # fill vectors and arrays with data
   for(i in 1:N){ # loop through persons
-    cur_i = filter(data, ID_part == ID_participant[i]) # subset individual
+    cur_i = filter(data, ID_part == i) # subset individual
     
     # assign original ID & double-check it gives whole number (it should)
     ID_OG[i] = mean(cur_i$ID)
@@ -357,12 +359,10 @@ make_binomial_stan_data = function(data, covariate_names){
 ## Make Parent Data
 ```{r, eval = F}
 binomial_parent_stan = make_binomial_stan_data(data = bind_rows(combined_data),
-                                               covariate_names = c("SU", "depression", "anxiety"))
-
-sample = "T1_parent_SU_Dep_Anx_Binomial"
+                                               covariate_names = covariates)
 
 saveRDS(binomial_parent_stan, here("1_TADS_Parents_PP", "Data", "1_Stan", 
-                                   paste("design", sample, "IGT.RDS", sep = "_")))
+                                   paste("design", sample, "Binomial", "IGT.RDS", sep = "_")))
 ```
 
 

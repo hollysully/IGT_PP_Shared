@@ -65,7 +65,7 @@ orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
                             paste0(model_name, ".stan")))
   
 # for(sample in c("T1_parent", "T2_parent", "T3_parent", "T4_parent", "T5_parent")) {
-for(sample in c("T12_parent_SU_Dep_Anx")) {
+for(sample in c("T1_parent_Anx_Dep_SU")) {
   # -----------------------------------------------------------------------------------
   # load data
   stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
