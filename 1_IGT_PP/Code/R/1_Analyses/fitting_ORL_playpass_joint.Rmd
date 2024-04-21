@@ -37,87 +37,48 @@ all_survey_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_surve
 # Compile model
 orl_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_joint.stan"))
 
+model_text <- "
+  Arew ~ session;
+  Apun ~ session;
+  betaF ~ session;
+  betaP ~ session
+"
+
 stan_data <- make_stan_data(
   all_task_data, 
   all_survey_data,
-  ~ session
+  model_text
 )
 
 # Fit model
 orl_fit <- orl_model$sample(
   stan_data, 
-  iter_sampling = 200, 
+  iter_sampling = 100, 
   iter_warmup = 100, 
-  chains = 8, 
-  parallel_chains = 8,
+  chains = 6, 
+  parallel_chains = 6,
   seed = 43210
 ) 
 ```
 
-
-# save fitted model
-```{r}
-# Save the fitted model as an rds file
-saveRDS(orl_fit, here("1_TADS_long", "Data", "2_Fitted",
-                        paste("orl_fit_T1_T2", ".rds", sep = "_")))
-```
-
-
-# read in fitted model
-```{r}
-orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
-                        paste("orl_fit_T1_T2", ".rds", sep = "_")))
-
-```
-
-
-
-# -------------------------------------------
-# Model Diagnostics
-```{r}
-orl_posteriors <- extract(orl_fit)
-saveRDS(orl_posteriors, (here("1_TADS_long", "Data", "2_Fitted",
-                        paste("orl_posteriors_T1_T2", ".rds", sep = "_")))
-```
-
-
-
-# -------------------------------------------
-# Save posterior means
 ```{r}
 
-posterior_means <- data.frame(subjID  = stan_data$ID_num,
-                  T1_child_Arew = colMeans(orl_posteriors$Arew[,,1]), # posterior means for session 1
-                  T1_child_Apun = colMeans(orl_posteriors$Apun[,,1]),      
-                  T1_child_K = colMeans(orl_posteriors$K[,,1]),
-                  T1_child_betaF = colMeans(orl_posteriors$betaF[,,1]),
-                  T1_child_betaP = colMeans(orl_posteriors$betaP[,,1]),
-                  T1_child_Arew_bt = colMeans(qnorm(orl_posteriors$Arew[,,1])), 
-                  T1_child_Apun_bt = colMeans(qnorm(orl_posteriors$Apun[,,1])),
-                  T1_child_K_bt = colMeans(qnorm((orl_posteriors$K[,,1]/5))))
-
-write.csv(posterior_means, here("IGT_Data", "2_Fitted",
-                             paste(sample, model_name, "posterior_means.csv", sep = "_")))
-
 ```
-
-
-
 
 # a plot Nate made for comparing this flex model w/ the previous 2 timepoint joint model
 ```{r}
 # all person-level parameters should match (be on the identity line)
-pars <- c("Arew", "Apun", "K", "betaF", "betaP")
+pars <- c("Arew", "Apun", "betaF", "betaP")
 df <- foreach(par=pars, .combine="rbind") %do% {
   data.frame(
     parameter=par,
     session=rep(c(rep(1, stan_data$N), rep(2, stan_data$N)), 2),
     model=c(
-      #rep("Original", stan_data$N*2), 
+      rep("Original", stan_data$N*2),
       rep("Design Matrix", stan_data$N*2)
     ),
     value=scale(c(
-      #apply(orl_fit_orig$draws(paste0(par)), 3, mean),
+      apply(orl_fit_orig$draws(paste0(par)), 3, mean),
       apply(orl_fit$draws(paste0(par)), 3, mean)
     ))
   )

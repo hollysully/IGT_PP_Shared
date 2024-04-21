@@ -55,7 +55,10 @@ data {
   int choice[N,T,S];                   // Choices on each trial
   real outcome[N,T,S];                 // Outcomes received on each trial
   real sign[N,T,S];                    // Signs of the outcome received on each trial
-  real X[N,T,D,S];                       // person-level predictors
+  real X_Arew[N,T,D,S];                       // person-level predictors
+  real X_Apun[N,T,D,S];                       // person-level predictors
+  real X_betaF[N,T,D,S];                       // person-level predictors
+  real X_betaP[N,T,D,S];                       // person-level predictors
   
 }
 
@@ -65,13 +68,11 @@ parameters {
   // Hyper(group)-parameters
   vector<lower=0>[S] sigma_Arew;
   vector<lower=0>[S] sigma_Apun;
-  vector<lower=0>[S] sigma_K;
   vector<lower=0>[S] sigma_betaF;
   vector<lower=0>[S] sigma_betaP;
   
   vector[D] beta_Arew;
   vector[D] beta_Apun;
-  vector[D] beta_K;
   vector[D] beta_betaF;
   vector[D] beta_betaP;
 
@@ -79,14 +80,12 @@ parameters {
     // Note, these are S (number of sessions) x N (number of subjects) matrices
   matrix[S,N] Arew_pr;  
   matrix[S,N] Apun_pr;  
-  matrix[S,N] K_pr;   
   matrix[S,N] betaF_pr;
   matrix[S,N] betaP_pr;
   
   // Correlation matrices for correlating between sessions
   cholesky_factor_corr[S] R_chol_Arew;
   cholesky_factor_corr[S] R_chol_Apun;
-  cholesky_factor_corr[S] R_chol_K;
   cholesky_factor_corr[S] R_chol_betaF;
   cholesky_factor_corr[S] R_chol_betaP;
 }
@@ -97,35 +96,31 @@ transformed parameters {
     // Note, for each of these, we include the mus and the subject-level parameters (see below), allowing for shrinkage and subject-to-subject variability
   matrix<lower=0,upper=1>[N,S] Arew; 
   matrix<lower=0,upper=1>[N,S] Apun; 
-  matrix<lower=0,upper=5>[N,S] K;    
   matrix[N,S] betaF;
   matrix[N,S] betaP;
   
   // Untransformed subject-level parameters incorporating correlation between sessions
   matrix[S,N] Arew_tilde;
   matrix[S,N] Apun_tilde;
-  matrix[S,N] K_tilde;
   matrix[S,N] betaF_tilde;
   matrix[S,N] betaP_tilde;
   
   // Untransformed subject-level parameters incorporating correlation between sessions
   Arew_tilde  = diag_pre_multiply(sigma_Arew, R_chol_Arew) * Arew_pr;  
   Apun_tilde  = diag_pre_multiply(sigma_Apun, R_chol_Apun) * Apun_pr;  
-  K_tilde     = diag_pre_multiply(sigma_K, R_chol_K) * K_pr;  
   betaF_tilde = diag_pre_multiply(sigma_betaF, R_chol_betaF) * betaF_pr;  
   betaP_tilde = diag_pre_multiply(sigma_betaP, R_chol_betaP) * betaP_pr;
   
   // Calculate & transform Arew, Apun, & K to use in RL algorithm
   for(s in 1:S){    // Loop over sessions
     for(i in 1:N){  // Loop over subjects
-      Arew[i,s] = Phi_approx(dot_product(beta_Arew, to_vector(X[i,1,,s])) + Arew_tilde[s,i]);
-      Apun[i,s] = Phi_approx(dot_product(beta_Apun, to_vector(X[i,1,,s])) + Apun_tilde[s,i]);
-      K[i,s]    = Phi_approx(dot_product(beta_K, to_vector(X[i,1,,s])) + K_tilde[s,i]) * 5;
+      Arew[i,s] = Phi_approx(dot_product(beta_Arew, to_vector(X_Arew[i,1,,s])) + Arew_tilde[s,i]);
+      Apun[i,s] = Phi_approx(dot_product(beta_Apun, to_vector(X_Apun[i,1,,s])) + Apun_tilde[s,i]);
     }
     
   // Calculate betaF & betaP to use in RL algorithm
-  betaF[:,s] = to_matrix(X[,1,,s]) * beta_betaF + to_vector(betaF_tilde[s,:]);
-  betaP[:,s] = to_matrix(X[,1,,s]) * beta_betaP + to_vector(betaP_tilde[s,:]);
+  betaF[:,s] = to_matrix(X_betaF[,1,,s]) * beta_betaF + to_vector(betaF_tilde[s,:]);
+  betaP[:,s] = to_matrix(X_betaP[,1,,s]) * beta_betaP + to_vector(betaP_tilde[s,:]);
   }
 }
 
@@ -146,26 +141,22 @@ model {
   // Hyperparameters for correlations
   R_chol_Arew   ~ lkj_corr_cholesky(1);
   R_chol_Apun   ~ lkj_corr_cholesky(1);
-  R_chol_K      ~ lkj_corr_cholesky(1);
   R_chol_betaF  ~ lkj_corr_cholesky(1);
   R_chol_betaP  ~ lkj_corr_cholesky(1);
   
   // Hyperparameters for RL learning algorithm
   beta_Arew ~ normal(0, 1);
   beta_Apun ~ normal(0, 1);
-  beta_K ~ normal(0, 1);
   beta_betaF ~ normal(0, 1);
   beta_betaP ~ normal(0, 1);
   sigma_Arew  ~ normal(0, 0.2);
   sigma_Apun  ~ normal(0, 0.2);
-  sigma_K     ~ normal(0, 0.2);
   sigma_betaF ~ cauchy(0, 1);
   sigma_betaP ~ cauchy(0, 1);
   
   // Subject-level parameters
   to_vector(Arew_pr)  ~ normal(0, 1.0);
   to_vector(Apun_pr)  ~ normal(0, 1.0);
-  to_vector(K_pr)     ~ normal(0, 1.0);
   to_vector(betaF_pr) ~ normal(0, 1.0);
   to_vector(betaP_pr) ~ normal(0, 1.0);
   
@@ -174,10 +165,9 @@ model {
       if (Tsubj[i,s] > 0) {    // If we have data for participant i on session s, run through RL algorithm
         
         // Initialize starting values
-        K_tr = pow(3, K[i,s]) - 1;
         ev = rep_vector(0,4);
         ef = rep_vector(0,4);
-        pers = rep_vector(0,4);
+        pers = rep_vector(1,4);
         utility = rep_vector(0,4);
         
         for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
@@ -209,12 +199,7 @@ model {
               ef[card[i,t,s]] = ef_chosen + Apun[i,s] * PEfreq;
               ev[card[i,t,s]] = ev[card[i,t,s]] + Apun[i,s] * PEval;
             }
-            
-            // Update perseverance
-            pers[card[i,t,s]] = 1;
           }
-          // perseverance decay
-          pers = pers / (1 + K_tr);
             
           // Calculate expected value of card
           utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
@@ -239,7 +224,6 @@ generated quantities {
   // test-retest correlations
   corr_matrix[S] R_Arew;
   corr_matrix[S] R_Apun;
-  corr_matrix[S] R_K;
   corr_matrix[S] R_betaF;
   corr_matrix[S] R_betaP;
   
@@ -247,7 +231,6 @@ generated quantities {
     // Note that we're multipling the cholesky factor by its transpose which gives us the correlation matrix
   R_Arew  = R_chol_Arew * R_chol_Arew'; //Phi_approx_corr_rng(mu_p[,1], sigma_Arew, R_chol_Arew * R_chol_Arew', 10000);
   R_Apun  = R_chol_Apun * R_chol_Apun'; //Phi_approx_corr_rng(mu_p[,2], sigma_Apun, R_chol_Apun * R_chol_Apun', 10000);
-  R_K     = R_chol_K * R_chol_K'; //Phi_approx_corr_rng(mu_p[,3], sigma_K, R_chol_K * R_chol_K', 10000);
   R_betaF = R_chol_betaF * R_chol_betaF';
   R_betaP = R_chol_betaP * R_chol_betaP';
   
@@ -280,7 +263,6 @@ generated quantities {
     real PEval;
     real PEfreq;
     vector[4] PEfreq_fic;
-    real K_tr;
   
     for (i in 1:N) {         // Loop through individual participants
       log_lik[i] = 0;        // Initialize log_lik
@@ -289,10 +271,9 @@ generated quantities {
         if (Tsubj[i,s] > 0) {    // If we have data for participant i on session s, run through RL algorithm
           
           // Initialize starting values
-          K_tr = pow(3, K[i,s]) - 1;
           ev = rep_vector(0,4);
           ef = rep_vector(0,4);
-          pers = rep_vector(0,4);
+          pers = rep_vector(1,4);
           utility = rep_vector(0,4);
           
           for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
@@ -322,13 +303,7 @@ generated quantities {
                 ef[card[i,t,s]] = ef_chosen + Apun[i,s] * PEfreq;
                 ev[card[i,t,s]] = ev[card[i,t,s]] + Apun[i,s] * PEval;
               }
-              
-              // Update perseverance
-              pers[card[i,t,s]] = 1;
             }
-            // perseverance decay
-            pers = pers / (1 + K_tr);
-              
             // Calculate expected value of card
             utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
           }
