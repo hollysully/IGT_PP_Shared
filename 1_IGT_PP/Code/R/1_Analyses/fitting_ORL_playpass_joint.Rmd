@@ -60,7 +60,6 @@ orl_fit <- orl_model$sample(
 ) 
 ```
 
-# a plot Nate made for comparing this flex model w/ the previous 2 timepoint joint model
 ```{r}
 stan_data_orig <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
 orl_orig_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_start_noK.stan"))
