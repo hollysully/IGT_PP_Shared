@@ -62,8 +62,21 @@ orl_fit <- orl_model$sample(
 ```
 
 ```{r}
+stan_data_orig <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "stan_ready_ORL_IGT.rds"))
+orl_orig_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "Joint_ORL_start_noK.stan"))
 
+orl_fit_orig <- orl_orig_model$sample(
+  stan_data_orig, 
+  iter_sampling = 100, 
+  iter_warmup = 100, 
+  chains = 6, 
+  parallel_chains = 6,
+  seed = 43210
+) 
 ```
+
+
+
 
 # a plot Nate made for comparing this flex model w/ the previous 2 timepoint joint model
 ```{r}
@@ -72,14 +85,18 @@ pars <- c("Arew", "Apun", "betaF", "betaP")
 df <- foreach(par=pars, .combine="rbind") %do% {
   data.frame(
     parameter=par,
-    session=rep(c(rep(1, stan_data$N), rep(2, stan_data$N)), 2),
+    session=rep(c(rep(1, stan_data_orig$N), rep(2, stan_data_orig$N)), 2),
     model=c(
-      rep("Original", stan_data$N*2),
-      rep("Design Matrix", stan_data$N*2)
+      rep("Original", stan_data_orig$N*2),
+      rep("Design Matrix", stan_data_orig$N*2)
     ),
+    # removing subject in design matrix data but not in 
+    # original data. Note 50-99 and 51-100 are pairs of 
+    # the same subject across sessions, so below is only 
+    # removing 2 subjects' data
     value=scale(c(
       apply(orl_fit_orig$draws(paste0(par)), 3, mean),
-      apply(orl_fit$draws(paste0(par)), 3, mean)
+      apply(orl_fit$draws(paste0(par))[,,-c(50,51, 99,100)], 3, mean)
     ))
   )
 }
