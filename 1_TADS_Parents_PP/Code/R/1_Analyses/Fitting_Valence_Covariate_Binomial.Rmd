@@ -1,0 +1,126 @@
+---
+title: "Fitting Binomial Model"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggpubr)
+library(ggh4x)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+library(egg)
+# source(here("Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+
+## RMD Setup
+```{r}
+sample = "T1_parent_Anx_Dep_SUD"
+
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         paste("design", sample, "Binomial", "IGT.RDS", sep = "_")))
+
+model_name = "Covariate_Valence_Binomial"
+
+focal_parameters = c(
+  "mu_good", "mu_bad",
+  "sigma_good", "sigma_bad",
+  "tilde_good", "tilde_bad",
+  "mu_good_theta", "mu_bad_theta",
+  "good_theta", "bad_theta"
+)
+
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+# -------------------------------------------
+# Model-Fitting
+## Check Model
+```{r, eval = T}
+model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
+                                paste0(model_name, ".stan")), compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+
+
+## Fit Model
+```{r, eval = T}
+# -----------------------------------------------------------------------------------
+# Compile model
+valence_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                                paste0(model_name, ".stan")))
+
+
+# -----------------------------------------------------------------------------------
+# Fit model
+valence_fit = sampling(valence_model, 
+                       data   = stan_data, 
+                       iter   = 5000, 
+                       warmup = 1000, 
+                       chains = 4, 
+                       cores  = 4,
+                       seed   = 43210,
+                       save_warmup = F)
+saveRDS(valence_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                          model_name,
+                          paste(sample, model_name, "fit.rds", sep = "_")))
+
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+saveRDS(extract(valence_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                   model_name,
+                                   paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+
+# -----------------------------------------------------------------------------------
+# save rhats
+rhat(valence_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               model_name,
+               paste(sample, model_name, "rhats.rds", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

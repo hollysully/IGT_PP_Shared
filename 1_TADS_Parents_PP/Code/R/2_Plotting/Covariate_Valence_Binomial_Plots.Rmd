@@ -1,0 +1,453 @@
+---
+title: "Fitting Binomial Model"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggpubr)
+library(ggh4x)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+library(egg)
+# source(here("Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+
+## RMD Setup
+```{r}
+groups = c("Anx", "Dep", "SUD")
+sample = "T1_parent_Anx_Dep_SUD"
+
+model_name = "Covariate_Valence_Binomial"
+
+focal_parameters = c(
+  "mu_good", "mu_bad",
+  "sigma_good", "sigma_bad",
+  "tilde_good", "tilde_bad",
+  "mu_good_theta", "mu_bad_theta",
+  "good_theta", "bad_theta"
+)
+
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+## Import Data
+```{r}
+# -----------------------------------------------------------------------------------
+# read in raw data
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         paste("design", sample, "Binomial", "IGT.RDS", sep = "_")))
+
+
+# -----------------------------------------------------------------------------------
+# subset participant to exclude
+sub_keep = stan_data$ID_participant[stan_data$X[,1] == 0]
+
+
+# -----------------------------------------------------------------------------------
+# read in model fit
+valence_fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                           model_name,
+                           paste(sample, model_name, "fit.rds", sep = "_")))
+
+
+# -----------------------------------------------------------------------------------
+# read in posteriors
+valence_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                  model_name,
+                                  paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+
+# -----------------------------------------------------------------------------------
+# read in rhats
+valence_rhats = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                             model_name,
+                             paste(sample, model_name, "rhats.rds", sep = "_")))
+
+
+# -----------------------------------------------------------------------------------
+# read in BIS/BAS
+bis_bas = bind_rows(select(readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
+                       "T1_dad_BIS_BAS.rds")), -c(sex, session)),
+                    select(readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
+                       "T1_mom_BIS_BAS.rds")), -c(sex, session)))
+```
+
+
+
+# -------------------------------------------
+# Traceplots
+```{r, eval = F}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          "group_traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(
+    valence_fit,
+    pars = group_parameters
+)
+dev.off()
+
+
+for(i in person_parameters){
+  tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+            model_name,
+            "traceplots.tiff"),
+       width = 100, height = 100, units = "cm", res = 300)
+    traceplot(valence_fit,
+              pars = i
+              ) %>% print()
+    dev.off()
+}
+```
+
+
+
+# -------------------------------------------
+# Person-Level Plots
+## Prep Data
+```{r, eval = T}
+valence_ind_data = data.frame(ID = stan_data$ID_OG,
+                              ID_participant = stan_data$ID_participant,
+                              participant = stan_data$participant_number,
+                              Anx = stan_data$X[,2],
+                              Dep = stan_data$X[,3],
+                              SUD = stan_data$X[,4],
+                              obs_good = (stan_data$C_plays +
+                                          stan_data$D_plays) /
+                                         (stan_data$C_trials +
+                                          stan_data$D_trials),
+                              obs_bad = (stan_data$A_plays +
+                                         stan_data$B_plays) /
+                                        (stan_data$A_trials +
+                                         stan_data$B_trials),
+                              pred_good = apply(valence_posteriors$good_pred, 2, mean) /
+                                (stan_data$C_trials + stan_data$D_trials),
+                              pred_bad = apply(valence_posteriors$bad_pred, 2, mean) /
+                                (stan_data$A_trials + stan_data$B_trials)) %>% 
+  pivot_longer(ends_with(c("good", "bad")), names_to = c("type", "valence"),
+               values_to = "estimate", names_sep = "_") %>% 
+  pivot_wider(names_from = "type", values_from = "estimate") %>% 
+  mutate(Con = case_when(Anx + Dep + SUD == 0 ~ 1, T ~ 0)) %>% 
+  pivot_longer(cols = c("Con", "Anx", "Dep", "SUD"), names_to = "diagnosis", values_to = "presence") %>%
+  mutate(diagnosis_presence = case_when(diagnosis == "Con" & presence == 1 ~ "Con",
+                                        diagnosis == "Anx" & presence == 1 ~ "Anx",
+                                        diagnosis == "Dep" & presence == 1 ~ "Dep",
+                                        diagnosis == "SUD" & presence == 1 ~ "SUD"),
+         diagnosis_presence = factor(diagnosis_presence, levels = c("Con", "Anx", "Dep", "SUD"),
+                                     ordered = T)) %>% 
+  filter(!is.na(diagnosis_presence))
+```
+
+
+
+## Make Plots
+```{r}
+person_level_plot = 
+  valence_ind_data %>% 
+    mutate(valence = factor(valence, levels = c("good", "bad"), labels = c("Good", "Bad"),
+                            ordered = T)) %>%
+    ggplot(aes(x = diagnosis_presence, fill = diagnosis_presence)) +
+      # geoms
+      geom_dotplot(aes(y = obs), binaxis = "y", stackdir = "center",
+                   dotsize = 1.5, stroke = .3) +
+      geom_violin(aes(y = pred), alpha = .25, trim = F) +
+      # scales
+      scale_y_continuous(limits = c(0, 1), expand = expansion(add = .05), breaks = seq(0, 1, .25),
+                         labels = c("0", ".25", ".50", ".75", "1")) +
+      scale_fill_manual(values = c("#999999","#56B4E9", "#E69F00", "#009E73"),
+                        limits = c("Con", "Anx", "Dep", "SUD")) +
+      # themes
+      labs(x = "Group", y = "Proportion Play") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 8),
+            axis.ticks.x = element_line(color = "black"),
+            legend.position = "none",
+            plot.margin = unit(c(.2, .2, 0, .1), "cm"),
+            panel.spacing.y = unit(-.26, "cm"),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.x = element_blank(),
+            strip.text.y = element_blank(),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(valence~.) +
+      guides(fill = guide_legend(nrow = 2))
+```
+
+
+
+# -------------------------------------------
+# Posterior Distributions
+## Prep Data
+```{r, eval = T}
+valence_grp_thetas = data.frame(iteration = 1:((valence_fit@sim$iter -
+                                                  valence_fit@sim$warmup) *
+                                                 valence_fit@sim$chains),
+                                good_mu = valence_posteriors$mu_good_theta,
+                                good_beta = valence_posteriors$mu_good,
+                                bad_mu = valence_posteriors$mu_bad_theta,
+                                bad_beta = valence_posteriors$mu_bad) %>% 
+  pivot_longer(starts_with(c("good", "bad")), names_to = c("valence", "group"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  filter(!(str_detect(valence, "beta") & group == 1)) %>% 
+  separate(col = "valence", into = c("valence", "parameter"), sep = "_") %>% 
+  mutate(group = case_when(group == 1 & parameter == "mu" ~ "Con",
+                           group == 2 & parameter == "mu" ~ "Anx",
+                           group == 3 & parameter == "mu" ~ "Dep",
+                           group == 4 & parameter == "mu" ~ "SUD",
+                           group == 2 & parameter == "beta" ~ "Anx",
+                           group == 3 & parameter == "beta" ~ "Dep",
+                           group == 4 & parameter == "beta" ~ "SUD")) %>% 
+  group_by(valence, parameter, group) %>% 
+  mutate(mu = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2],
+         parameter = factor(parameter, levels = c("mu", "beta"), ordered = T,
+                              labels = c("Mu", "Beta")),
+         valence = factor(valence, levels = c("good", "bad"), ordered = T),
+         group = factor(group, levels = c("Con", "Anx", "Dep", "SUD")))
+```
+
+
+
+## Descriptives
+```{r}
+valence_grp_thetas %>% 
+  group_by(group, valence, parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2],
+            sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% ungroup() %>% 
+  mutate(sig = case_when(parameter == "Mu" ~ "", T ~ sig),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper,2),
+         combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>% 
+  select(-c(mu, lower, upper, sig)) %>% 
+  pivot_wider(names_from = "group", values_from = "combined") %>% 
+  mutate(order_parameter = case_when(parameter == "Mu" ~ 1, T ~ 2),
+         order_valence = match(valence, c("good", "bad")[1:2])) %>% 
+  arrange(order_valence, order_parameter) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
+               model_name,
+               "Covariate_Binomial_Descriptives.csv"))
+```
+
+
+
+## Make Plots
+```{r}
+horizontal_lab = data.frame(parameter = factor(c("mu", "beta"), levels = c("mu", "beta"), ordered = T,
+                                               labels = c("Mu", "Beta")),
+                            lab_ = c("Mu", "Beta"),
+                            valence = factor("good", levels = c("good", "bad"),
+                                             ordered = T))
+vertical_lab = data.frame(parameter = factor("beta", levels = c("mu", "beta"), ordered = T,
+                                             labels = c("Mu", "Beta")),
+                          lab_ = c("Good", "Bad"),
+                          valence = factor(c("good", "bad"), levels = c("good", "bad"),
+                                           ordered = T))
+
+
+  # build plot
+posterior_distribution_plot = 
+  valence_grp_thetas %>% 
+    ggplot(aes(x = estimate, fill = group)) +
+      # geoms
+      geom_text_npc(data = horizontal_lab, aes(label = lab_),
+                    npcx = "left", npcy = "top", size = 4, vjust = 1) +
+      geom_text_npc(data = vertical_lab, aes(label = lab_),
+                    npcx = "right", npcy = "center", angle = 270, size = 4, vjust = 1) +
+      geom_density(alpha = .5, linewidth = .25) +
+      geom_hline(yintercept = 0) +
+      # scales
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+      scale_fill_manual(values = c("#999999","#56B4E9", "#E69F00", "#009E73"),
+                        limits = c("Con", "Anx", "Dep", "SUD")) +
+      # themes
+      labs(x = "Estimate") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 8),
+            axis.ticks.x = element_line(color = "black"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.title.y = element_blank(),
+            legend.text = element_text(size = 6),
+            legend.spacing.x = unit(.05, 'cm'),
+            legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+            legend.position = c(.125, .7),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.title = element_blank(),
+            plot.margin = unit(c(.05, .2, 0, .1), "cm"),
+            panel.spacing.x = unit(.25, "cm"),
+            panel.spacing.y = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(valence~parameter, scales = "free",
+                     labeller = labeller(valence = c("good" = "Good", "bad" = "Bad"))) +
+      facetted_pos_scales(x = list(parameter == "Mu" & valence == "bad" ~
+                                     scale_x_continuous(limits = c(.6, .9), breaks = seq(.6, .9, .1),
+                                                        expand = expansion(mult = .1)),
+                                   parameter == "Beta" & valence == "bad" ~
+                                     scale_x_continuous(limits = c(-.6, .6), breaks = seq(-.6, .6, .3),
+                                                        expand = expansion(mult = .1)),
+                                   parameter == "Mu" & valence == "good" ~
+                                     scale_x_continuous(limits = c(.6, .9), breaks = seq(.6, .9, .1),
+                                                        expand = expansion(mult = .1), labels = NULL),
+                                   parameter == "Beta" & valence == "good" ~
+                                     scale_x_continuous(limits = c(-.6, .6), breaks = seq(-.6, .6, .3),
+                                                        expand = expansion(mult = .1), labels = NULL))) +
+      guides(fill = guide_legend(nrow = 2))
+```
+
+
+
+# -------------------------------------------
+# Combine & Save Plots
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name,
+          "Binomial_Valence_Plots.tiff"),
+     width = 14.6, height = 4, units = "cm", res = 300)
+  
+  grid.newpage()
+  # main plot
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(ggarrange(person_level_plot, posterior_distribution_plot,
+                      ncol = 2))
+  
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Correlations with BIS/BAS
+## Calculate Cors
+```{r, eval = F}
+binomial_BIS_BAS = data.frame()
+
+for(i in 1:nrow(valence_posteriors$good_theta)){
+  cur_data = data.frame(ID = stan_data$ID_OG,
+                        participant = ifelse(stan_data$participant_number == 2, "dad", "mom"),
+                        good = valence_posteriors$good_theta[i,],
+                        bad = valence_posteriors$bad_theta[i,]) %>% 
+    left_join(bis_bas) %>% 
+    filter(!is.na(bas_drive))
+  
+  binomial_BIS_BAS = data.frame(iteration = i,
+                                good_bas_drive = cor(cur_data$good, cur_data$bas_drive),
+                                good_bas_fun = cor(cur_data$good, cur_data$bas_fun),
+                                good_bas_rew = cor(cur_data$good, cur_data$bas_rew),
+                                good_bas_tot = cor(cur_data$good, cur_data$bas_tot),
+                                good_bis = cor(cur_data$good, cur_data$bis),
+                                bad_bas_drive = cor(cur_data$bad, cur_data$bas_drive),
+                                bad_bas_fun = cor(cur_data$bad, cur_data$bas_fun),
+                                bad_bas_rew = cor(cur_data$bad, cur_data$bas_rew),
+                                bad_bas_tot = cor(cur_data$bad, cur_data$bas_tot),
+                                bad_bis = cor(cur_data$bad, cur_data$bis)) %>% 
+    bind_rows(binomial_BIS_BAS)
+}
+
+saveRDS(binomial_BIS_BAS,
+        here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+             paste(sample, "Binomial_BIS_BAS.RDS", sep = "_")))
+```
+
+
+
+```{r}
+binomial_BIS_BAS = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+                                paste(sample, "Binomial_BIS_BAS.RDS", sep = "_")))
+```
+
+
+
+## Results
+```{r}
+BIS_BAS_results = data.frame()
+
+for(correlation in c("good_bas_drive", "good_bas_fun", "good_bas_rew",
+                     "good_bas_tot", "good_bis", "bad_bas_drive", "bad_bas_fun",
+                     "bad_bas_rew", "bad_bas_tot", "bad_bis")){
+  BIS_BAS_results = data.frame(
+    correlation = correlation,
+    mu = mean(binomial_BIS_BAS[[correlation]]),
+    lower = HDIofMCMC(binomial_BIS_BAS[[correlation]])[1],
+    upper = HDIofMCMC(binomial_BIS_BAS[[correlation]])[2]) %>% 
+    bind_rows(BIS_BAS_results)
+}
+BIS_BAS_results = BIS_BAS_results %>% 
+  mutate(sig = case_when(lower < 0 & upper < 0 ~ "*",
+                         lower > 0 & upper > 0 ~ "*",
+                         T ~ ""))
+write.csv(BIS_BAS_results, here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+                                paste(sample, "BIS_BAS_correlations.csv", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

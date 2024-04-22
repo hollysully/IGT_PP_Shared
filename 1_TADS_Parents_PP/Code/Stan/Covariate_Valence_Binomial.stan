@@ -59,8 +59,8 @@ model {
   // hyperpriors
   mu_good ~ normal(0,1);    // effect of person-level predictors for good decks
   mu_bad ~ normal(0,1);     // effect of person-level predictors for bad decks
-  sigma_good ~ normal(0,1); // variance of subject-level betas for good decks
-  sigma_bad ~ normal(0,1);  // variance of subject-level betas for bad decks
+  sigma_good ~ cauchy(0,1); // variance of subject-level betas for good decks
+  sigma_bad ~ cauchy(0,1);  // variance of subject-level betas for bad decks
   
   // person-level priors
   tilde_good ~ normal(0,1); // subject-level deviation from mean for good decks

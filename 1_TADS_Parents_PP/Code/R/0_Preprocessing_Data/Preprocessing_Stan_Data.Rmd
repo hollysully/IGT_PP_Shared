@@ -83,16 +83,16 @@ bind_rows(T1_IGT_dad, T1_IGT_mom,
 # --------------------------------------
 # Initialize Variables
 ```{r}
-sample = "T5_parent"
+sample = "T1_parent_Anx_Dep_SUD"
 covariates = c()
-# covariate_names = c("anxiety", "depression", "SU")
+covariates = c("anxiety", "depression", "SU")
 
 IGT_prepped = bind_rows(
-                        # T1_IGT_dad, T1_IGT_mom
+                        T1_IGT_dad, T1_IGT_mom
                         # T2_IGT_dad, T2_IGT_mom
                         # T3_IGT_dad, T3_IGT_mom
                         # T4_IGT_dad, T4_IGT_mom
-                        T5_IGT_dad, T5_IGT_mom
+                        # T5_IGT_dad, T5_IGT_mom
                         ) %>% 
   select(ID = id, -date, everything())
 ```
