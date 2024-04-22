@@ -53,7 +53,7 @@ stan_data <- make_stan_data(
 orl_fit <- orl_model$sample(
   stan_data, 
   iter_sampling = 500, 
-  iter_warmup = 100,
+  iter_warmup = 100, 
   chains = 6, 
   parallel_chains = 6,
   seed = 43210
