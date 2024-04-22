@@ -183,7 +183,7 @@ model {
             // After choice, calculate prediction error
             PEval      = outcome[i,t,s] - ev[card[i,t,s]];     // Value prediction error
             PEfreq     = sign[i,t,s] - ef[card[i,t,s]];        // Win-frequency prediction error
-            PEfreq_fic = -sign[i,t,s] - ef;
+            PEfreq_fic = -sign[i,t,s]/3 - ef;
             ef_chosen  = ef[card[i,t,s]];
             
             if (outcome[i,t,s] >= 0) {  // If participant DID NOT lose
@@ -287,7 +287,7 @@ generated quantities {
               // After choice, calculate prediction error
               PEval      = outcome[i,t,s] - ev[card[i,t,s]];     // Value prediction error
               PEfreq     = sign[i,t,s] - ef[card[i,t,s]];        // Win-frequency prediction error
-              PEfreq_fic = -sign[i,t,s] - ef;
+              PEfreq_fic = -sign[i,t,s]/3 - ef;
               ef_chosen = ef[card[i,t,s]];
               
               if (outcome[i,t,s] >= 0) {  // If participant DID NOT lose

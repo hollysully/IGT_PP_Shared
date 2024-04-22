@@ -60,7 +60,7 @@ data {
 parameters {
 // Declare parameters
   // Hyper(group)-parameters
-  matrix[S, 5] mu_p;   // S (number of sessions) x 5 (number of parameters) matrix of mus
+  matrix[S, 4] mu_p;   // S (number of sessions) x 4 (number of parameters) matrix of mus
   vector<lower=0>[2] sigma_Arew;
   vector<lower=0>[2] sigma_Apun;
   vector<lower=0>[2] sigma_K;
@@ -219,7 +219,7 @@ model {
 }
 
 generated quantities {
-  // Hyper(group)-parameters - these are 5 (number of parameters) x S (number of sessions) matrix of mus & sigmas, respectively, for each parameter
+  // Hyper(group)-parameters - these are 4 (number of parameters) x S (number of sessions) matrix of mus & sigmas, respectively, for each parameter
   vector<lower=0,upper=1>[2] mu_Arew;
   vector<lower=0,upper=1>[2] mu_Apun;
   vector<lower=0,upper=5>[2] mu_K;
