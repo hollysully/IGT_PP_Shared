@@ -37,7 +37,7 @@ source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 ## Load Stan Data
 ```{r include=FALSE}
-sample = "T1_parent"
+sample = "T5_parent"
 
 stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
                          paste("design", sample, "IGT.RDS", sep = "_")))
@@ -46,7 +46,7 @@ stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
 
 
 # ---------------------------------------
-## Prep Data
+# Prep Data
 ```{r}
 bin_width = 5
 
@@ -119,7 +119,7 @@ for(cur_IDs in ID_groups){
     facet_rep_wrap(id~.)
     
     
-  tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Raw_data",
+  tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Raw_data", sample,
             paste0("ID #", min(cur_IDs), "-", max(cur_IDs), " PPCs.tiff")),
        width = 15, height = 14, units = "cm", res = 300)
       print(cur_plot)

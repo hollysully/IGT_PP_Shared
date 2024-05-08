@@ -1,0 +1,311 @@
+---
+title: "Manuscript Plots"
+output: html_document
+date: "2023-03-09"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(foreach)
+library(tidybayes)
+library(patchwork)
+library(abind)
+library(zoo)
+library(here)
+library(ggpubr)
+library(egg)
+library(grid)
+library(tidyverse)
+library(lemon)
+library(ggpp)
+library(wBoot)
+library(stringi)
+library(ggh4x)
+library(hBayesDM)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+```
+
+
+
+## Load Data
+```{r include=FALSE}
+groups = c("Anx", "Dep", "SUD")
+model_name = "Covariate_Joint_ORL_Bias"
+sample = "T1_parent_Anx_Dep_SUD"
+task_deck = c("A", "B", "C", "D") # the usual
+task_deck = c("E", "F", "G", "H") # the loss one from Bechara et al. (2000)
+task_deck = c("I", "J", "K", "L") # Jeremy's own recipe
+
+
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         paste("design", sample, "IGT.RDS", sep = "_")))
+orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                              model_name,
+                              paste(sample, model_name, "posteriors.rds", sep = "_")))
+```
+
+
+
+## Functions
+```{r}
+#------------------------------------------------------------------------------
+# USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
+softmax = function(values){
+  return(exp(values) / sum(exp(values)))
+}
+
+
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_orl = function(parameter_mus, condition,
+                        custom_seed = 20230928, n_iterations = 1000) {
+  set.seed(seed = custom_seed)
+  data = data.frame()
+  
+  # parameters for sim
+  Arew = filter(parameter_mus, parameter == "Arew")[[condition]]
+  Apun = filter(parameter_mus, parameter == "Apun")[[condition]]
+  betaF = filter(parameter_mus, parameter == "betaF")[[condition]]
+  betaB = filter(parameter_mus, parameter == "betaB")[[condition]]
+  
+  for(i in 1:n_iterations){
+    utility = rep(0,4)
+    ev = rep(0,4)
+    ef = rep(0,4)
+    
+    ef_chosen = 0
+    PEval = 0
+    PEfreq = 0
+    PEfreq_fic = rep(0,4)
+    card_trial = rep(0,4)
+    
+    for(t in 1:120){
+      outcome = outcomes$outcome[outcomes$trial == t]
+      sign = outcomes$sign[outcomes$trial == t]
+      card = outcomes$card[outcomes$trial == t]
+      prob = softmax(c(utility[card], 0))
+      curr_choice = sample(c(1,2), 1, prob = prob)
+      
+      if(curr_choice==1) {
+        PEval = outcome - ev[card]
+        PEfreq = sign - ef[card]
+        PEfreq_fic = -1*sign/3 - ef;
+        ef_chosen = ef[card];
+        
+        if(outcome >= 0) {
+          ef = ef + Apun * PEfreq_fic
+          ef[card] = ef_chosen + Arew * PEfreq
+          ev[card] = ev[card] + Arew * PEval
+        } else {
+          ef = ef + Arew * PEfreq_fic
+          ef[card] = ef_chosen + Apun * PEfreq;
+          ev[card] = ev[card] + Apun * PEval;
+        }
+      }
+      
+      utility = ev + ef * betaF + betaB
+      card_trial[card] = card_trial[card] + 1
+      data = data.frame(simulation = condition,
+                        iteration = i,
+                        card = card,
+                        trial = t,
+                        card_trial = card_trial[card],
+                        choice = curr_choice) %>% 
+        bind_rows(data)
+    }
+  }
+  data %>%
+    return()
+}
+```
+
+
+
+# ---------------------------------------
+# Simulate ORL Parameters
+## Prep Inputs for Simulations
+```{r, eval = F}
+# PREP TASK-RELATED INPUTS
+cards = data.frame(card = stan_data$card[1,,1]) %>%
+  mutate(trial = 1:n()) %>% 
+  group_by(card) %>% 
+  mutate(card_trial = 1:n())
+
+outcomes = read.csv(here("1_IGT_PP", "Data", "0_Raw", paste0("outcomes - ",
+                         paste0(task_deck, collapse = ""), ".csv"))) %>% 
+  mutate(card_trial = 1:n()) %>% 
+  pivot_longer(starts_with("Deck"), names_to = "card",
+               values_to = "outcome", names_prefix = "Deck_") %>% 
+  mutate(card = case_when(card == task_deck[1] ~ 1, card == task_deck[2] ~ 2,
+                          card == task_deck[3] ~ 3, card == task_deck[4] ~ 4),
+         sign = sign(outcome),
+         outcome = outcome / 100) %>% 
+  left_join(cards) %>% na.omit()
+
+#------------------------------------------------------------------------------
+# PARAMETER VALUES FOR SIMULATION
+parameters = data.frame(Arew = orl_posteriors$mu_Arew,
+                        Apun = orl_posteriors$mu_Apun,
+                        betaF = orl_posteriors$mu_betaF,
+                        betaB = orl_posteriors$mu_betaB) %>%
+  pivot_longer(everything(), names_to = c("parameter", "session", "group"), names_sep = "\\.",
+               values_to = "estimate") %>%
+  mutate(group = case_when(group == 1~ "Con", group == 2 ~ "Anx",
+                           group == 3 ~ "Dep", group == 4 ~ "SUD")) %>% 
+  group_by(parameter, group) %>%
+  reframe(mu = mean(estimate)) %>%
+  pivot_wider(names_from = "group", values_from = "mu")
+
+#------------------------------------------------------------------------------
+# RUN SIMULATIONS
+# Simulation of observed changes in Arew & betaB with interaction
+simulations = bind_rows(simulate_orl(parameters, "Con"),
+                        simulate_orl(parameters, "Anx"),
+                        # simulate_orl(parameters, "Dep")
+                        )
+saveRDS(simulations, here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+                          paste(sample, model_name, paste0(task_deck, collapse = ""), "simulations.RDS", sep = "_")))
+```
+
+
+
+```{r}
+simulations = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+                           paste0(sample, "_", model_name, "_simulations.RDS")))
+```
+
+
+
+## Arew/BetaP Simulation
+```{r, eval = T}
+labs = c("Con", "Anx", "Dep", "SUD")
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables", model_name, sample,
+           paste(paste0(task_deck, collapse = ""), "Simulations.tiff")),
+     width = 7, height = 5.5, units = "cm", res = 300)
+
+  # data
+  simulations %>% 
+    dplyr::select(everything(), deck = card) %>% 
+    filter(simulation %in% c("Con", "Anx")) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           simulation = factor(simulation, ordered = T,
+                               levels = c(labs[1], labs[2], labs[3], labs[4])),
+           deck = chartr("1234", paste0(task_deck, collapse = ""), as.character(deck)),
+           deck = paste("Deck", deck)) %>% 
+    group_by(simulation, card_trial, deck) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    group_by(simulation, deck) %>% 
+    arrange(card_trial) %>% 
+    mutate(proportion = rollapply(proportion, width = 6, FUN = mean,
+                                  na.rm = TRUE, fill = NA, partial = T)) %>% 
+    # plotting
+    ggplot(aes(x = card_trial, color = simulation, fill = simulation)) +
+      # geoms
+      geom_line(aes(y = proportion), linewidth = .5) +
+      geom_vline(xintercept = c(10.5, 20.5), linewidth = .25, linetype = "dashed") +
+      # scales
+      scale_y_continuous(limits = c(.5,1),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "#E01818", "#2184DA"),
+                         limits = c("Con", "Anx", "Dep")) +
+      scale_fill_manual(values = c("black", "#E01818", "#2184DA"),
+                        limits = c("Con", "Anx", "Dep")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.5, 1.15), 
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .05, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            plot.margin = margin(t = .25, r = .1, unit = 'cm'),
+            strip.text = element_text(vjust = -1.5),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(-1,"lines")
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
+      facet_rep_wrap(deck~.)
+  
+dev.off()  
+```
+
+
+
+## Arew/BetaP Simulation
+```{r, eval = T}
+labs = c("Con", "Anx", "Dep", "SUD")
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables", model_name, sample,
+           paste("Play Proportions", paste0(task_deck, collapse = ""), "Simulations.tiff")),
+     width = 7, height = 5.5, units = "cm", res = 300)
+
+  # data
+  simulations %>% 
+    dplyr::select(everything(), deck = card) %>% 
+    mutate(choice = case_when(choice == 2 ~ 0, T ~ choice),
+           simulation = factor(simulation, ordered = T,
+                               levels = c(labs[1], labs[2], labs[3], labs[4])),
+           deck = chartr("1234", paste0(task_deck, collapse = ""), as.character(deck)),
+           deck = paste("Deck", deck)) %>% 
+    group_by(simulation, deck) %>% 
+    reframe(proportion = mean(choice)) %>% 
+    # plotting
+    ggplot(aes(x = simulation, fill = simulation)) +
+      # geoms
+      geom_point(aes(y = proportion), shape = 21) +
+      # scales
+      scale_y_continuous(limits = c(.6,.9), expand = c(0,0),
+                         breaks = seq(.6,.9,.1)) +
+      scale_fill_manual(values = c("black", "#E01818", "#2184DA"),
+                        limits = c("Con", "Anx", "Dep")) +
+      # theme
+      labs(y = "Proportion Play") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.5, 1.15), 
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .05, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            axis.title.x = element_blank(),
+            plot.margin = margin(t = .25, r = .1, unit = 'cm'),
+            strip.text = element_text(vjust = -1.5),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(-.5,"lines"),
+            panel.spacing.y = unit(-1,"lines")
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
+      facet_rep_wrap(deck~.)
+  
+dev.off()  
+```
+
+
+
+# ---------------------------------------
+
+
+
+
+
+
+

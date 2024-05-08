@@ -126,8 +126,10 @@ for(i in person_parameters){
 
 
 
-## PPC Plots
-### Prep Data
+# -------------------------------------------
+# Posterior Predictions
+## Group-Level PPCs
+### Calculate Group PPCs
 ```{r, eval = F}
 source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
@@ -166,19 +168,10 @@ saveRDS(PPCs,
 PPCs = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
                     model_name,
                     paste(sample, model_name, "PPCs.rds", sep = "_")))
-```
 
-
-
-### Within-Group PPC Plot
-```{r, eval = F}
 bin_width = 3
-tiff(here("1_TADS_Parents_PP", "Figs_Tables",
-          model_name, sample, "Within-Group PPCs.tiff"),
-     width = 7, height = 5.25, units = "cm", res = 300)
 
-  # simplify data
-  PPCs %>% 
+grp_PPCs = PPCs %>% 
     group_by(trial, deck, group) %>% 
     summarise(observed = mean(observed), mu = mean(mu),
               lower50 = mean(lower50), upper50 = mean(upper50),
@@ -196,7 +189,19 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
            lower95 = rollapply(lower95, width = bin_width, FUN = mean,
                                na.rm = TRUE, fill = NA, partial = T),
            upper95 = rollapply(upper95, width = bin_width, FUN = mean,
-                               na.rm = TRUE, fill = NA, partial = T)) %>% 
+                               na.rm = TRUE, fill = NA, partial = T))
+```
+
+
+
+### Within-Group PPC Plot
+```{r, eval = F}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Within-Group PPCs.tiff"),
+     width = 7, height = 5.25, units = "cm", res = 300)
+
+  # simplify data
+  grp_PPCs %>% 
     # plotting
     ggplot(aes(x = trial, color = deck)) +
       # geoms
@@ -242,95 +247,9 @@ dev.off()
 
 
 
-### Person-Level PPC Plot
-#### Subset Persons
-```{r}
-ind_parameters = data.frame(ID = stan_data$ID_participant,
-                            anx = stan_data$X[,2,],
-                            dep = stan_data$X[,3,],
-                            sud = stan_data$X[,4,],
-                            # group-level parameter means
-                            con_Arew = apply(orl_posteriors$mu_Arew, 3, mean)[1],
-                            con_Apun = apply(orl_posteriors$mu_Apun, 3, mean)[1],
-                            con_betaF = apply(orl_posteriors$mu_betaF, 3, mean)[1],
-                            con_betaB = apply(orl_posteriors$mu_betaB, 3, mean)[1],
-                            
-                            anx_Arew = apply(orl_posteriors$mu_Arew, 3, mean)[2],
-                            anx_Apun = apply(orl_posteriors$mu_Apun, 3, mean)[2],
-                            anx_betaF = apply(orl_posteriors$mu_betaF, 3, mean)[2],
-                            anx_betaB = apply(orl_posteriors$mu_betaB, 3, mean)[2],
-                            
-                            dep_Arew = apply(orl_posteriors$mu_Arew, 3, mean)[3],
-                            dep_Apun = apply(orl_posteriors$mu_Apun, 3, mean)[3],
-                            dep_betaF = apply(orl_posteriors$mu_betaF, 3, mean)[3],
-                            dep_betaB = apply(orl_posteriors$mu_betaB, 3, mean)[3],
-                            
-                            sud_Arew = apply(orl_posteriors$mu_Arew, 3, mean)[4],
-                            sud_Apun = apply(orl_posteriors$mu_Apun, 3, mean)[4],
-                            sud_betaF = apply(orl_posteriors$mu_betaF, 3, mean)[4],
-                            sud_betaB = apply(orl_posteriors$mu_betaB, 3, mean)[4],
-                            # ind-level parameter means
-                            ind_Arew = apply(orl_posteriors$Arew, 2, mean),
-                            ind_Apun = apply(orl_posteriors$Apun, 2, mean),
-                            ind_betaF = apply(orl_posteriors$betaF, 2, mean),
-                            ind_betaB = apply(orl_posteriors$betaB, 2, mean)) %>% 
-  pivot_longer(c(starts_with("con"), starts_with("anx_"), starts_with("dep_"), starts_with("sud_")),
-               names_to = c("diag", "parameter"), names_sep = "_", values_to = "mu") %>% 
-  mutate(con = case_when(anx + dep + sud == 0 ~ 1, T ~ 0),
-         diff_Arew = (mu - ind_Arew)^2,
-         diff_Apun = (mu - ind_Apun)^2,
-         diff_betaF = (mu - ind_betaF)^2,
-         diff_betaB = (mu - ind_betaB)^2)
-
-con_index = ind_parameters %>% 
-  filter(con == 1, diag == "con") %>% 
-  mutate(z_diff_Arew = (diff_Arew - mean(diff_Arew)) / sd(diff_Arew),
-         z_diff_Apun = (diff_Apun - mean(diff_Apun)) / sd(diff_Apun),
-         z_diff_betaF = (diff_betaF - mean(diff_betaF)) / sd(diff_betaF),
-         z_diff_betaB = (diff_betaB - mean(diff_betaB)) / sd(diff_betaB),
-         combined_z = (z_diff_Arew + z_diff_Apun + z_diff_betaF + z_diff_betaB) / 4,
-         min_z = min(combined_z),
-         closest_to_mean = min_z == combined_z) %>% 
-  filter(closest_to_mean) %>% .$ID
-
-anx_index = ind_parameters %>% 
-  filter(anx == 1, diag == "anx") %>% 
-  mutate(z_diff_Arew = (diff_Arew - mean(diff_Arew)) / sd(diff_Arew),
-         z_diff_Apun = (diff_Apun - mean(diff_Apun)) / sd(diff_Apun),
-         z_diff_betaF = (diff_betaF - mean(diff_betaF)) / sd(diff_betaF),
-         z_diff_betaB = (diff_betaB - mean(diff_betaB)) / sd(diff_betaB),
-         combined_z = (z_diff_Arew + z_diff_Apun + z_diff_betaF + z_diff_betaB) / 4,
-         min_z = min(combined_z),
-         closest_to_mean = min_z == combined_z) %>% 
-  filter(closest_to_mean) %>% .$ID
-
-dep_index = ind_parameters %>% 
-  filter(dep == 1, diag == "dep") %>% 
-  mutate(z_diff_Arew = (diff_Arew - mean(diff_Arew)) / sd(diff_Arew),
-         z_diff_Apun = (diff_Apun - mean(diff_Apun)) / sd(diff_Apun),
-         z_diff_betaF = (diff_betaF - mean(diff_betaF)) / sd(diff_betaF),
-         z_diff_betaB = (diff_betaB - mean(diff_betaB)) / sd(diff_betaB),
-         combined_z = (z_diff_Arew + z_diff_Apun + z_diff_betaF + z_diff_betaB) / 4,
-         min_z = min(combined_z),
-         closest_to_mean = min_z == combined_z) %>% 
-  filter(closest_to_mean) %>% .$ID
-
-sud_index = ind_parameters %>% 
-  filter(sud == 1, diag == "sud") %>% 
-  mutate(z_diff_Arew = (diff_Arew - mean(diff_Arew)) / sd(diff_Arew),
-         z_diff_Apun = (diff_Apun - mean(diff_Apun)) / sd(diff_Apun),
-         z_diff_betaF = (diff_betaF - mean(diff_betaF)) / sd(diff_betaF),
-         z_diff_betaB = (diff_betaB - mean(diff_betaB)) / sd(diff_betaB),
-         combined_z = (z_diff_Arew + z_diff_Apun + z_diff_betaF + z_diff_betaB) / 4,
-         min_z = min(combined_z),
-         closest_to_mean = min_z == combined_z) %>% 
-  filter(closest_to_mean) %>% .$ID
-```
-
-
-
-#### Calculate PPCs
-```{r, eval = T}
+## Person-Level PPCs
+### Calculate Ind PPCs
+```{r, eval = F}
 ind_PPCs = data.frame(ID = stan_data$ID_participant,
                       deck = stan_data$card,
                       choice = ifelse(stan_data$choice == 1, 1, 0),
@@ -353,131 +272,46 @@ saveRDS(ind_PPCs,
 ```{r}
 ind_PPCs = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
                         model_name,
-                        paste(sample, model_name, "ind_PPC_data.rds", sep = "_")))
+                        paste(sample, model_name, "ind_PPCs.rds", sep = "_")))
 ```
 
 
 
-#### Con v Anx PPC Plots
-```{r, eval = T}
-bin_width = 6
-tiff(here("1_TADS_Parents_PP", "Figs_Tables",
-          model_name, sample, "Person-Level PPCs.tiff"),
-     width = 7, height = 5.5, units = "cm", res = 300)
-
-  # simplify data
-  ind_PPCs %>% 
-    filter(ID %in% c(con_index, anx_index, dep_index)) %>% 
-    mutate(group = case_when(ID == con_index ~ "Con", ID == anx_index ~ "Anx", ID == dep_index ~ "Dep"),
-           group = factor(group, levels = c("Con", groups[1], groups[2],
-                                            groups[3]), ordered = T),
-           deck = chartr("1234", "ABCD", as.character(deck)),
-           deck = paste("Deck", deck)) %>% 
-    group_by(ID, group, deck) %>%
-    arrange(trial) %>% 
-    mutate(trial = 1:30,
-           # pred = rollapply(pred, width = bin_width, FUN = mean,
-           #                  na.rm = TRUE, fill = NA, partial = T),
-           observed = rollapply(choice, width = bin_width, FUN = mean,
-                                na.rm = TRUE, fill = NA, partial = T)) %>% 
-    # plotting
-    ggplot(aes(x = trial, color = group, fill = group)) +
-      # geoms
-      geom_line(aes(y = pred), linewidth = .5) +
-      geom_point(aes(y = observed), color = "black",
-                  shape = 21, size = .75) +
-      geom_vline(xintercept = c(10.5, 20.5), linewidth = .25, linetype = "dashed") +
-      # scales
-      scale_y_continuous(limits = c(0,1),
-                         breaks = seq(0,1,.25)) +
-      scale_color_manual(values = c("black", "#D81B60", "#068C75"),
-                         limits = c("Con", "Anx", "Dep")) +
-      scale_fill_manual(values = c("black", "#D81B60", "#068C75"),
-                        limits = c("Con", "Anx", "Dep")) +
-      # theme
-      labs(x = "Trial", y = "Proportion Play") +
-      theme_classic() +
-      theme(legend.title = element_blank(),
-            legend.background = element_rect(fill = "transparent", colour = "transparent"),
-            legend.position = c(.5, 1.15), 
-            legend.spacing.x = unit(0, 'cm'),
-            legend.spacing.y = unit(-.25, 'cm'),
-            legend.text = element_text(size = 8),
-            legend.direction = "horizontal",
-            legend.margin = margin(t = .05, b = .01, r = .01, unit = 'cm'),
-            legend.key.size = unit(.25, "cm"),
-            axis.text = element_text(color = "black"),
-            plot.margin = margin(t = .25, r = .1, unit = 'cm'),
-            strip.text = element_text(vjust = -1.5),
-            strip.background = element_blank(),
-            panel.spacing.x = unit(-.5,"lines"),
-            panel.spacing.y = unit(-1,"lines")
-            ) +
-      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
-      facet_rep_wrap(deck~.)
-dev.off()
-```
-
-
-
-#### Con v Dep PPC Plots
-```{r, eval = T}
-bin_width = 6
-tiff(here("1_TADS_Parents_PP", "Figs_Tables",
-          model_name, sample, "Person-Level Con v Dep PPCs.tiff"),
-     width = 7, height = 4, units = "cm", res = 300)
-
-  # simplify data
-  ind_PPCs %>% 
-    filter(ID %in% c(con_index, dep_index)) %>% 
-    mutate(group = case_when(ID == con_index ~ "Con", ID == dep_index ~ "Dep"),
-           group = factor(group, levels = c("Con", groups[1], groups[2],
-                                            groups[3]), ordered = T),
-           deck = chartr("1234", "ABCD", as.character(deck))) %>% 
-    group_by(ID, group, deck) %>%
-    arrange(trial) %>% 
-    mutate(trial = 1:30,
-           # pred = rollapply(pred, width = bin_width, FUN = mean,
-           #                  na.rm = TRUE, fill = NA, partial = T),
-           observed = rollapply(choice, width = bin_width, FUN = mean,
-                                na.rm = TRUE, fill = NA, partial = T)) %>% 
-    # plotting
-    ggplot(aes(x = trial, color = deck, fill = deck)) +
-      # geoms
-      geom_line(aes(y = pred), linewidth = .5) +
-      geom_point(aes(y = observed), color = "black",
-                 shape = 21, size = .75) +
-      geom_text_npc(aes(npcx = .3875, npcy = "top", label = group),
-                    hjust = .1, vjust = .675) +
-      geom_vline(xintercept = c(10.5, 20.5), linewidth = .25, linetype = "dashed") +
-      # scales
-      scale_y_continuous(limits = c(0,1),
-                         breaks = seq(0,1,.25)) +
-      scale_color_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73")) +
-      scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73")) +
-      # theme
-      labs(x = "Trial", y = "Proportion Play",
-           color = "Deck:", fill = "Deck:") +
-      theme_classic() +
-      theme(legend.title = element_text(size = 8),
-            legend.background = element_rect(fill = "white", colour = "white"),
-            legend.position = c(.5, 1.05), 
-            legend.spacing.x = unit(0, 'cm'),
-            legend.spacing.y = unit(-.25, 'cm'),
-            legend.text = element_text(size = 8),
-            legend.direction = "horizontal",
-            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
-            legend.key.size = unit(.25, "cm"),
-            axis.text = element_text(color = "black"),
-            plot.margin = margin(t = .5, r = .1, unit = 'cm'),
-            strip.text = element_blank(),
-            strip.background = element_blank(),
-            panel.spacing.x = unit(-.5,"lines"),
-            panel.spacing.y = unit(-.25,"lines")
-            ) +
-      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
-      facet_rep_wrap(group~.)
-dev.off()
+### Calculate Par Diffs
+```{r}
+ind_parameters = data.frame(ID = stan_data$ID_participant,
+                            anx = stan_data$X[,2,],
+                            dep = stan_data$X[,3,],
+                            sud = stan_data$X[,4,],
+                            # group-level parameter means
+                            con_Arew = apply(orl_posteriors$mu_Arew, 3, mean)[1],
+                            con_Apun = apply(orl_posteriors$mu_Apun, 3, mean)[1],
+                            con_betaF = apply(orl_posteriors$mu_betaF, 3, mean)[1],
+                            con_betaB = apply(orl_posteriors$mu_betaB, 3, mean)[1],
+                            
+                            anx_Arew = apply(orl_posteriors$mu_Arew, 3, mean)[2],
+                            anx_Apun = apply(orl_posteriors$mu_Apun, 3, mean)[2],
+                            anx_betaF = apply(orl_posteriors$mu_betaF, 3, mean)[2],
+                            anx_betaB = apply(orl_posteriors$mu_betaB, 3, mean)[2],
+                            
+                            # group-level parameter SD
+                            SD_Arew = mean(orl_posteriors$sigma_Arew),
+                            SD_Apun = mean(orl_posteriors$sigma_Apun),
+                            SD_betaF = mean(orl_posteriors$sigma_betaF),
+                            SD_betaB = mean(orl_posteriors$sigma_betaB),
+                            # ind-level parameter means
+                            ind_Arew = apply(orl_posteriors$Arew, 2, mean),
+                            ind_Apun = apply(orl_posteriors$Apun, 2, mean),
+                            ind_betaF = apply(orl_posteriors$betaF, 2, mean),
+                            ind_betaB = apply(orl_posteriors$betaB, 2, mean)) %>% 
+  pivot_longer(c(starts_with("con_"), starts_with("anx_"), starts_with("dep_"),
+                 starts_with("sud_"), starts_with("SD"), starts_with("ind")),
+               names_to = c("diag", "parameter"), names_sep = "_", values_to = "estimate") %>% 
+  pivot_wider(names_from = "diag", values_from = "estimate", names_prefix = "estimate_") %>% 
+  pivot_longer(c(ends_with("_con"), ends_with("_anx"), ends_with("_dep"), ends_with("_sud")),
+               values_to = "estimate_group", names_to = "group", names_prefix = "estimate_") %>% 
+  mutate(con = case_when(anx + dep + sud == 0 ~ 1, T ~ 0),
+         z = (estimate_group - estimate_ind) / estimate_SD)
 ```
 
 
@@ -531,7 +365,7 @@ orl_grp_parameters = data.frame(
 
 
 ## Descriptives
-```{r}
+```{r, eval = F}
 orl_grp_parameters %>% 
   group_by(group, grp_parameter, orl_parameter) %>% 
   summarise(mu = mean(estimate),
@@ -591,7 +425,8 @@ x_scaling = list(grp_parameter == "Mu" & orl_parameter == "Arew" ~
 horizontal_lab = data.frame(
   grp_parameter = factor(c("mu", "beta"), levels = c("mu", "beta"), ordered = T,
                          labels = c("Mu", "Beta")),
-  lab_ = c("Mu", "Beta"),
+  lab_ = factor(c("Mu", "Beta"), ordered = T,
+                labels = c(expression("\u03B2"), expression("\u03BC"))),
   orl_parameter = factor("Arew", ordered = T,
                          levels = c("Arew", "Apun", "betaF", "betaB")))
 
@@ -610,9 +445,9 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
       geom_hline(yintercept = 0) +
       # scales
       scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
-      scale_color_manual(values = c("black", "#D81B60", "#068C75", "#FFC107"),
+      scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
                          limits = c("Con", "Anx", "Dep", "SUD")) +
-      scale_fill_manual(values = c("black", "#D81B60", "#068C75", "#FFC107"),
+      scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
                         limits = c("Con", "Anx", "Dep", "SUD")) +
       # themes
       labs(x = "Estimate") +
@@ -631,7 +466,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             legend.background = element_rect(fill = "transparent", colour = "transparent"),
             legend.title = element_blank(),
             plot.margin = unit(c(.05, .2, 0, .1), "cm"),
-            panel.spacing.x = unit(.25, "cm"),
+            panel.spacing.x = unit(.3, "cm"),
             panel.spacing.y = unit(.1, "cm"),
             strip.text = element_blank(),
             strip.background = element_rect(fill = "transparent", colour = "transparent"),
@@ -648,6 +483,301 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
                 expression(paste("\u03B2",italic(b),sep=""))),
               x = rep(.93, 4), y = c(.92, .68, .45, .21),
               gp = gpar(fontsize = 9.5))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Anx Beta A- Follow-Up
+## Subset Participants
+```{r}
+con_index = ind_parameters %>% 
+  filter(con == 1, group == "con") %>% 
+  group_by(ID) %>% 
+  summarise(sum_abs_z = sum(abs(z))) %>% 
+  arrange(sum_abs_z) %>% head(1) %>% .$ID
+
+anx_index = ind_parameters %>% 
+  filter(anx == 1, group == "anx") %>% 
+  group_by(ID) %>% 
+  summarise(sum_abs_z = sum(abs(z))) %>% 
+  arrange(sum_abs_z) %>% head(1) %>% .$ID
+```
+
+
+
+```{r, eval = F}
+ind_parameters %>% 
+    filter((ID %in% con_index & group == "con") |
+           (ID %in% anx_index & group == "anx")) %>% 
+  View(title = "Check Subseted Parameters")
+```
+
+
+
+## Plot
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Anx Beta A- Person-Level PPCs.tiff"),
+     width = 7, height = 3.25, units = "cm", res = 300)
+
+  # prep data
+  ind_PPCs %>% 
+    filter(ID %in% c(con_index, anx_index)) %>%
+    mutate(group = case_when(ID %in% con_index ~ "Con",
+                             ID %in% anx_index ~ "Anx"),
+           grp_ind = "ind",
+           deck = chartr("1234", "ABCD", as.character(deck))) %>% 
+    group_by(ID, group, deck) %>%
+    arrange(trial) %>% 
+    mutate(trial = 1:30,
+           observed = rollapply(choice, width = bin_width, FUN = mean,
+                                na.rm = TRUE, fill = NA, partial = T)) %>% 
+    bind_rows(mutate(grp_PPCs, grp_ind = "grp", pred = mu)) %>% 
+    mutate(group = factor(group, levels = c("Con", "Anx", ordered = T))) %>% 
+    filter(group %in% c("Con", "Anx"), deck == "B") %>% 
+    # plotting
+    ggplot(aes(x = trial, color = group)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
+                  alpha = .2) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
+                  alpha = .375) +
+      geom_line(aes(y = pred), linewidth = .5) +
+      geom_point(aes(y = observed, fill = group), color = "black",
+                 shape = 21, size = 1) +
+      # scales
+      scale_y_continuous(limits = c(.5,1),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "#E01818"), limits = c("Con", "Anx")) +
+      scale_fill_manual(values = c("black", "#E01818"), limits = c("Con", "Anx")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.15, .95), 
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.25, "cm"),
+            axis.title = element_text(color = "black", size = 10),
+            axis.text = element_text(color = "black"),
+            plot.margin = margin(t = .15, r = .1, unit = 'cm'),
+            strip.text = element_blank(),
+            strip.background = element_blank()
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
+      facet_rep_wrap(.~grp_ind, scales = "free") +
+      facetted_pos_scales(y = list(grp_ind == "grp" ~
+                                     scale_y_continuous(limits = c(.5,1),
+                                                        labels = c(".5", ".75", "1"),
+                                                        breaks = seq(.5,1,.25)),
+                                   grp_ind == "ind" ~
+                                     scale_y_continuous(limits = c(0,1),
+                                                        labels = c("0", ".5", "1"),
+                                                        breaks = seq(0,1,.5))))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Dep Beta BetaF Follow-up
+## Frequency Plot
+### Prep Data
+```{r}
+dep_data = ind_PPCs %>% 
+  left_join(data.frame(ID = stan_data$ID_participant,
+                       anx = stan_data$X[,2,],
+                       dep = stan_data$X[,3,],
+                       sud = stan_data$X[,4,])) %>% 
+  filter(deck > 0) %>% 
+  mutate(group = case_when(dep == 0 ~ "Con", T ~ "Dep"),
+         deck = chartr("1234", "ABCD", as.character(deck))) %>%
+  group_by(ID, anx, dep, sud, group, deck) %>% 
+  summarise(prop = mean(choice)) %>% 
+  filter(!(group == "Con" & anx+sud > 0))
+
+# subset specific groups
+con_dep_data = dep_data %>%
+  filter(anx+dep+sud == 0) %>% 
+  group_by(ID, deck) %>% 
+  summarise(group = "Con", prop = mean(prop))
+
+dep_full_data = dep_data %>%
+  filter(dep == 1) %>% 
+  group_by(ID, deck) %>% 
+  summarise(group = "Dep", prop = mean(prop))
+
+dep_only_data = dep_data %>%
+  filter(dep == 1 & anx == 0 & sud == 0) %>% 
+  group_by(ID, deck) %>% 
+  summarise(group = "Dep", prop = mean(prop))
+
+# calculate group-level means
+con_dep_mus = con_dep_data %>% 
+  group_by(group, deck) %>%
+  summarise(prop = mean(prop)) %>%
+  filter(group == "Con")
+
+dep_only_mus = dep_only_data %>% 
+  group_by(group, deck) %>%
+  summarise(prop = mean(prop)) %>%
+  filter(group == "Dep")
+
+dep_full_mus = dep_data %>% 
+  group_by(group, deck) %>%
+  summarise(prop = mean(prop)) %>%
+  filter(group == "Dep")
+```
+
+
+
+### Plot
+```{r, eval = F}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Dep Beta BetaF Frequency Plot.tiff"),
+     width = 7, height = 4.5, units = "cm", res = 300)
+
+  # plotting
+  ggplot(dep_data, aes(x = group, y = prop)) +
+    # geoms
+    ### control-group-related geoms ###
+    geom_dotplot(data = con_dep_data, binaxis = "y", fill = "gray75",
+                 stackdir = "center", stroke = .6, dotsize = 1.35) +
+    geom_crossbar(data = con_dep_mus, aes(ymin = prop, ymax = prop),
+                  linewidth = .5, fatten = 0, width = 1) +
+    
+    ### depression-related geoms ###
+    ###### dep-only as red ######
+    geom_dotplot(data = dep_full_data, binaxis = "y", fill = "gray75",
+                 stackdir = "center", stroke = .6, dotsize = 1.25) +
+    geom_dotplot(data = dep_only_data, binaxis = "y",
+                 stackdir = "center", stroke = .6, dotsize = 1.25) +
+    geom_crossbar(data = dep_full_mus, aes(ymin = prop, ymax = prop),
+                  linewidth = .5, fatten = 0, width = 1) +
+    geom_point(data = dep_only_mus, color = "red", size = .75) +
+    ###### dep full as red ######
+    # geom_dotplot(data = dep_full_data, binaxis = "y",
+    #              stackdir = "center", stroke = .6, dotsize = 1.35) +
+    # geom_dotplot(data = dep_only_data, binaxis = "y", fill = "gray85",
+    #              stackdir = "center", stroke = .6, dotsize = 1.35) +
+    # geom_crossbar(data = dep_full_mus, aes(ymin = prop, ymax = prop),
+    #               linewidth = .5, fatten = 0, width = 1) +
+    # geom_point(data = dep_only_mus, color = "red", size = .65) +
+    
+    ### other geoms ###
+    geom_text_npc(aes(npcx = "right", npcy = "bottom", label = deck),
+                  check_overlap = T) +
+    geom_violin(scale = "count", fill = "transparent", trim = F, draw_quantiles = T) +
+    # scales
+    scale_y_continuous(limits = c(0, 1)) +
+    scale_shape_manual(values = c(16, 1)) +
+    # themes
+    labs(y = "Proportion Play") +
+    theme_classic() +
+    theme(legend.position = "none",
+          axis.text = element_text(color = "black"),
+          axis.title.x = element_blank(),
+          plot.margin = margin(t = .1, r = .1, unit = 'cm'),
+          strip.text = element_blank(),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(-.5,"lines"),
+          panel.spacing.y = unit(-.25,"lines")) +
+    facet_rep_wrap(deck~.)
+    
+dev.off()
+```
+
+
+
+## PPC Plot
+### Prep Data
+```{r}
+con_index = ind_parameters %>% 
+  filter(con == 1, group == "con") %>% 
+  group_by(ID) %>% 
+  summarise(sum_abs_z = sum(abs(z))) %>% 
+  arrange(sum_abs_z) %>% head(1) %>% .$ID
+
+dep_index = ind_parameters %>% 
+  filter(dep == 1, group == "dep") %>% 
+  group_by(ID) %>% 
+  summarise(sum_abs_z = sum(abs(z))) %>% 
+  arrange(sum_abs_z) %>% head(1) %>% .$ID
+```
+
+
+
+### Plot
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Dep Beta BetaF Person-Level PPCs.tiff"),
+     width = 7, height = 3.25, units = "cm", res = 300)
+
+  # prep data
+  ind_PPCs %>% 
+    filter(ID %in% c(con_index, dep_index)) %>%
+    mutate(group = case_when(ID %in% con_index ~ "Con",
+                             ID %in% dep_index ~ "Dep"),
+           grp_ind = "ind",
+           deck = chartr("1234", "ABCD", as.character(deck))) %>% 
+    group_by(ID, group, deck) %>%
+    arrange(trial) %>% 
+    mutate(trial = 1:30,
+           observed = rollapply(choice, width = bin_width, FUN = mean,
+                                na.rm = TRUE, fill = NA, partial = T)) %>% 
+    bind_rows(mutate(grp_PPCs, grp_ind = "grp", pred = mu)) %>% 
+    mutate(group = factor(group, levels = c("Con", "Dep", ordered = T))) %>% 
+    filter(group %in% c("Con", "Dep"), deck %in% c("B", "D")) %>% 
+    # plotting
+    ggplot(aes(x = trial, color = group, linetype = deck)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
+                  alpha = .2) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
+                  alpha = .375) +
+      geom_line(aes(y = pred), linewidth = .5) +
+      geom_point(aes(y = observed, fill = group, shape = deck), color = "black",
+                 size = 1) +
+      # scales
+      scale_y_continuous(limits = c(.5,1),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "#2184DA"), limits = c("Con", "Dep")) +
+      scale_fill_manual(values = c("black", "#2184DA"), limits = c("Con", "Dep")) +
+      scale_shape_manual(values = c(21, 22)) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.15, .95), 
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.25, "cm"),
+            axis.title = element_text(color = "black", size = 10),
+            axis.text = element_text(color = "black"),
+            plot.margin = margin(t = .15, r = .1, unit = 'cm'),
+            strip.text = element_blank(),
+            strip.background = element_blank()
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
+      facet_rep_wrap(.~grp_ind, scales = "free") +
+      facetted_pos_scales(y = list(grp_ind == "grp" ~
+                                     scale_y_continuous(limits = c(.5,1),
+                                                        labels = c(".5", ".75", "1"),
+                                                        breaks = seq(.5,1,.25)),
+                                   grp_ind == "ind" ~
+                                     scale_y_continuous(limits = c(0,1),
+                                                        labels = c("0", ".5", "1"),
+                                                        breaks = seq(0,1,.5))))
 dev.off()
 ```
 
@@ -713,7 +843,15 @@ for(scale in c("bas_drive", "bas_fun", "bas_rew", "bas_tot", "bis")){
 BIS_BAS_results = BIS_BAS_results %>% 
   mutate(sig = case_when(lower < 0 & upper < 0 ~ "*",
                          lower > 0 & upper > 0 ~ "*",
-                         T ~ ""))
+                         T ~ ""),
+         label = paste0(round(mu,2), " [", round(lower,2), ",", round(upper,2), "]", sig)) %>% 
+  select(parameter, scale, label) %>% 
+  pivot_wider(names_from = "parameter", values_from = "label") %>% 
+  select(scale, Arew, Apun, betaF, betaB) %>% 
+  mutate(scale_order = case_when(scale == "bas_tot" ~ 1, scale == "bas_drive" ~ 2, 
+                                 scale == "bas_fun" ~ 3, scale == "bas_rew" ~ 4, 
+                                 scale == "bis" ~ 5)) %>% 
+  arrange(scale_order)
 write.csv(BIS_BAS_results, here("1_TADS_Parents_PP", "Figs_Tables",
                                 model_name, sample,
                                 paste(sample, "BIS_BAS_correlations.csv", sep = "_")))
