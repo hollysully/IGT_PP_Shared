@@ -145,10 +145,14 @@ model {
   R_chol_betaP  ~ lkj_corr_cholesky(1);
   
   // Hyperparameters for RL learning algorithm
-  beta_Arew ~ normal(0, 1);
-  beta_Apun ~ normal(0, 1);
-  beta_betaF ~ normal(0, 1);
-  beta_betaP ~ normal(0, 1);
+  beta_Arew[1] ~ normal(0, 1);
+  beta_Apun[1] ~ normal(0, 1);
+  beta_betaF[1] ~ normal(0, 1);
+  beta_betaP[1] ~ normal(0, 1);
+  beta_Arew[2:D] ~ normal(0, .2);
+  beta_Apun[2:D] ~ normal(0, .2);
+  beta_betaF[2:D] ~ normal(0, .2);
+  beta_betaP[2:D] ~ normal(0, .2);
   sigma_Arew  ~ normal(0, 0.2);
   sigma_Apun  ~ normal(0, 0.2);
   sigma_betaF ~ cauchy(0, 1);
@@ -168,7 +172,7 @@ model {
         ev = rep_vector(0,4);
         ef = rep_vector(0,4);
         pers = rep_vector(1,4);
-        utility = rep_vector(0,4);
+        utility = ev + ef * betaF[i,s] + pers * betaP[i,s];;
         
         for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
           
@@ -200,7 +204,6 @@ model {
               ev[card[i,t,s]] = ev[card[i,t,s]] + Apun[i,s] * PEval;
             }
           }
-            
           // Calculate expected value of card
           utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
         }
@@ -274,7 +277,7 @@ generated quantities {
           ev = rep_vector(0,4);
           ef = rep_vector(0,4);
           pers = rep_vector(1,4);
-          utility = rep_vector(0,4);
+          utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
           
           for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
             // softmax choice

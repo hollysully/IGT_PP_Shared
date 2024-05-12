@@ -22,7 +22,8 @@ all_task_data <- rbind(AB, BD) %>%
     time = SessionDate,
     session = as.factor(as.integer(as.factor(SessionDate))),
     outcome = ifelse(is.na(absmoney1), 0, absmoney1)
-  )
+  ) %>%
+  filter(ID>=2049 & ID<=2099)
 
 #Note: PlayPass IGT task subject numbers are 2049—2099
 

@@ -96,7 +96,7 @@ df <- foreach(par=pars, .combine="rbind") %do% {
     # removing 2 subjects' data
     value=scale(c(
       apply(orl_fit_orig$draws(paste0(par)), 3, mean),
-      apply(orl_fit$draws(paste0(par))[,,-c(50,51, 99,100)], 3, mean)
+      apply(orl_fit$draws(paste0(par)), 3, mean)
     ))
   )
 }
