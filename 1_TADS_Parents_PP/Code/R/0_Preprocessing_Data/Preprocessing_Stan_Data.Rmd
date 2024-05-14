@@ -117,7 +117,9 @@ combined_data = inner_join(IGT_prepped, SCID_prepped) %>%
   # This ensures that we exclude all non-participant data (e.g., test data)
   filter(ID >= 5000 & ID < 6000) %>%
   # Do some prepartion for creating stan data
-  mutate(# create variable that assigns numbers to participant types (1 = child, 2 = mom, 3 = dad)
+  mutate(# fix session variable
+         session = as.numeric(str_remove(time, "T")),
+         # create variable that assigns numbers to participant types (1 = child, 2 = mom, 3 = dad)
          participant_num = match(participant, c("child", "dad", "mom")[1:3]),
          # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
          card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4])) %>% 
