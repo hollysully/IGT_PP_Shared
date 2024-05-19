@@ -73,6 +73,102 @@ make_stan_data <- function(task_data, survey_data, formula) {
   return(stan_list)
 }
 
+make_stan_data_growth <- function(task_data, survey_data, formula, time_variable) {
+  comb_data <- task_data %>% 
+    left_join(survey_data, 
+              by = c("ID", "session")) %>%
+    arrange(ID, session, Trialorder)
+  
+  comb_data$SessionTime
+  
+  subj_list <- unique(comb_data$ID)
+  
+  # trials per subject
+  n_subj <- length(subj_list)
+  t_subj <- array(0, c(n_subj)) 
+  for (i in 1:n_subj)  {
+    t_subj[i] <- sum(comb_data$ID==subj_list[i])
+  }
+  t_max <- max(t_subj) 
+    
+  # new session start trial markers
+  session_start <- array(0, c(n_subj, t_max)) 
+  for (i in 1:n_subj) {
+    subj_trials <- subset(comb_data, ID==subj_list[i])$Trialorder
+    for (t in 1:t_subj[i]) {
+      if (subj_trials[t] == 1) {
+        session_start[i,t] <- 1
+      }
+    }
+  }
+  
+  # time variable in model
+  n_sessions <- length(unique(comb_data$session))
+  time <- array(0, c(n_subj, n_sessions)) 
+  for (i in 1:n_subj) {
+    for (s in 1:n_sessions) {
+      subj_session <- subset(comb_data, ID==subj_list[i] & session==s)
+      if (nrow(subj_session) > 0) {
+        time[i,s] <- as.integer(unique(subj_session[time_variable])[1])
+        time[time[1:n_subj,s]==0,s] <- mean(time[time[1:n_subj,s]!=0,s])
+      }
+    }
+  }
+  
+  # parsed list of formulas
+  named_formulas <- parse_formula(formula)
+  
+  # Behavioral data arrays
+  choice <- outcome <- sign_outcome <- card <- array(-1, c(n_subj, t_max))
+  # create model matrix for each formula in list_formula
+  X <- lapply(named_formulas, function(f) model.matrix(f, comb_data))
+  D_end <- cumsum(sapply(X, ncol))
+  D <- D_end[length(D_end)]
+  D_start <- c(1, D_end[2:length(D_end)]-1)
+  names(D_start) <- names(D_end)
+  design_matrix <- array(0, c(n_subj, t_max, D))
+  
+  # Filling arrays with task and survey covariate data
+  for (i in 1:n_subj) {
+    subj_idx <- comb_data$Subject == subj_list[i]
+    # sessions are "special" covariates because the model
+    # initial conditions need reset each session start
+    # regardless of the covariate model assumptions
+    if (sum(subj_idx) > 0) {
+      for (par in PARAMETERS) {
+        design_matrix[i,,D_start[par]:D_end[par]] <- X[[par]][subj_idx,1:ncol(X[[par]])]  
+      }
+      subj_dat <- comb_data %>% 
+        filter(ID==subj_list[i])
+      if (nrow(subj_dat) > 0) {
+        card[i,1:t_subj[i]] <- subj_dat$card
+        choice[i,1:t_subj[i]] <- subj_dat$choice
+        outcome[i,1:t_subj[i]] <- subj_dat$outcome / 100
+        sign_outcome[i,1:t_subj[i]] <- sign(subj_dat$outcome)
+      }
+    }
+  }  
+  
+  stan_list <- list(
+    N = n_subj,
+    T = t_max,
+    S = n_sessions,
+    D = D,
+    D_start = D_start,
+    D_end = D_end,
+    Tsubj = t_subj,
+    session_start = session_start,
+    time = time,
+    card = card,
+    outcome = outcome,     
+    sign = sign_outcome,
+    choice = choice,
+    X = design_matrix,
+    subj_list = subj_list
+  )
+  return(stan_list)
+}
+
 # parse text into a list of formulas
 parse_formula <- function(text) {
   # clean up the text
