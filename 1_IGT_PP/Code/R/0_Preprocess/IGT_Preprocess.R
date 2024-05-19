@@ -5,7 +5,9 @@ library(lubridate)
 library(readxl)
 library(here)
 
-# test comment 
+# dataset to get DOB for each subject
+dob = read_sav(here("1_IGT_PP", "Data", "0_Raw", "MergedQuest_3.21.16-Session1.sav")) %>%
+  select(ID, DOB)
 
 
 #import Play or Pass raw data
