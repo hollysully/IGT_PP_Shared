@@ -111,10 +111,10 @@ make_stan_data_growth <- function(task_data, survey_data, formula, time_variable
       if (nrow(subj_session) > 0) {
         time[i,s] <- as.integer(unique(subj_session[time_variable])[1])
         time[time[1:n_subj,s]==0,s] <- mean(time[time[1:n_subj,s]!=0,s])
-        time <- time - min(time)
       }
     }
   }
+  time <- time - min(time)
   
   # parsed list of formulas
   named_formulas <- parse_formula(formula)
