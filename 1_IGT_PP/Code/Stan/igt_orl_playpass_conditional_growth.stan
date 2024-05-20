@@ -68,11 +68,12 @@ model {
   // Priors
   for (p in 1:4) {
     R_chol[p] ~ lkj_corr_cholesky(1);  
-    gamma0[p] ~ normal(0,1);
-    gamma1[p] ~ normal(0,1);
-    sigma_beta[p] ~ normal(0,1);
-    theta[p] ~ normal(0,1);
-    sigma_theta[p] ~ normal(0,1);
+    gamma0[p] ~ normal(-1,1);
+    gamma1[p] ~ normal(0,.5);
+    to_vector(beta_pr[p]) ~ std_normal();
+    sigma_beta[p] ~ normal(0,.2);
+    theta[p] ~ std_normal();
+    sigma_theta[p] ~ normal(0,.2);
   }
   
   
@@ -81,12 +82,12 @@ model {
     if (Tsubj[i] > 0) {    
       for (t in 1:Tsubj[i]) { 
         if (session_start[i,t] == 1) {
-            session += 1;
-            ev = rep_vector(0,4);
-            ef = rep_vector(0,4);
-            pers = rep_vector(1,4);
-          }
-        utility = ev + ef * betaF[i,session] + pers * betaP[i,session];  
+          session += 1;
+          ev = rep_vector(0,4);
+          ef = rep_vector(0,4);
+          pers = rep_vector(1,4);
+          utility = ev + ef * betaF[i,session] + pers * betaP[i,session];  
+        }
         choice[i,t] ~ categorical_logit(to_vector({utility[card[i,t]], 0}));
           
         if (choice[i,t]==1) {
