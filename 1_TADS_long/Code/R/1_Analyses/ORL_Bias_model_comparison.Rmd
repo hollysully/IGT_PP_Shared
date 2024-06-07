@@ -1,0 +1,96 @@
+---
+title: "Model-Comparison"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(loo)
+```
+
+
+
+## Setup
+```{r}
+model1 = "ORL_woK"
+model2 = "ORL"
+
+#samples = c("T1_IGT_child")
+samples = c("T1_IGT_child", "T2_IGT_child", "T3_IGT_child", "T4_IGT_child", "T5_IGT_child")
+
+```
+
+
+
+# -------------------------------------------
+# IGT
+```{r}
+
+for(sample in samples){
+  #load data
+  model1_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model1, "_fit.rds")))
+  model2_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model2, "_fit.rds")))
+  #extract log likelihoods
+  model1_log_lik = extract_log_lik(model1_fit)
+  model2_log_lik = extract_log_lik(model2_fit)
+  
+  #loo
+  model1_loo = loo(model1_log_lik)
+  model2_loo = loo(model2_log_lik)
+  
+  #compare models
+  models = list()
+  models[[model1]] = model1_loo
+  models[[model2]] = model2_loo
+
+  comparison = loo_compare(models)
+  print(comparison, simplify = F)
+  
+  
+  path_out = "/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_TADS_long/Data/2_Fitted/"
+  filename <- paste0(path_out,'1_Model_Comparison_', sample, '_.csv')
+  # save output
+  write.csv(comparison,filename) 
+
+  # link to stan forums for interpreting output:  https://discourse.mc-stan.org/t/interpreting-output-from-compare-of-loo/3380
+}
+```  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

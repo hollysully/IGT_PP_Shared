@@ -1,0 +1,123 @@
+---
+title: "Estimate MLMs"
+output: html_document
+date: "2024-05-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(lme4)
+library(psych)
+library("lmerTest")
+library(here)
+library("jtools")
+library("sjPlot")
+library(tidyverse)
+library(ggplot2)
+
+# Note here() starts at:  /Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared
+```
+
+
+
+# import long-format data
+```{r}
+
+data <- read.csv(here("1_TADS_long", "Data", "3_LongFormat", "TADS_child_long_IGT.csv"))
+
+```
+
+
+# general spaghetti plot code 
+```{r, echo=FALSE}
+# Create the plot
+spaghetti_plot <- ggplot(data, aes(x = age_centered, y = Arew_qnormed, colour = as.factor(id), group = id)) +
+  geom_point() + 
+  geom_line() +  # Add lines for each id
+  geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +  # Add overall fit line
+  theme_bw() +  # Apply a black-and-white theme
+  theme(legend.position = "none")
+
+print(spaghetti_plot)
+
+```
+
+
+# define colors for subject-level data
+```{r}
+
+cols=rainbow(length(unique(data$id)))
+
+# Reset the plot window
+dev.off() 
+
+```
+
+
+
+NOTE:  here is the lmer cheatsheet:  https://eshinjolly.com/pymer4/rfx_cheatsheet.html
+
+
+# random intercepts only Arew_qnormed
+```{r}
+
+rand_intcpt_Arew_qnormed <- lmer(Arew_qnormed ~ age_centered + (1 | id), data=data, REML=FALSE)
+summ(rand_intcpt_Arew_qnormed)
+summary(rand_intcpt_Arew_qnormed)
+tab_model(rand_intcpt_Arew_qnormed)
+
+
+# NOTE:  1 unit change in age = -.04 unit change in Arew_qnormed
+
+```
+
+
+# random slopes only Arew_qnormed
+```{r}
+
+rand_slope_Arew_qnormed <- lmer(Arew_qnormed ~ age_centered + (0 + age_centered | id), data=data, REML=FALSE)
+summ(rand_slope_Arew_qnormed)
+summary(rand_slope_Arew_qnormed)
+tab_model(rand_slope_Arew_qnormed)
+
+```
+
+
+
+# random intercepts and slopes (without their correlation) Arew_qnormed
+```{r}
+
+rand_intcpt_slope_Arew_qnormed <- lmer(Arew_qnormed ~ age_centered + (0 + age_centered | id), data=data, REML=FALSE)
+summ(rand_intcpt_slope_Arew_qnormed)
+summary(rand_intcpt_slope_Arew_qnormed)
+tab_model(rand_intcpt_slope_Arew_qnormed)
+
+```
+
+
+
+#Random intercepts and slopes (without their correlation)
+```{r}
+rand_intcpt_slope_Arew_qnormed <- lmer(Arew_qnormed ~ age_centered + MatHxDepress + age_centered*MatHxDepress + (1 | id) + (0 + age_centered | id), data=data, REML=FALSE)
+summ(rand_intcpt_slope_Arew_qnormed)
+summary(rand_intcpt_slope_Arew_qnormed)
+tab_model(rand_intcpt_slope_Arew_qnormed)
+  
+```
+
+
+
+#Random intercepts and slopes (without their correlation)
+```{r}
+rand_intcpt_slope_Apun_qnormed <- lmer(Apun_qnormed ~ age_centered + MatHxDepress + age_centered*MatHxDepress + (1 | id) + (0 + age_centered | id), data=data, REML=FALSE)
+summ(rand_intcpt_slope_Apun_qnormed)
+summary(rand_intcpt_slope_Apun_qnormed)
+tab_model(rand_intcpt_slope_Apun_qnormed)
+  
+```
+
+
+
+
+

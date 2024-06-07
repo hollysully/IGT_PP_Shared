@@ -1,0 +1,172 @@
+---
+title: "Spaghetti Plot"
+output: html_document
+date: "2024-06-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load libraries
+```{r}
+library(plyr)
+library(patchwork)
+library("viridis")
+```
+
+# NOTE: this code is from:  https://www.r-bloggers.com/2014/10/my-commonly-done-ggplot2-graphs/ 
+
+
+# read in data
+```{r}
+data <- read.csv("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_TADS_long/Data/3_LongFormat/TADS_child_long_IGT.csv")
+```
+
+
+
+
+# make a basic plot for the whole group
+```{r , echo=FALSE}
+tspag = ggplot(data, aes(x=age, y=Arew_qnormed)) + 
+  geom_line() + guides(colour=FALSE) + xlab("Age") +
+  ylab("Arew_qnormed") + 
+  theme_bw() + # Apply a black-and-white theme
+  theme(panel.grid.major = element_blank(),  # Remove major grid lines
+        panel.grid.minor = element_blank())  # Remove minor grid lines
+
+spag = tspag + aes(colour = factor(id)) 
+spag
+
+# add a black fit line
+sspag = spag + geom_smooth(se=FALSE, colour="black", size=2)
+sspag
+```
+
+
+
+
+# Make separate plots for each group
+```{r , echo=FALSE}
+
+# Create two subsets of the data based on 'MatHxDepress'
+MatHxDepress <- subset(data, MatHxDepress == 1)
+length(unique(MatHxDepress$id)) # 76
+NoMatHxDepress <- subset(data, MatHxDepress == 0)
+length(unique(NoMatHxDepress$id)) #147
+
+
+# Plot for Group 1 (MatHxDepress = 1) in red
+plot_MatHxDepress <- ggplot(MatHxDepress, aes(x = age, y = Arew_qnormed, group = id)) +
+  geom_line(color = "lightgray", alpha = 0.5) +  # Individual lines in pink
+  geom_smooth(aes(group = 1), method = "lm", se = TRUE, color = "red", fill = "pink", size = 2) +  # Overall fit line in red
+  guides(colour = FALSE) +
+  #xlab("Age") +
+  #ylab("Arew_qnormed") +
+  scale_x_continuous(name ="\nAge", breaks=c(10, 12, 14, 16),
+                     labels=c("10", "12", "14", "16"), limits=c(9, 17)) +  
+  scale_y_continuous(name ="Arew_qnormed\n", breaks=c(-2.5, -2, -1.5, -1, -.5),
+                     labels=c("-2.5", "-2", "-1.5", "-1", "-.5"), limits=c(-2.7, -.3)) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(),  # Remove major grid lines
+        panel.grid.minor = element_blank())  # Remove minor grid lines
+
+# Plot for Group 2 (MatHxDepress = 0) in blue
+plot_NoMatHxDepress <- ggplot(NoMatHxDepress, aes(x = age, y = Arew_qnormed, group = id)) +
+  geom_line(color = "lightgray", alpha = 0.5) +  # Individual lines in light blue
+  geom_smooth(aes(group = 1), method = "lm", se = TRUE, color = "darkgreen",fill = "lightgreen", size = 2) +  # Overall fit line in dark blue
+  guides(colour = FALSE) +
+  #xlab("Age") +
+  #ylab("Arew_qnormed") +
+  scale_x_continuous(name ="\nAge", breaks=c(10, 12, 14, 16),
+                     labels=c("10", "12", "14", "16"), limits=c(9, 17)) +  
+  scale_y_continuous(name ="Arew_qnormed\n", breaks=c(-2.5, -2, -1.5, -1, -.5),
+                     labels=c("-2.5", "-2", "-1.5", "-1", "-.5"), limits=c(-2.7, -.3)) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(),  # Remove major grid lines
+        panel.grid.minor = element_blank())  # Remove minor grid lines
+
+
+combined_plot <- plot_NoMatHxDepress + plot_MatHxDepress
+
+print(combined_plot)
+
+```
+
+
+
+# Make separate plots for each group
+```{r , echo=FALSE}
+
+data <- subset(data, !is.na(MatHxDepress))
+
+# Create a combined data frame with an additional column to indicate the group
+data$group <- ifelse(data$MatHxDepress == 1, "MatHxDepress", "NoMatHxDepress")
+
+# Create the combined plot
+combined_plot <- ggplot(data, aes(x = age, y = Arew_qnormed, group = id)) +
+  geom_line(aes(color = group), alpha = 0.5) +  # Individual lines colored by group
+  geom_smooth(aes(group = group, color = group), method = "lm", se = FALSE, size = 2) +  # Overall fit lines by group
+  scale_color_manual(values = c("MatHxDepress" = "#D55E00", "NoMatHxDepress" = "#009E73")) +  # Colors for individual lines
+  #scale_color_manual(name = "Fit Lines", values = c("MatHxDepress" = "red", "NoMatHxDepress" = "darkgreen")) +
+  guides(color = FALSE) +
+  scale_x_continuous(name ="\nAge", breaks=c(10, 12, 14, 16), labels=c("10", "12", "14", "16"), limits=c(9, 17)) +  
+  scale_y_continuous(name ="Arew_qnormed\n", breaks=c(-2.5, -2, -1.5, -1, -.5), labels=c("-2.5", "-2", "-1.5", "-1", "-.5"), limits=c(-2.7, -.3)) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # Remove grid lines
+
+print(combined_plot)
+
+```
+
+# Make separate plots for each group
+```{r , echo=FALSE}
+
+data <- subset(data, !is.na(MatHxDepress))
+
+# Create a combined data frame with an additional column to indicate the group
+data$group <- ifelse(data$MatHxDepress == 1, "MatHxDepress", "NoMatHxDepress")
+
+# Create the combined plot
+combined_plot <- ggplot(data, aes(x = age, y = Arew, group = id)) +
+  geom_line(aes(color = group), alpha = 0.5) +  # Individual lines colored by group
+  geom_smooth(aes(group = group, color = group), method = "lm", se = FALSE, size = 2) +  # Overall fit lines by group
+  scale_color_manual(values = c("MatHxDepress" = "#D55E00", "NoMatHxDepress" = "#009E73")) +  # Colors for individual lines
+  #scale_color_manual(name = "Fit Lines", values = c("MatHxDepress" = "red", "NoMatHxDepress" = "darkgreen")) +
+  guides(color = FALSE) +
+  # scale_x_continuous(name ="\nAge", breaks=c(10, 12, 14, 16), labels=c("10", "12", "14", "16"), limits=c(9, 17)) +  
+  # scale_y_continuous(name ="Arew\n", breaks=c(-2.5, -2, -1.5, -1, -.5), labels=c("-2.5", "-2", "-1.5", "-1", "-.5"), limits=c(-2.7, -.3)) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # Remove grid lines
+
+print(combined_plot)
+
+```
+
+
+
+# Make separate plots for each group
+```{r , echo=FALSE}
+
+data <- subset(data, !is.na(MatHxDepress))
+
+# Create a combined data frame with an additional column to indicate the group
+data$group <- ifelse(data$MatHxDepress == 1, "MatHxDepress", "NoMatHxDepress")
+
+# Create the combined plot
+combined_plot <- ggplot(data, aes(x = age, y = Apun_qnormed, group = id)) +
+  geom_line(aes(color = group), alpha = 0.5) +  # Individual lines colored by group
+  geom_smooth(aes(group = group, color = group), method = "lm", se = FALSE, size = 2) +  # Overall fit lines by group
+  scale_color_manual(values = c("MatHxDepress" = "#D55E00", "NoMatHxDepress" = "#009E73")) +  # Colors for individual lines
+  #scale_color_manual(name = "Fit Lines", values = c("MatHxDepress" = "red", "NoMatHxDepress" = "darkgreen")) +
+  guides(color = FALSE) +
+  # scale_x_continuous(name ="\nAge", breaks=c(10, 12, 14, 16), labels=c("10", "12", "14", "16"), limits=c(9, 17)) +  
+  # scale_y_continuous(name ="Apun_qnormed\n", breaks=c(-2.5, -2, -1.5, -1, -.5), labels=c("-2.5", "-2", "-1.5", "-1", "-.5"), limits=c(-2.7, -.3)) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())  # Remove grid lines
+
+print(combined_plot)
+
+```
+
+

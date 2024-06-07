@@ -1,0 +1,228 @@
+---
+title: "PreprocessData_for_MLM"
+output: html_document
+date: "2024-05-08"
+---
+
+
+
+# load packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#install.packages("haven")
+library(haven)
+library(dplyr)
+library(tidyverse) 
+#install.packages("here")
+library(here)
+
+# Note:  here() starts at /Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared
+```
+
+
+
+# import data and add it to lists for each time point
+```{r}
+demodat <- read_sav("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_TADS_long/Data/1_Preprocessed/FINALIZED_Demoinfo_7.1.22_KD.sav")
+
+
+samples = c("T1", "T2", "T3", "T4", "T5")
+n_samp <- length(samples)
+labels = c("T1_bias_dat", "T2_bias_dat", "T3_bias_dat", "T4_bias_dat", "T5_bias_dat")
+  IGT_dat_list <- lapply(labels, function(label) data.frame())
+  names(IGT_dat_list) <- labels
+datafile_name = "_IGT_child_ORL_woK_ind_posterior_means"
+
+
+# pull each timepoint's posterior means (from the Bias (w/o K) model) into IGT_dat_list 
+for (i in 1:n_samp) {
+  cur_dat <- read.csv(here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(samples[i], datafile_name, ".csv")))
+  colnames(cur_dat)[1] <- "id"
+  
+
+  # add a variable called time 
+  cur_dat["time"] <- samples[i]
+  
+  
+  # add a variable called T where time is (t - 1)
+  cur_dat["T"] <- (i - 1)
+  
+  
+  
+  # read in age data for the given timepoint
+  age <- demodat[c("id", (paste0(samples[i], "_IGT_Age_Child")))]
+  colnames(age)[2] <- "age"
+  
+  # the age data had a few duplicate rows. In the loop below, I am looking for duplicate id numbers,     
+  # and checking whether the age value is the same for both. If age is the same, then delete duplicate row; 
+  # if age is not the same print the rows (no rows were printed)
+      # Find duplicated 'id' values
+      dup_ids <- age$id[duplicated(age$id)]
+
+      # Loop through duplicated ids
+      for (id in dup_ids) {
+        # Subset the dataframe for the current id
+        subset_df <- age[age$id == id, ]
+        
+        # Check if all 'age' values are the same
+        if (length(unique(subset_df$age)) == 1) {
+          # If age values are the same, delete one of the rows
+          age <- age[!duplicated(age), ]
+          } else {
+            # If age values are different, print the rows
+            print(subset_df)
+          }
+        }
+  
+  # merge the age data into cur_dat.  left_join() function ensures that all rows from cur_dat are retained,   # and matching rows from demodat are added based on the "id" variable.
+  cur_dat <- left_join(cur_dat, age %>% select(id, age), by = "id")
+  
+    # make a dataframe of baseline ages
+    if (i == 1) {
+      base_age <- as.data.frame(cbind(cur_dat$id, cur_dat$age))
+      names(base_age) <- c("id", "baseline_age")
+    }
+  
+  
+  cur_dat <- left_join(cur_dat, base_age %>% select(id, baseline_age), by = "id")
+  
+
+  # NOTE: the n's for each timepoint list are the same before & after I merge in the age data, so removing    the duplicate id row in the age dataframes worked as intended
+  
+  
+  # import sex (character values M & F)
+  # NOTE:  DO NOT use variable Sex_T1Child from     */Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_TADS_long/Data/1_Preprocessed/FINALIZED_Demoinfo_7.1.22_KD.sav*
+  
+  # The issue is explained more fully here https://osf.io/zdmj8/wiki/Preprocessing%20Play%20or%20Pass%20Data/
+  sex <- read_csv("/Users/tuo09169/Dropbox/1_Comp_Modelling/1_IGT_PlayPass/IGT_PP_Shared/1_TADS_long/Data/1_Preprocessed/TADS_Child_Sex (use this)/TADS Participant Sex Check - 10.10.22.csv")
+  
+  names(sex)[2] <- "child_sex"
+  
+  # recode sex 1 = female; 0 = male
+  sex <- mutate(sex, child_sex = recode(child_sex, 'M'= 0, 'F' = 1))
+
+  
+  # merge the sex data into cur_dat.  left_join() function ensures that all rows from cur_dat are retained,   
+  # and matching rows from sex are added based on the "id" variable.
+  cur_dat <- left_join(cur_dat, sex %>% select(id, child_sex), by = "id")
+
+  
+  # read in mat hx of depression data
+  matdat <- read_sav("/Users/tuo09169/Dropbox/1._Olino_Lab/TADS_behav_data/2_T1_Mom_Data/MomSCIDT1_diagnosesandsymptoms.sav")
+  
+  # check how many mom's report any lifetime prevalence of alcohol use disorder or substance use disorder
+  sum(matdat$lalc)
+  sum(matdat$lsub)
+  
+  mat_hx <- as.data.frame(cbind(matdat$ID, matdat$deptype_l, matdat$lalc, matdat$lsub, matdat$lpot))
+  names(mat_hx) <- c("id", "MatHxDepress", "MatHxAlc", "MatHxSub", "MatHxPot") 
+  length(mat_hx)
+  mat_hx$MatHxAlc_or_Sub <- ifelse(mat_hx$MatHxAlc == 1 | mat_hx$MatHxSub == 1, 1, 0)
+  mat_hx$MatHxAlc_Sub_or_Pot <- ifelse(mat_hx$MatHxAlc == 1 | mat_hx$MatHxSub == 1 | mat_hx$MatHxPot == 1, 1, 0)
+  
+  # recode MatHxDepress to a binary variable
+  depress <- which(mat_hx$MatHxDepress>=1)
+  length(depress)
+  mat_hx$MatHxDepress[depress] <- 1
+  
+
+  # merge the sex data into cur_dat.  left_join() function ensures that all rows from cur_dat are       retained, and matching rows from mat_hx are added based on the "id" variable.
+  cur_dat <- left_join(cur_dat, mat_hx %>% select(id, MatHxDepress, MatHxAlc, MatHxSub, MatHxPot, MatHxAlc_or_Sub, MatHxAlc_Sub_or_Pot), by = "id")
+  
+  
+  # center age by subtracting the avg baseline age from age at each timepoint
+  cur_dat$age_centered <- cur_dat$age - 9.9
+  
+
+  # Initialize an empty dataframe with the dimensions of cur_dat
+  IGT_dat_list[[i]] <- as.data.frame(matrix(NA, nrow = nrow(cur_dat), ncol = ncol(cur_dat)))
+  # Assign the data from cur_dat to IGT_dat_list[i]
+  IGT_dat_list[[i]] <- cur_dat
+}
+
+```
+
+
+
+# get avg baseline age 
+# This code gave me avg age at baseline (9.9) 
+# but I used this value in the loop above to center age by avg baseline age
+```{r}
+baseline_age <- as.data.frame(IGT_dat_list[["T1_bias_dat"]][["age"]])
+avg_T1_age <- mean(baseline_age[1,])
+
+```
+
+# visually check baseline_age variable
+```{r}
+IGT_dat_list[["T1_bias_dat"]][["id"]]
+IGT_dat_list[["T1_bias_dat"]][["baseline_age"]]
+IGT_dat_list[["T2_bias_dat"]][["baseline_age"]]
+IGT_dat_list[["T2_bias_dat"]][["id"]]
+```
+
+
+
+# pull all the lists into long format data & save as .csv
+```{r}
+# Create a dataframe from the first list
+TADS_child_long_IGT <- as.data.frame(IGT_dat_list[[1]])
+
+# Loop through the remaining lists and bind them row-wise
+for (i in 2:length(IGT_dat_list)) {
+  TADS_child_long_IGT <- bind_rows(TADS_child_long_IGT, as.data.frame(IGT_dat_list[[i]]))
+}
+
+
+
+### save the long format data as a .csv
+path_out = here("1_TADS_long", "Data", "3_LongFormat")
+filename <- paste0(path_out, "/", "TADS_child_long_IGT.csv")
+
+# save output
+write.csv(TADS_child_long_IGT,filename) 
+
+```
+
+
+
+
+
+
+
+
+
+
+# Some code Tom gave me...dosen't play well with my code above
+```{r}
+library("plyr")
+
+IGT_dat_list_df <- plyr::rbind.fill(IGT_dat_list)
+
+
+child_IGT_age_long <- child_IGT_age %>% pivot_longer(cols = T1_IGT_Age_Child:T5_IGT_Age_Child,
+                                           names_to = c("time", "drop"),
+                                           names_sep = c(2, 14))
+
+
+full_df <- merge(IGT_dat_list_df, child_IGT_age_long, by = c("id", "time"), all.x = T)
+
+
+
+```
+
+  
+
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

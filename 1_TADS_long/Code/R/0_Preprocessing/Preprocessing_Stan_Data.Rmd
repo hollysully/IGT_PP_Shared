@@ -35,7 +35,7 @@ T5_IGT_child = readRDS(here("1_TADS_long", "Data", "0_Raw", "T5_IGT_child.RDS"))
 ```{r}
 
 #Enter the name of the data you want to check below
-curr_dat <- T2_IGT_child
+curr_dat <- T5_IGT_child
 
 subj_ids <- unique(curr_dat$id)
 n_subj <- length(t(unique(curr_dat["id"])))
@@ -60,11 +60,14 @@ subj_ids
 
 ### T2_IGT_child, sub 5040 had 50 trials & 5083 had 75 trials
 
+### T3_IGT_child, sub 5040 had 40 trials
+
 ### Remove these subjects from the respective datasets
 
 ```{r}
 T1_IGT_child <- subset(T1_IGT_child, id!= 5083 & id!= 5119 & id!= 9995)
 T2_IGT_child <- subset(T2_IGT_child, id!= 5040 & id!= 5083)
+T3_IGT_child <- subset(T3_IGT_child, id!= 5040)
 
 ```
 
@@ -140,10 +143,33 @@ make_stan = function(data){
 ```
 
 
-## Make Child Data
+## Make individual stan-ready data for each timepoint of child data
 ```{r}
-child_stan <- make_stan(bind_rows(T1_IGT_child,T2_IGT_child))
-saveRDS(child_stan, here("1_TADS_long", "Data", "1_Preprocessed", "child_IGT.RDS"))
+
+dat_list <- list(T1_IGT_child, T2_IGT_child, T3_IGT_child, T4_IGT_child, T5_IGT_child)
+dat_names <- c("T1_IGT_child", "T2_IGT_child", "T3_IGT_child", "T4_IGT_child", "T5_IGT_child")
+
+
+for (i in 1:5) {
+  data <- dat_list[[i]]
+  stanReady <- paste(dat_names[i], "_stanReady", sep = '') 
+  stanReady <- make_stan(data)
+  saveRDS(stanReady, here("1_TADS_long", "Data", "1_Preprocessed", (paste(dat_names[i], "_stanReady.RDS", sep = ''))))
+}
+
+```
+
+
+
+
+## Make joint stan-ready data for all timepoints of child data
+```{r}
+child_stan <- make_stan(bind_rows(T1_IGT_child,T2_IGT_child,T3_IGT_child,T4_IGT_child,T5_IGT_child))
+saveRDS(child_stan, here("1_TADS_long", "Data", "1_Preprocessed", "child_IGT_5_timepoints.RDS"))
+
+
+#read in 5 timepoint data
+#child_dat <- readRDS(here("1_TADS_long", "Data", "1_Preprocessed", "child_IGT_5_timepoints.RDS"))
 
 ```
 

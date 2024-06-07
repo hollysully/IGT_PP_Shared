@@ -1,0 +1,381 @@
+---
+title: "Fitting ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+source(here("1_TADS_long", "Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+
+## RMD Setup
+```{r}
+model_name = "ORL"
+samples = c("T1_IGT_child", "T2_IGT_child", "T3_IGT_child", "T4_IGT_child", "T5_IGT_child")
+# sample = "T2_IGT_child"
+
+focal_parameters = c(
+  "mu_Arew", "mu_Apun", "mu_K", "mu_betaF", "mu_betaP", 
+  "sigma_Arew", "sigma_Apun", "sigma_K", "sigma_betaF", "sigma_betaP", 
+  "Arew", "Apun", "K", "betaF", "betaP"
+)
+
+
+group_parameters <- grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+
+
+# Fit Model
+```{r, eval = F}
+# Compile model
+orl_model = stan_model(here("1_TADS_long", "Code", "Stan",
+                            paste0(model_name, ".stan")))
+
+for(sample in samples){
+
+  stan_data = readRDS(here("1_TADS_long", "Data", "1_Preprocessed",
+                           paste0(sample, "_stanReady.RDS")))
+  
+  
+  stan_data$ID = stan_data$ID_num # set ID variable to use in stan code
+
+  # Fit model
+  orl_fit = sampling(orl_model, 
+                     data   = stan_data, 
+                     iter   = 5000, 
+                     warmup = 1000, 
+                     chains = 4, 
+                     cores  = 4,
+                     seed   = 43210)
+  
+  
+  # Save the fitted model as an rds file
+  saveRDS(orl_fit, here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model_name, "_fit.rds")))
+
+}
+```
+
+
+
+```{r}
+
+samples = c("T1_IGT_child", "T2_IGT_child", "T3_IGT_child", "T4_IGT_child", "T5_IGT_child")
+
+for(sample in samples){
+  orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_fit.rds")))
+
+iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
+print(iterations)
+}
+```
+
+
+
+# Model Diagnostics (_fit.rds) & Posteriors (_posteriors.rds)
+```{r}
+for(sample in samples){
+  orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_fit.rds")))
+  orl_posteriors <- extract(orl_fit)
+  saveRDS(orl_posteriors, here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_posteriors.rds")))
+}
+```
+
+
+
+
+# Model Diagnostics (_fit.rds) & Posteriors (_posteriors.rds)
+```{r}
+for(sample in samples){
+  orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model_name, "_fit.rds")))
+  orl_posteriors <- extract(orl_fit)
+  stan_data = readRDS(here("1_TADS_long", "Data", "1_Preprocessed",
+                           paste0(sample, "_stanReady.RDS")))
+  orl_posteriors[["ID_num"]] <- stan_data[["ID_num"]]
+  saveRDS(orl_posteriors, here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model_name, "_posteriors.rds")))
+}
+    
+```
+
+
+
+
+## Rhat
+```{r, eval = T}
+for(sample in samples){
+  orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_fit.rds")))
+  rhats = rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+  saveRDS(rhats, here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_rhats.rds")))
+}
+
+
+
+##check the rhats
+for(sample in samples){
+rhat_dat <- readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_rhats.rds")))
+print(sample)
+print(rhat_dat[,])
+}
+```
+
+
+
+## Traceplots
+```{r, eval = T}
+
+for(sample in samples){
+  orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_fit.rds")))
+  trace <- traceplot(
+    orl_fit,
+    pars = group_parameters)
+  ggsave((here("1_TADS_long","Figs_Tables", "Traceplots", paste0(sample, "_ORL_traceplot.png"))), trace)
+}
+  
+
+dev.off()
+
+```
+
+
+
+# Parsplots
+```{r, eval = T}
+
+for(sample in samples){
+  orl_fit = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                           paste0(sample, "_ORL_fit.rds")))
+  pars_plot <- plot(orl_fit, pars = group_parameters)
+  ggsave((here("1_TADS_long","Figs_Tables", paste0(sample, "_ORL_parsplot.png"))), pars_plot)
+}
+
+
+dev.off()
+```
+
+
+
+
+
+
+# Make .csv files for ind posterior means at each time point
+```{r, eval = T}
+for(sample in samples){
+   orl_posteriors = readRDS(here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model_name, "_posteriors.rds")))
+   df <- data.frame(ID = orl_posteriors$ID_num,
+          Arew = colMeans(orl_posteriors$Arew[,,1]), # posterior means for Arew
+          Apun = colMeans(orl_posteriors$Apun[,,1]),
+          betaF = colMeans(orl_posteriors$betaF[,,1]),
+          betaP = colMeans(orl_posteriors$betaP[,,1]),
+          K = colMeans(orl_posteriors$K[,,1]))
+   var_name <- paste0(sample, "_ind_posterior_means")   
+   assign(var_name, df)
+   #save the posterior_means dataframe as a .csv
+   write.csv(df,(here("1_TADS_long", "Data", "2_Fitted",
+                        paste0(sample, "_", model_name, "_ind_posterior_means.csv"))))
+}
+      
+```
+
+
+
+
+
+
+## I HAVEN'T USED ANY CODE BELOW HERE
+# THIS IS NOT FINISHED
+## Posterior Distributions
+```{r, eval = F}
+tiff(here("Figs_Tables",
+          model_name,
+          paste(sample, model_name, "posterior_distributions.tiff", sep = "_")),
+     width = length(group_parameters), height = length(group_parameters),
+     units = "cm", res = 300)
+  par(mfrow = c(5, 5))
+  # Mus & Sigmas
+  for(s in 1:stan_data$S){
+    for(i in grep("mu|sigma", group_parameters, value = T)){
+      plot(density(orl_posteriors[[i]][,s]), main = paste(i, s))
+      abline(v = mean(orl_posteriors[[i]][,s]))
+    }
+  }
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Results
+## PPC Plot
+```{r, eval = F}
+choice_proportions = calculate_proportions(orl_posteriors, stan_data,
+                                           data_type = "data.frame"
+                                           # data_type = "list_of_matrices"
+                                           )
+saveRDS(choice_proportions,
+        here("Data", "2_Fitted",
+             model_name,
+             paste(sample, model_name, "ppcs.rds", sep = "_")))
+```
+
+
+
+```{r, eval = F}
+choice_proportions = readRDS(here("Data", "2_Fitted",
+                                  model_name,
+                                  paste(sample, model_name, "ppcs.rds", sep = "_")))
+```
+
+
+
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_playfic_playupdate_modifiedK_simplified",
+          "ORL_playfic_playupdate_modifiedK_simplified_PPC.tiff"),
+     width = 15, height = 8, units = "cm", res = 300)
+
+  # simplify data
+  choice_proportions %>% 
+    group_by(trial, deck, session) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    # plotting
+    ggplot(aes(x = trial,
+               group = trial)) +
+    geom_linerange(aes(ymin = lower95, ymax = upper95),
+                   linewidth = .35, color = "goldenrod3", alpha = .35) +
+    geom_linerange(aes(ymin = lower50, ymax = upper50),
+                   linewidth = .35, color = "goldenrod3") +
+    geom_point(aes(y = mu), shape = 21,
+               color = "goldenrod3", fill = "white",
+               size = .75) +
+    geom_point(aes(y = observed), size = .75) +
+    scale_y_continuous(limits = c(0,1), expand = c(0,0),
+                       breaks = seq(0,1,.25)) +
+    labs(x = "Trial", y = "Proportion Play") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black"),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(-.5,"lines"),
+          panel.spacing.y = unit(0,"lines")) +
+    facet_rep_grid(session~deck,
+                   labeller = labeller(session = c("1" = "Session 1", "2" = "Session 2"),
+                                       deck = c("A" = "Deck A", "B" = "Deck B",
+                                                "C" = "Deck C", "D" = "Deck D")))
+dev.off()
+```
+
+
+## THIS CODE IS FOR THE JOINT MODEL
+## Reliability
+```{r, eval = F}
+tiff(here("1_IGT_PP", "Figs_Tables", "ORL_playfic_playupdate_modifiedK_simplified",
+          "reliability_coefficients.tiff"),
+     width = 15, height = 6.25, units = "cm", res = 300)
+  bind_rows(data.frame(parameter = "Arew", r = orl_posteriors$R_Arew[,2,1]),
+            data.frame(parameter = "Apun", r = orl_posteriors$R_Apun[,2,1]),
+            data.frame(parameter = "betaF", r = orl_posteriors$R_betaF[,2,1]),
+            data.frame(parameter = "betaP", r = orl_posteriors$R_betaP[,2,1]),
+            data.frame(parameter = "K", r = orl_posteriors$R_K[,2,1])) %>% 
+    mutate(parameter = factor(parameter,
+                              levels = c("Arew", "Apun", "betaF", "betaP", "K"),
+                              labels = c(expression(paste(italic(A),"+",sep="")),
+                                         expression(paste(italic(A),"-",sep="")),
+                                         expression(paste("\u03B2",italic(f),sep="")),
+                                         expression(paste("\u03B2",italic(p),sep="")),
+                                         expression(italic(K))))) %>% 
+    group_by(parameter) %>% 
+    mutate(mu_r = mean(r), lower = HDIofMCMC(r)[1], upper = HDIofMCMC(r)[2],
+           mu_r_lab = paste(ifelse(sign(round(mu_r,2))==1," ","-"),
+                            stri_pad_right(str_remove(abs(round(mu_r,2)), "^0+"),
+                                           width = 3, pad = "0"),sep=""), 
+           lower = as.numeric(str_remove(lower, "\\(")),
+           upper = as.numeric(str_remove(upper, "\\(")),
+           
+           lower_lab = paste(ifelse(sign(round(lower,2))==1,"","-"),
+                             stri_pad_right(str_remove(abs(round(lower,2)), "^0+"),
+                                            width = 3, pad = "0"),sep=""), 
+           upper_lab = paste(ifelse(sign(round(upper,2))==1,"","-"),
+                             stri_pad_right(str_remove(abs(round(upper,2)), "^0+"),
+                                            width = 3, pad = "0"),sep=""),
+           upper_lab = case_when(round(upper,2) == 1 ~ "1.00", T ~ upper_lab),
+           mu_rCI = paste("=",mu_r_lab," (",lower_lab,",",upper_lab,")",sep="")) %>% 
+    ggplot(aes(x = r)) +
+      # geoms
+      geom_histogram(aes(y = ..density..), color = "black", fill = "gray45",
+                     linewidth = .1, bins = 50) +
+      geom_text_npc(aes(npcx = "left", npcy = "top"), label = expression(italic(r)),
+                    size = 2, hjust = -3, vjust = -1.425) +
+      geom_text_npc(aes(npcx = "middle", npcy = "top",
+                        label = mu_rCI), size = 2, vjust = -1) +
+      geom_hline(yintercept = 0) +
+      geom_vline(aes(xintercept = mu_r), color = "red2") +
+      # scales
+      scale_x_continuous(limits = c(-1,1), expand = c(0,0), breaks = seq(-1,1,.5),
+                         labels = c("-1","-.5","0",".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = c(0,0), n.breaks = 3) +
+      # themes
+      labs(x = "Reliability Coefficient", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black"),
+            axis.text.y = element_text(color = "black"),
+            axis.ticks = element_line(color = "black"),
+            axis.line.x = element_line(color = "transparent"),
+            plot.margin = unit(c(.3, .3, .3, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.x = element_text(size = 12, vjust = 1.5),
+            strip.text.y = element_blank(),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent"),
+            aspect.ratio = 1) +
+      facet_rep_grid(.~parameter, scales = "free",
+                     labeller = label_parsed) +
+      geom_segment(aes(x = lower, xend = upper, y = .025, yend = .025),
+                   size = 1, color = "red2", linewidth = .5)
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
