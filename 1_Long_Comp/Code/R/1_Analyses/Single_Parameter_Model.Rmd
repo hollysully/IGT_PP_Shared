@@ -1,0 +1,670 @@
+---
+title: "Single-Parameter Model"
+output: html_document
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(wBoot)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+source(here("1_IGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
+library(MASS)
+library(ggh4x)
+library(grid)
+```
+
+
+## Create Task Data
+```{r}
+set.seed(20240611)
+outcomes =
+  data.frame(option_1 = sample(rep(c(0, 0, 0, 0, 0, 0, 0, 1, 1, 1), 10),
+                               replace = F),
+             option_2 = sample(rep(c(0, 0, 0, 1, 1, 1, 1, 1, 1, 1), 10),
+                               replace = F))
+
+write.csv(outcomes, here("1_Long_Comp", "Data", "outcomes.csv"))
+summarise(outcomes, mean(option_1), mean(option_2))
+```
+
+
+## Functions
+```{r, eval = T}
+#------------------------------------------------------------------------------
+# USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
+softmax = function(values){
+  return(exp(values) / sum(exp(values)))
+}
+
+
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_RL = function(learning_rate = .5, N = 100, n_trials = 100, 
+                       custom_seed = 20240709, label = "") {
+  set.seed(seed = custom_seed)
+  A = learning_rate
+  utility = rep(0,2)
+  data = data.frame(sim = label,
+                    A = A,
+                    trial = 0,
+                    prob_1 = .5,
+                    prob_2 = .5,
+                    utility_1 = 0,
+                    utility_2 = 0,
+                    outcome = NA,
+                    choice = NA)
+    
+  for(t in 1:nrow(outcomes)){
+    prob = softmax(c(utility[1], utility[2]))
+    
+    choice = sample(c(1,2), 1, prob = prob)
+  
+    utility[choice] = utility[choice] + A * (outcomes[t, choice] - utility[choice])
+    
+    data = data.frame(sim = label,
+                      A = A,
+                      trial = t,
+                      prob_1 = prob[1],
+                      prob_2 = prob[2],
+                      utility_1 = utility[1],
+                      utility_2 = utility[2],
+                      outcome = outcomes[t, choice],
+                      choice = choice) %>% 
+      bind_rows(data)
+  }
+  data %>%
+    return()
+}
+```
+
+
+## Test Functions
+```{r}
+sim_data = bind_rows(simulate_RL(learning_rate = .2, N = 1, label = "hi"),
+                     simulate_RL(learning_rate = .05, N = 1, label = "lo")) %>% 
+  pivot_longer(ends_with(c("1", "2")), names_to = "variable", values_to = "value") %>% 
+  separate("variable", into = c("variable", "option")) %>% 
+  pivot_wider(names_from = "variable", values_from = "value")
+
+
+ggplot(sim_data, aes(x = trial, y = utility, color = option)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic() +
+  facet_rep_grid(.~sim)
+
+
+ggplot(sim_data, aes(x = trial, y = prob, color = option)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic() +
+  facet_rep_grid(.~sim)
+
+
+ggplot(sim_data, aes(x = trial, y = utility, color = sim)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic() +
+  facet_rep_grid(.~option)
+
+
+ggplot(sim_data, aes(x = trial, y = prob, color = sim)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic() +
+  facet_rep_grid(.~option)
+```
+
+
+# -------------------------------------------
+# Simulate Parameters
+## Setup
+```{r, eval = T}
+# setup for how much data will be generated - i.e., n_sessions x N = # of observations
+n_sessions = 5 # number of sessions
+N = 100        # number of participants
+
+
+# group-level parameters
+mu_intercept_UT = qnorm(.1) # mean untransformed intercept for learning rate
+sd_intercept_UT = 1         # standard deviation of intercepts
+
+# IDEAL
+sd_beta_UT = 1                       # standard deviation of intercepts
+effect_size = .5                     # Cohen's d for slope effect
+mu_beta_UT = effect_size*sd_beta_UT  # slope effect for session
+# FOR NOW
+# mu_beta_UT = qnorm(.6)  # slope effect for session
+```
+
+
+
+## Method 1: Centered Parameterizattion
+```{r, eval = T}
+set.seed(20240611)
+
+# setup for building variance-covariance matrix
+int_slope_R = .5 # correlation between intercepts and slopes
+R = matrix(data = c(1, int_slope_R, int_slope_R, 1), nrow = 2, ncol = 2) # correlation matrix
+SD = matrix(data = c(sd_intercept_UT, 0, 0, sd_beta_UT), nrow = 2, ncol = 2) # SD matrix
+VC = SD%*%R%*%SD # variance-covariance matrix
+
+# simulate person-level intercept & slope parameters
+parameters = mvrnorm(N, mu = c(mu_intercept_UT, mu_beta_UT), Sigma = VC) # draw from MVT Normal
+
+# combine the parameters into the As
+A_UTs = parameters[,1] + parameters[,2]%*%t(1:n_sessions)
+
+# plot untransformed As
+plot(rep(1:n_sessions, N), A_UTs)
+points(1:n_sessions, apply(A_UTs, 2, mean),
+       pch = 15, col = "red", cex = 1.5)
+
+# plot transformed As
+plot(rep(1:n_sessions, N), pnorm(A_UTs))
+points(1:n_sessions, apply(pnorm(A_UTs), 2, mean),
+       pch = 15, col = "red", cex = 1.5)
+
+# run MLM to see if it captures changes across time
+data.frame(ID = 1:N, session = A_UTs) %>% 
+  pivot_longer(starts_with("session"), names_to = "session", values_to = "A",
+               names_prefix = "session.", names_transform = list(session = as.numeric)) %>% 
+  # mutate(A = pnorm(A)) %>% 
+  lme4::lmer(A ~ session + (session|ID), data = .,
+             control = lme4::lmerControl(optimizer = "bobyqa",
+                                         optCtrl = list(maxfun = 100000))) %>% 
+  # summary()
+  car::Anova(type = "III")
+```
+
+
+
+## Method 2: Non-Centered Parameterization
+```{r, eval = T}
+set.seed(20240611)
+
+# setup for building variance-covariance matrix
+int_slope_R = .5 # correlation between intercepts and slopes
+R = matrix(data = c(1, int_slope_R, int_slope_R, 1), nrow = 2, ncol = 2) # correlation matrix
+SD = matrix(data = c(1, 0, 0, 1), nrow = 2, ncol = 2) # SD matrix
+VC = SD%*%R%*%SD # variance-covariance matrix
+
+# simulate person-level deviations from the group-level intercept & slope parameters
+int_slope_deviations = mvrnorm(N, c(0, 0), Sigma = VC) # draw from MVT Normal
+
+# add person-level deviations to intercepts and slopes
+parameters = matrix(data = NA, nrow = N, ncol = 2)
+parameters[,1] = mu_intercept_UT +  int_slope_deviations[,1] * sd_intercept_UT # intercepts
+parameters[,2] = mu_beta_UT + int_slope_deviations[,2] * sd_beta_UT            # slopes
+
+# combine the parameters into the As
+A_UTs = parameters[,1] + parameters[,2]%*%t(1:n_sessions) # generate session-specific untransformed As
+
+# plot untransformed As
+plot(rep(1:n_sessions, N), A_UTs)
+points(1:n_sessions, apply(A_UTs, 2, mean),
+       pch = 15, col = "red", cex = 1.5)
+
+# plot transformed As
+plot(rep(1:n_sessions, N), pnorm(A_UTs))
+points(1:n_sessions, apply(pnorm(A_UTs), 2, mean),
+       pch = 15, col = "red", cex = 1.5)
+
+# run MLM to see if it captures changes across time
+data.frame(ID = 1:N, session = A_UTs) %>% 
+  pivot_longer(starts_with("session"), names_to = "session", values_to = "A",
+               names_prefix = "session.", names_transform = list(session = as.numeric)) %>% 
+  mutate(A = pnorm(A)) %>%
+  lme4::lmer(A ~ session + (session|ID), data = .) %>% 
+  # summary()
+  car::Anova(type = "III")
+```
+
+
+
+```{r}
+
+```
+
+
+
+# -------------------------------------------
+# BELOW NOT FINISHED
+# -------------------------------------------
+
+# -------------------------------------------
+
+# -------------------------------------------
+
+# -------------------------------------------
+```{r}
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_RL = function(parameter_values) {
+  # set.seed(seed = custom_seed)
+  data = data.frame()
+  
+  for(i in 1:nrow(parameter_values)){
+    # parameters for sim
+    A = filter(parameter_values, ID == i)$A
+    
+    
+    utility = rep(0,2)
+    
+    for(t in 1:nrow(outcomes)){
+      prob = softmax(c(utility[1], utility[2]))
+      
+      choice = sample(c(1,2), 1, prob = prob)
+    
+      utility[choice] = utility[choice] + A * (outcomes[t, choice] - utility[choice])
+      
+      data = data.frame(ID = i,
+                        A = A,
+                        trial = t,
+                        probability = prob,
+                        outcome = outcomes[t, choice],
+                        utility = utility[choice],
+                        choice = choice) %>% 
+        bind_rows(data)
+    }
+  }
+  data %>%
+    return()
+}
+```
+
+
+# -------------------------------------------
+
+
+## Simulated Person-Level Parameters
+```{r, eval = F}
+set.seed(20240530)
+
+parameters = data.frame(Arew_mu = rowSums(t(t(X) * mus[,"Arew_beta"])),
+                        Apun_mu = rowSums(t(t(X) * mus[,"Apun_beta"])),
+                        betaF_mu = rowSums(t(t(X) * mus[,"betaF_beta"])),
+                        betaB_mu = rowSums(t(t(X) * mus[,"betaB_beta"])),
+                        sigmas)
+
+simulated_parameters = data.frame() 
+
+for(i in 1:nrow(parameters)){
+  simulated_parameters = data.frame(ID = i,
+                                    Arew = pnorm(rnorm(n = 1, mean = parameters[i, "Arew_mu"],
+                                                       sd = parameters[i, "Arew_sigma"])),
+                                    Apun = pnorm(rnorm(n = 1, mean = parameters[i, "Apun_mu"],
+                                                       sd = parameters[i, "Apun_sigma"])),
+                                    betaF = rnorm(n = 1, mean = parameters[i, "betaF_mu"],
+                                                  sd = parameters[i, "betaF_sigma"]),
+                                    betaB = rnorm(n = 1, mean = parameters[i, "betaB_mu"],
+                                                  sd = parameters[i, "betaB_sigma"])) %>% 
+    bind_rows(simulated_parameters)
+}
+saveRDS(simulated_parameters, here("1_TADS_Parents_PP", "Data",
+                                   "4_Parameter_Recovery", "simulated_parameters.RDS"))
+```
+
+
+
+```{r, eval = T}
+simulated_parameters = readRDS(here("1_TADS_Parents_PP", "Data",
+                                    "4_Parameter_Recovery", "simulated_parameters.RDS"))
+```
+
+
+
+# -------------------------------------------
+# Simulation
+## Simulate Data
+```{r, eval = F}
+sim_data = simulate_orl(parameter_values = simulated_parameters,
+                        N = nrow(simulated_parameters),
+                        X = X,
+                        custom_seed = 20240304)
+
+
+saveRDS(sim_data, here("1_TADS_Parents_PP", "Data",
+                       "4_Parameter_Recovery", "sim_data.RDS"))
+```
+
+
+
+```{r}
+sim_data = readRDS(here("1_TADS_Parents_PP", "Data",
+                        "4_Parameter_Recovery", "sim_data.RDS"))
+```
+
+
+
+
+## Prep Stan Data
+```{r, eval = T}
+IDs = vector()
+N = length(unique(sim_data$ID))
+Trials = max(sim_data$trial)
+S = 1
+X_ = array(data = -1, c(nrow(X), ncol(X), S))
+
+Tsubj = array(120, c(N, S))
+choice = card = outcome = sign = array(-1, c(N, Trials, S))
+
+for(i in 1:N){
+  for(s in 1:S){
+    
+    if(Tsubj[i,s] > 0){
+      temp_data = sim_data %>% 
+        filter(ID == i) %>% 
+        arrange(trial)
+      IDs[i] = mean(temp_data$ID)
+      choice[i,,s] = temp_data$choice
+      card[i,,s] = temp_data$card
+      outcome[i,,s] = temp_data$outcome
+      sign[i,,s] = temp_data$sign
+      X_[i,,s] = c(1, mean(temp_data$anx), mean(temp_data$dep), mean(temp_data$sud))
+    }
+  }
+}
+stan_data = list(
+  ID = IDs,
+  N = N,
+  T = Trials,
+  S = S,
+  X = X_,
+  D = ncol(X_),
+  subjIDs = IDs,
+  Tsubj = Tsubj,
+  choice = choice,
+  card = card,
+  outcome = outcome,
+  sign = sign
+)
+```
+
+
+
+# -------------------------------------------
+# Fit Model
+```{r, eval = F}
+# Compile model
+orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                            paste0(model_name, ".stan")))
+
+
+# Fit model
+sim_orl_fit = sampling(orl_model,
+                       data   = stan_data, 
+                       iter   = 5000, 
+                       warmup = 1000, 
+                       chains = 4, 
+                       cores  = 4,
+                       seed   = 43210,
+                       save_warmup = F)
+
+
+#save the fitted model as an .rds file
+saveRDS(sim_orl_fit, here("1_TADS_Parents_PP", "Data",
+                          "4_Parameter_Recovery", "sim_orl_fit.RDS"))
+```
+
+
+
+```{r}
+sim_orl_fit = readRDS(here("1_TADS_Parents_PP", "Data",
+                           "4_Parameter_Recovery", "sim_orl_fit.RDS"))
+```
+
+
+
+```{r, eval = F}
+sim_orl_posteriors <- extract(sim_orl_fit)
+saveRDS(sim_orl_posteriors,
+        here("1_TADS_Parents_PP", "Data",
+             "4_Parameter_Recovery", "sim_orl_posteriors.RDS"))
+```
+
+
+
+```{r}
+sim_orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data",
+                                  "4_Parameter_Recovery", "sim_orl_posteriors.RDS"))
+```
+
+
+
+# -------------------------------------------
+# Plot Recovered Parameters
+## Prep Data
+```{r}
+recovered_parameters =
+  data.frame(Arew = sim_orl_posteriors$Arew,
+             Apun = sim_orl_posteriors$Apun,
+             betaF = sim_orl_posteriors$betaF,
+             betaB = sim_orl_posteriors$betaB) %>% 
+  pivot_longer(everything(),
+               names_to = c("parameter", "ID", "session"),
+               values_to = "recovered",
+               names_sep = "\\.", names_transform = list(ID = as.numeric)) %>% 
+  group_by(parameter, ID) %>% 
+  summarise(recovered = mean(recovered))
+
+
+actual_parameters = simulated_parameters %>%
+  pivot_longer(c(everything(), -ID), 
+               names_to = "parameter", values_to = "actual")
+
+combined_parameters = full_join(recovered_parameters, actual_parameters)
+```
+
+
+
+## Run Correlations
+```{r}
+set.seed(20240323)
+PR_correlations = data.frame()
+
+for(p in c("Arew", "Apun", "betaF", "betaB")){
+  cur_data = filter(combined_parameters,
+                    parameter == p)
+  cur_cor = boot.cor.bca(
+    x = cur_data$actual, y = cur_data$recovered,
+    alternative = c("two.sided", "less", "greater"),
+    null.hyp = NULL, conf.level = 0.95, type = NULL, R = 9999)
+  PR_correlations = data.frame(parameter = p,
+                               estimate = cur_cor$Observed) %>% 
+    bind_rows(PR_correlations)
+}
+PR_correlations = PR_correlations %>% 
+  mutate(estimate = round(estimate,2),
+         estimate_lab = paste("r =", ifelse(sign(estimate)==1," ","-"),
+                              stri_pad_right(str_remove(abs(estimate), "^0+"),
+                                             width = 3, pad = "0"),sep=""),
+         parameter = factor(parameter,
+                            levels = c("Arew", "Apun", "betaF", "betaB"),
+                            labels = c(expression(paste(italic(A),"+",sep="")),
+                                       expression(paste(italic(A),"-",sep="")),
+                                       expression(paste("\u03B2",italic(f),sep="")),
+                                       expression(paste("\u03B2",italic(b),sep="")))))
+```
+
+
+
+## Plot Parameter Recovery Correlations
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
+          "T1_parent_Anx_Dep_SUD",
+          "Supplement_1 Parameter Recovery.tiff"),
+     width = 14.6, height = 5, units = "cm", res = 300)
+  combined_parameters %>% 
+    group_by(parameter) %>% 
+    mutate(z_actual = (actual - mean(actual)) / sd(actual),
+           z_recovered = (recovered - mean(recovered)) / sd(recovered),
+           parameter = factor(
+             parameter,
+             levels = c("Arew", "Apun", "betaF", "betaB"),
+             labels = c(expression(paste(italic(A),"+",sep="")),
+                        expression(paste(italic(A),"-",sep="")),
+                        expression(paste("\u03B2",italic(f),sep="")),
+                        expression(paste("\u03B2",italic(b),sep=""))))) %>% 
+    ggplot(aes(x = z_actual, y = z_recovered)) +
+      geom_text_npc(data = PR_correlations, aes(npcx = "left", npcy = "top",
+                                                label = estimate_lab),
+                    vjust = .5, size = 3) +
+        geom_point(size = 1, shape = 21, color = "black", fill = "gray50") +
+        geom_smooth(method = "lm", formula = "y ~ x", color = "black",
+                    se = F, size = .5, fullrange = T) +
+      theme_classic() +
+      theme(aspect.ratio = 1,
+            axis.text = element_text(color = "black"),
+            strip.background = element_blank()) +
+      labs(x = "Actual", y = "Recovered",
+           caption = "X- and Y-axis values are z-scored") +
+      facet_rep_grid(.~parameter,
+                     labeller = label_parsed)
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Check Group-Differences
+```{r}
+group_differences = data.frame(
+  iteration = 1:((sim_orl_fit@sim$iter -
+                    sim_orl_fit@sim$warmup) *
+                   sim_orl_fit@sim$chains), 
+  Arew_2 = sim_orl_posteriors$beta_Arew[,2],
+  Arew_3 = sim_orl_posteriors$beta_Arew[,3],
+  Arew_4 = sim_orl_posteriors$beta_Arew[,4],
+  Apun_2 = sim_orl_posteriors$beta_Apun[,2],
+  Apun_3 = sim_orl_posteriors$beta_Apun[,3],
+  Apun_4 = sim_orl_posteriors$beta_Apun[,4],
+  betaF_2 = sim_orl_posteriors$beta_betaF[,2],
+  betaF_3 = sim_orl_posteriors$beta_betaF[,3],
+  betaF_4 = sim_orl_posteriors$beta_betaF[,4],
+  betaB_2 = sim_orl_posteriors$beta_betaB[,2],
+  betaB_3 = sim_orl_posteriors$beta_betaB[,3],
+  betaB_4 = sim_orl_posteriors$beta_betaB[,4]) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("parameter", "group"),
+               values_to = "estimate", names_sep = "_") %>% 
+  mutate(group = case_when(group == 2 ~ "Anx",
+                           group == 3 ~ "Dep",
+                           group == 4 ~ "SUD"),
+         parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaB")),
+         group = factor(group, levels = c("Anx", "Dep", "SUD"),
+                        ordered = T))
+
+group_differences %>% 
+  group_by(parameter, group) %>% 
+  summarise(mu = round(mean(estimate), 2),
+            lower = round(HDIofMCMC(estimate)[1], 2),
+            upper = round(HDIofMCMC(estimate)[2], 2),
+            greater_0 = round(mean(estimate > 0), 2),
+            sig = case_when(lower < 0 & upper < 0 ~ "*",
+                            lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
+                 "T1_parent_Anx_Dep_SUD", "Supplement_1 Parameter Recovery.csv"))
+```
+
+
+
+## X-Axis
+```{r}
+x_scaling = list(
+  parameter == "Arew" ~ scale_x_continuous(limits = c(-.4, .4), breaks = seq(-.4, .4, length.out = 3),
+                                           expand = expansion(mult = .05)),
+  parameter == "Apun" ~ scale_x_continuous(limits = c(-.4, .4), breaks = seq(-.4, .4, length.out = 3),
+                                           expand = expansion(mult = .05)),
+  parameter == "betaF" ~ scale_x_continuous(limits = c(-2.5, 2.5), breaks = seq(-2.5, 2.5, length.out = 3),
+                                            expand = expansion(mult = .05)),
+  parameter == "betaB" ~ scale_x_continuous(limits = c(-.75, .75), breaks = seq(-.8, .8, length.out = 3),
+                                            expand = expansion(mult = .05))
+)
+```
+
+
+
+## Make Plots
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
+          "T1_parent_Anx_Dep_SUD", "Supplement_2 Parameter Recovery.tiff"),
+     width = 3.4, height = 7, units = "cm", res = 300)
+  group_differences %>% 
+    ggplot(aes(x = estimate, fill = group)) +
+      # geoms
+      geom_density(alpha = .5, linewidth = .25) +
+      geom_hline(yintercept = 0) +
+      # scales
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+      scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                         limits = c("Con", "Anx", "Dep", "SUD")) +
+      scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                        limits = c("Con", "Anx", "Dep", "SUD")) +
+      # themes
+      labs(x = "Estimate") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 8),
+            axis.ticks.x = element_line(color = "black"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.title.y = element_blank(),
+            legend.text = element_text(size = 6),
+            legend.spacing.x = unit(.05, 'cm'),
+            legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+            legend.position = c(.125, .125),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.title = element_blank(),
+            plot.margin = unit(c(.05, .2, 0, .5), "cm"),
+            panel.spacing.x = unit(.3, "cm"),
+            panel.spacing.y = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(parameter~., nrow = 4, ncol = 1,
+                     scales = "free") +
+      facetted_pos_scales(x = x_scaling) +
+      guides(fill = guide_legend(nrow = 2))
+  
+    grid.text(c(expression(paste(italic(A),"+",sep="")),
+                expression(paste(italic(A),"-",sep="")),
+                expression(paste("\u03B2",italic(f),sep="")),
+                expression(paste("\u03B2",italic(b),sep=""))),
+              x = rep(.93, 4), y = c(.92, .68, .45, .21),
+              gp = gpar(fontsize = 9.5))
+dev.off()
+```
+
+
+
+# ---------------------------------------
+
+
+
+
+
+
+

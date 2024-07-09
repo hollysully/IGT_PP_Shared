@@ -640,6 +640,67 @@ dev.off()
 
 
 
+## Supplement Plot
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Anx Beta A- Person-Level PPCs Supplement.tiff"),
+     width = 7, height = 5, units = "cm", res = 300)
+
+  # prep data
+  Anx_PPCs %>% 
+    filter(group %in% c("Anx-", "Anx+"),
+           deck %in% c("B", "D")) %>% 
+    # plotting
+    ggplot(aes(x = trial, color = group)) +
+      # geoms
+      geom_text_npc(data = data.frame(comparison = 1, deck = c("B", "D"), lab_ = c("Deck B", "Deck D")),
+                    aes(npcx = "left", npcy = "top", label = lab_),
+                    size = 3, hjust = 0, vjust = .75) +
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
+                  alpha = .2) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
+                  alpha = .375) +
+      geom_line(aes(y = pred), linewidth = .5) +
+      geom_point(aes(y = observed, fill = group),
+                 size = .75, shape = 21, color = "black") +
+      # scales
+      scale_y_continuous(limits = c(.5,1),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("black", "#E01818"), limits = c("Anx-", "Anx+")) +
+      scale_fill_manual(values = c("gray25", "#E01818"), limits = c("Anx-", "Anx+")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.2, .05),
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 8),
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.25, "cm"),
+            axis.title = element_text(color = "black", size = 9),
+            axis.text = element_text(color = "black", size = 8),
+            plot.margin = margin(t = .15, r = .1, unit = 'cm'),
+            strip.text = element_blank(),
+            panel.spacing.x = unit(-.15,"lines"),
+            strip.background = element_blank()
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 1.25))) +
+      facet_rep_wrap(deck~comparison, scales = "free_y") +
+      facetted_pos_scales(y = list(comparison != 3 ~
+                                     scale_y_continuous(limits = c(.5,1),
+                                                        labels = c(".5", ".75", "1"),
+                                                        breaks = seq(.5,1,.25)),
+                                   comparison == 3 ~
+                                     scale_y_continuous(limits = c(0,1),
+                                                        labels = c("0", ".5", "1"),
+                                                        breaks = seq(0,1,.5))))
+dev.off()
+```
+
+
+
 # -------------------------------------------
 # Dep Beta BetaF Follow-up
 ## Prep Data
@@ -851,6 +912,60 @@ BIS_BAS_results = BIS_BAS_results %>%
 write.csv(BIS_BAS_results, here("1_TADS_Parents_PP", "Figs_Tables",
                                 model_name, sample,
                                 paste(sample, "BIS_BAS_correlations.csv", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Demographics
+```{r}
+demographics = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", 
+                            "processed_demographics_data.RDS"))
+```
+
+
+
+```{r}
+included = data.frame(ID = stan_data$ID_OG,
+                      gender = stan_data$participant_number,
+                      Tsubj = stan_data$Tsubj) %>% 
+  filter(Tsubj == 120) %>% 
+  mutate(gender = case_when(gender == 2 ~ "Male", gender == 3 ~ "Female")) %>% 
+  left_join(demographics)
+
+included %>% 
+  summarise(age = paste0(round(mean(age, na.rm = T), 2),
+                         "(", round(sd(age, na.rm = T), 2), ")"))
+
+included %>% 
+  group_by(gender) %>% 
+  summarise(n(),
+            n()/286*100)
+
+included %>% 
+  group_by(race) %>% 
+  summarise(n(),
+            n()/286*100)
+
+included %>% 
+  group_by(ethnicity) %>% 
+  summarise(n(),
+            n()/286*100)
+```
+
+
+
+# -------------------------------------------
+# Diagnosis Counts
+```{r}
+data.frame(diag = stan_data$X[,2:4,]) %>% 
+  select(anx = diag.1, dep = diag.2, sud = diag.3) %>% 
+  mutate(con = case_when(anx + dep + sud == 0 ~ 1, T ~ 0),
+         anx_dep = case_when(anx + dep == 2 ~ 1, T ~ 0),
+         anx_sud = case_when(anx + sud == 2 ~ 1, T ~ 0),
+         dep_sud = case_when(dep + sud == 2 ~ 1, T ~ 0),
+         anx_dep_sud = case_when(anx + dep + sud == 3 ~ 1, T ~ 0)) %>% 
+  colSums()#/286*100
 ```
 
 

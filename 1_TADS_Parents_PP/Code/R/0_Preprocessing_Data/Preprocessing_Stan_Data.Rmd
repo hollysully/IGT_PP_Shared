@@ -119,7 +119,7 @@ combined_data = inner_join(IGT_prepped, SCID_prepped) %>%
   # Do some prepartion for creating stan data
   mutate(# fix session variable
          session = as.numeric(str_remove(time, "T")),
-         # create variable that assigns numbers to participant types (1 = child, 2 = mom, 3 = dad)
+         # create variable that assigns numbers to participant types (1 = child, 2 = dad, 3 = mom)
          participant_num = match(participant, c("child", "dad", "mom")[1:3]),
          # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
          card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4])) %>% 
@@ -159,7 +159,7 @@ make_ORL_stan_data = function(data, covariate_names){
   ID_OG = rep(-1, N)                            # original ID
   ID_number = rep(-1, N)                        # ID number - this links parents of the same 
                                                   # child together in the same way as ID_OG
-  participant_number = rep(-1, N)               # child (1), mom (2), or dad (3)
+  participant_number = rep(-1, N)               # child (1), dad (2), or mom (3)
   Tsubj = array(data = 0, dim = c(N,S))         # number of trials by participant
   card = array(data = -1, dim = c(N,Tr,S))      # cards
   choice = array(data = -1, dim = c(N,Tr,S))    # choices made by participant
