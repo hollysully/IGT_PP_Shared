@@ -48,7 +48,7 @@ T5_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T5_IGT_mom.RDS"))
 
 full = readRDS(here("1_TADS_Raw_Data", "full_IGT.RDS"))
 
-SCID = readRDS(here("1_TADS_Parents_PP", "Drugs", "processed_SCID_data.RDS"))
+SCID = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "processed_SCID_data.RDS"))
 ```
 
 
@@ -83,16 +83,16 @@ bind_rows(T1_IGT_dad, T1_IGT_mom,
 # --------------------------------------
 # Initialize Variables
 ```{r}
-sample = "T12345_parent"
-covariates = c("days_pc")
-# covariates = c("anxiety", "depression", "SU")
+sample = "T1_parent_Anx_Dep_SUD"
+# covariates = c("days_pc")
+covariates = c("anxiety", "depression", "SU")
 
 IGT_prepped = bind_rows(
                         T1_IGT_dad, T1_IGT_mom,
-                        T2_IGT_dad, T2_IGT_mom,
-                        T3_IGT_dad, T3_IGT_mom,
-                        T4_IGT_dad, T4_IGT_mom,
-                        T5_IGT_dad, T5_IGT_mom
+                        # T2_IGT_dad, T2_IGT_mom,
+                        # T3_IGT_dad, T3_IGT_mom,
+                        # T4_IGT_dad, T4_IGT_mom,
+                        # T5_IGT_dad, T5_IGT_mom
                         ) %>% 
   group_by(id, participant) %>% 
   mutate(date = as.Date(date, format = "%m-%d-%Y"),

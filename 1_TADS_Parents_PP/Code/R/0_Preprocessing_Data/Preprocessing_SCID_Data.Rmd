@@ -13,6 +13,7 @@ library(tidyverse)
 library(rprime)
 library(car)
 library(plyr)
+library(here)
 ```
 
 
@@ -39,9 +40,11 @@ custom_select = function(data){
 ## Import Data
 ```{r, warning=F}
 SCID_dad = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Finalized Scored Data/T1/Interviews/SCID/Dad/5.23.2022_DadSCIDT1_diagnosesandsymptoms.csv") %>% 
-  custom_select()
+  custom_select() %>% 
+  dplyr::mutate(participant = "dad")
 SCID_mom = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Finalized Scored Data/T1/Interviews/SCID/Mom/5.23.2022_MomSCIDT1_diagnosesandsymptoms.csv") %>% 
-  custom_select()
+  custom_select() %>% 
+  dplyr::mutate(participant = "mom")
 ```
 
 
@@ -54,7 +57,7 @@ SCID = bind_rows(SCID_mom, SCID_dad) %>%
   select(everything(), depression = ldep, anxiety = lanx, -lsub, -lpot, -lalc)
 
 
-saveRDS(SCID, "processed_SCID_data.RDS")
+saveRDS(SCID, here("1_TADS_Parents_PP", "Data", "0_Raw", "processed_SCID_data.RDS"))
 ```
 
 
