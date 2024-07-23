@@ -13,6 +13,7 @@ library(tidyverse)
 library(rprime)
 library(car)
 library(plyr)
+library(here)
 ```
 
 
@@ -57,8 +58,8 @@ SCID_mom = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets S
 
 ## Process Data
 ```{r}
-bind_rows(SCID_mom, SCID_dad) %>% #View()
-  saveRDS("SCID_SUD_Data.RDS")
+bind_rows(SCID_mom, SCID_dad) %>% View()
+  saveRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "SCID_SUD_Data.RDS"))
 ```
 
 
