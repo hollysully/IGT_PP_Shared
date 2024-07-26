@@ -49,7 +49,7 @@ person_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE, invert=TRU
 
 # -------------------------------------------
 # Check Model
-```{r, eval = T}
+```{r, eval = F}
 model_code = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", 
                                 paste0(model_name, ".stan")), compile = F)
 
