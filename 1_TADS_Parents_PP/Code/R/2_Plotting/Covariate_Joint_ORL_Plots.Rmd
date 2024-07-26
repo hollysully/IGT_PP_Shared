@@ -98,7 +98,7 @@ bis_bas = bind_rows(select(readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
 # -------------------------------------------
 # Model Diagnostics
 ## Traceplots
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, 
           sample,
@@ -130,7 +130,7 @@ for(i in person_parameters){
 # Posterior Predictions
 ## Group-Level PPCs
 ### Calculate Group PPCs
-```{r, eval = F}
+```{r, eval = T}
 source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 
@@ -204,7 +204,7 @@ grp_PPCs =
 
 
 ### Within-Group PPC Plot
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Within-Group PPCs.tiff"),
      width = 7, height = 5.25, units = "cm", res = 300)
@@ -258,7 +258,7 @@ dev.off()
 
 ## Person-Level PPCs
 ### Calculate Ind PPCs
-```{r, eval = F}
+```{r, eval = T}
 ind_PPCs = data.frame(ID = stan_data$ID_participant,
                       deck = stan_data$card,
                       choice = ifelse(stan_data$choice == 1, 1, 0),
@@ -379,7 +379,7 @@ orl_grp_parameters = data.frame(
 
 
 ## Descriptives
-```{r, eval = F}
+```{r, eval = T}
 orl_grp_parameters %>% 
   group_by(group, grp_parameter, orl_parameter) %>% 
   summarise(mu = mean(estimate),
@@ -843,7 +843,7 @@ dev.off()
 # -------------------------------------------
 # Correlations with BIS/BAS
 ## Calculate Cors
-```{r, eval = F}
+```{r, eval = T}
 ORL_BIS_BAS = data.frame()
 
 for(p in c("Arew", "Apun", "betaF", "betaB")) {
