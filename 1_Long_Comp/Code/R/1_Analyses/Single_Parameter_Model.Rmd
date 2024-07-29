@@ -176,7 +176,7 @@ VC = SD%*%R%*%SD # variance-covariance matrix
 parameters = mvrnorm(N, mu = c(mu_intercept_UT, mu_beta_UT), Sigma = VC) # draw from MVT Normal
 
 # combine the parameters into the As
-A_UTs = parameters[,1] + parameters[,2]%*%t(1:n_sessions)
+A_UTs = parameters[,1] + parameters[,2]%*%t(1:n_sessions-1)
 
 # plot untransformed As
 plot(rep(1:n_sessions, N), A_UTs)
@@ -194,7 +194,7 @@ data.frame(ID = 1:N, session = A_UTs) %>%
                names_prefix = "session.", names_transform = list(session = as.numeric)) %>%
   mutate(A = pnorm(A_UT)) %>%
   lme4::lmer(A_UT ~ session + (session|ID), data = .) %>%
-  # summary()
+  summary()
   car::Anova(type = "III")
 ```
 
@@ -218,7 +218,7 @@ parameters[,1] = mu_intercept_UT +  int_slope_deviations[,1] * sd_intercept_UT #
 parameters[,2] = mu_beta_UT + int_slope_deviations[,2] * sd_beta_UT            # slopes
 
 # combine the parameters into the As
-A_UTs = parameters[,1] + parameters[,2]%*%t(1:n_sessions) # generate session-specific untransformed As
+A_UTs = parameters[,1] + parameters[,2]%*%t(1:n_sessions-1) # generate session-specific untransformed As
 
 # plot untransformed As
 plot(rep(1:n_sessions, N), A_UTs)
@@ -236,7 +236,7 @@ data.frame(ID = 1:N, session = A_UTs) %>%
                names_prefix = "session.", names_transform = list(session = as.numeric)) %>%
   mutate(A = pnorm(A_UT)) %>%
   lme4::lmer(A_UT ~ session + (session|ID), data = .) %>%
-  # summary()
+  summary()
   car::Anova(type = "III")
 ```
 
