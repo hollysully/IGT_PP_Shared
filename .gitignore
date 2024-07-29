@@ -25,6 +25,8 @@ dead_end_models/
 Manuscript/
 1_IGT_PP/Test-Retest IGT PP Manuscript/
 1_TADS_Parents_PP/TADS - T1 SU, Dep, Anx IGT PP Manuscript/
+1_TADS_Parents_PP/Data/0_Raw/Raw_T1_Dad/
+1_TADS_Parents_PP/Data/0_Raw/Raw_T1_Mom/
 1_IGT_PP/Code/R/2_Plotting/group_PPCs_joint_indMu.Rmd
 1_IGT_PP/Code/Stan/simple_IRT.stan
 1_IGT_PP/Data/2_Fitted/IRT/
