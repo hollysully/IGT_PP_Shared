@@ -350,7 +350,7 @@ dev.off()
 # -------------------------------------------
 # Correlations with BIS/BAS
 ## Calculate Cors
-```{r, eval = F}
+```{r, eval = T}
 binomial_BIS_BAS = data.frame()
 
 for(i in 1:nrow(valence_posteriors$good_theta)){

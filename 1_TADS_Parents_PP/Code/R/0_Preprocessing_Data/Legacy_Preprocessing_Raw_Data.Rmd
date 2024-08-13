@@ -246,7 +246,8 @@ rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
 setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/T1/Mom/Behavioral Tasks/IGT New")
 IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
 eprime_filenames[["T1_mom"]] = IGT_List
-IGT_List <- IGT_List[-c(219:233)] #dropping the questionable files
+# IGT_List <- IGT_List[-c(219:233)] #dropping the questionable files
+IGT_List <- IGT_List[-c(224:238)] #dropping the questionable files
 # remove duplicates
 IGT_List = IGT_List[-which(IGT_List %in% c("BD/playorpass - Version 2-5003-1.txt",
                                            "BD/playorpass - Version 2-5004-1.txt",

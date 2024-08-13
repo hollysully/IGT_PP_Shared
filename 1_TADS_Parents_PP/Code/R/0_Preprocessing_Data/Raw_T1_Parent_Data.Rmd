@@ -22,7 +22,8 @@ library(here)
 check_version = function(data, eprime = T){
   
   if(eprime){
-    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "eprime_AB_outcome_list.csv")) %>% 
+    outcome_list = read.csv(here::here("1_TADS_Parents_PP", "Data", "3_Helper",
+                                       "eprime_AB_outcome_list.csv")) %>% 
   mutate(trial_seq = as.numeric(row.names(.)))
   
   versions = data %>%
@@ -77,7 +78,7 @@ check_version = function(data, eprime = T){
 # Dad
 ```{r}
 # Identify the directory for the files and get the list of those files
-setwd(here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T1_Dad"))
+setwd(here::here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T1_Dad"))
 T1_dad_filenames <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), 
                                         list.files(pattern = "5", recursive = T)),
                               list.files(pattern = "*-1.txt", recursive = T))
@@ -127,7 +128,7 @@ T1_dad_subclean = T1_dad_raw %>%
 # Mom
 ```{r}
 # Identify the directory for the files and get the list of those files
-setwd(here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T1_Mom"))
+setwd(here::here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T1_Mom"))
 T1_mom_filenames <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), 
                                         list.files(pattern = "5", recursive = T)),
                               list.files(pattern = "*-1.txt", recursive = T))
@@ -177,16 +178,21 @@ T1_mom_subclean = T1_mom_raw %>%
 # Combine & Save
 ```{r}
 bind_rows(T1_dad_subclean, T1_mom_subclean) %>%
-  # exclude participants that responded on < 50% trials
-  filter(!(id == 5183 & participant == "dad" & time == "T1"),
-         !(id == 5020 & participant == "mom" & time == "T1")) %>%
+  # exclude participant that responded on < 50% trials
+  filter(!(id == 5183 & participant == "dad" & time == "T1")) %>%
+  # exclude participant that didn't finish the task - only 40 trials worth of data
+  filter(!(id == 5020 & participant == "mom" & time == "T1")) %>%
+  # fix participant's data because they didn't respond on a specific deck
+  mutate(AB_card = case_when(id == 5139 & participant == "mom" & time == "T1" & card == "A" ~ "AB_A",
+                             id == 5222 & participant == "mom" & time == "T1" & card == "B" ~ "AB_B",
+                             id == 5198 & participant == "mom" & time == "T1" & card == "D" ~ "AB_D",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5139 & participant == "mom" & time == "T1" & card == "A" ~ "AB",
+                                     id == 5222 & participant == "mom" & time == "T1" & card == "B" ~ "AB",
+                                     id == 5198 & participant == "mom" & time == "T1" & card == "D" ~ "AB",
+                                     T ~ checked_version)) %>%
   saveRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "Processed_Raw_T1_Parents.RDS"))
 ```
-
-
-
-
-
 
 
 
