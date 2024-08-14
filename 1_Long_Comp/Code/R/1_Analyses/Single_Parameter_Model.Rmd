@@ -174,6 +174,7 @@ data.frame(ID = 1:N, session = A_UTs) %>%
 
 # -------------------------------------------
 # Simulate Choice Data
+## Generate Data
 ```{r}
 set.seed(20240807)
 
@@ -190,7 +191,70 @@ for(i in 1:N){
 ```
 
 
+## Convert to Stan Data
+```{r}
+Tr = max(sim_data$trial)
+choice = array(-1, dim = c(N,Tr,S))
+outcome = array(0, dim = c(N,Tr,S))
+
+for(s in 1:S){
+  for(i in 1:N){
+    cur_data = filter(sim_data, session == s, ID == i) %>% 
+      arrange(trial)
+    choice[i,,s] = cur_data$choice
+    outcome[i,,s] = cur_data$outcome
+  }
+}
+
+
+stan_data = list(N = N,
+                 T = Tr,
+                 S = S,
+                 choice = choice,
+                 outcome = outcome)
+```
+
+
 # -------------------------------------------
+# Fit RL Model
+```{r}
+model_code = cmdstan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Model.stan"),
+                           compile = F)
+
+model_code$check_syntax(quiet = T)
+```
+
+```{r}
+# Compile model
+RL_model = stan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Model.stan"))
+
+
+# -----------------------------------------------------------------------------------
+# Fit model
+RL_fit = sampling(RL_model, 
+                  data   = stan_data, 
+                  iter   = 2000, 
+                  warmup = 1000, 
+                  chains = 1, 
+                  cores  = 4,
+                  seed   = 43210,
+                  save_warmup = F)
+saveRDS(RL_fit, here("1_Long_Comp", "Data", "2_Fitted", "Single_Parameter_Model.stan"))
+```
+
+
+```{r}
+# -----------------------------------------------------------------------------------
+# save posteriors
+RL_posteriors = extract(RL_fit)
+saveRDS(RL_posteriors, here("1_Long_Comp", "Data", "2_Fitted", "RL_posteriors.RDS"))
+  
+# -----------------------------------------------------------------------------------
+# save rhats
+RL_rhats = rhat(RL_posteriors, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_rhats.RDS"))
+```
 
 
 

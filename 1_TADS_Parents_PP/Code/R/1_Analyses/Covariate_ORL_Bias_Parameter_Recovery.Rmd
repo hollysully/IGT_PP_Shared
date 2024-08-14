@@ -166,7 +166,7 @@ sigmas = data.frame(Arew_sigma = apply(orl_posteriors$sigma_Arew, 2, mean),
 
 
 ## Simulated Person-Level Parameters
-```{r, eval = F}
+```{r, eval = T}
 set.seed(20240530)
 
 parameters = data.frame(Arew_mu = rowSums(t(t(X) * mus[,"Arew_beta"])),
@@ -205,7 +205,7 @@ simulated_parameters = readRDS(here("1_TADS_Parents_PP", "Data",
 # -------------------------------------------
 # Simulation
 ## Simulate Data
-```{r, eval = F}
+```{r, eval = T}
 sim_data = simulate_orl(parameter_values = simulated_parameters,
                         N = nrow(simulated_parameters),
                         X = X,
@@ -273,7 +273,7 @@ stan_data = list(
 
 # -------------------------------------------
 # Fit Model
-```{r, eval = F}
+```{r, eval = T}
 # Compile model
 orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
                             paste0(model_name, ".stan")))
@@ -304,7 +304,7 @@ sim_orl_fit = readRDS(here("1_TADS_Parents_PP", "Data",
 
 
 
-```{r, eval = F}
+```{r, eval = T}
 sim_orl_posteriors <- extract(sim_orl_fit)
 saveRDS(sim_orl_posteriors,
         here("1_TADS_Parents_PP", "Data",

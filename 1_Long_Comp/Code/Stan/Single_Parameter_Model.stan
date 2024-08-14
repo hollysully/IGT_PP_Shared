@@ -13,8 +13,8 @@ parameters {
   real gamma10;    // group-level slopes
   real<lower=0> R; // residual error
   
-  cholesky_factor_corr[2] R_chol; // Cholesky correlation matrix
-  vector[2]<lower=0> sigma_U;     // SD of intercepts (sigma_U[1]) and slopes (sigma_U[2])
+  cholesky_factor_corr[2] R_chol; // Cholesky correlation matrix for intercept-slope correlation
+  vector<lower=0>[2] sigma_U;     // SD of intercepts (sigma_U[1]) and slopes (sigma_U[2])
   matrix[2,N] z_U;                // uncorrelated standardized person-specific deviations from group-level intercepts (z_U[1,]) and slopes (z_U[2,])
 }
 
@@ -23,15 +23,16 @@ transformed parameters {
   vector[N] beta0; // person-specific intercepts
   vector[N] beta1; // person-specific slopes
   matrix[2,N] U;   // correlated person-specific deviations from group-level intercepts (z_U[1,]) and slopes (z_U[2,])
+  matrix[S,N] A;   // bounded learning rates for each session
   
   U = diag_pre_multiply(sigma_U, R_chol) * z_U; // calculate person-specific deviations
   
   for(i in 1:N){ // loop through persons
-    beta0[i] = gamm00 + U[1,i]; // calculate person-specific intercepts
-    beta1[i] = gamm10 + U[2,i]; // calculate person-specific slopes
+    beta0[i] = gamma00 + U[1,i]; // calculate person-specific intercepts
+    beta1[i] = gamma10 + U[2,i]; // calculate person-specific slopes
     
     for(s in 1:S){ // loop through sessions
-      A = Phi_approx(beta0[i] + beta1[i*(s-1) + R); // combine intercepts & slopes and transform into learning rate
+      A[s,i] = Phi_approx(beta0[i] + beta1[i]*(s-1) + R); // combine intercepts & slopes and transform into learning rate
     }
   }
 }
@@ -58,7 +59,7 @@ model {
         choice[i,t,s] ~ categorical_logit(utility); // predict choice based on utility
         
         // RW learning rule
-        utility[choice[i,t,s]] = utility[choice[i,t,s]] + A*(outcome[i,t,s] - utility[choice[i,t,s]]);
+        utility[choice[i,t,s]] = utility[choice[i,t,s]] + A[s,i]*(outcome[i,t,s] - utility[choice[i,t,s]]);
       }        
     }
   }
@@ -66,9 +67,10 @@ model {
   
   
 generated quantities {
+  vector[2] utility;       // declare utility variable
   real log_lik[N];         // log-likelihoods for calculating LOOIC
-  real choice_pred[N,T,S]; // posterior predicted values
-  corr_matrix[S] R_A;      // correlation matrix
+  int choice_pred[N,T,S];  // posterior predicted values
+  corr_matrix[2] R_A;      // correlation matrix
   
   // calculate correlation matrix
   R_A = R_chol * R_chol';
@@ -93,7 +95,7 @@ generated quantities {
         log_lik[i] += categorical_logit_lpmf(choice[i,t,s]|utility);
         choice_pred[i,t,s] = categorical_rng(softmax(utility));
         
-        utility[choice_pred[i,t,s]] = utility[choice_pred[i,t,s]] + A*(outcome[i,t,s] - utility[choice_pred[i,t,s]]);
+        utility[choice_pred[i,t,s]] = utility[choice_pred[i,t,s]] + A[s,i]*(outcome[i,t,s] - utility[choice_pred[i,t,s]]);
       }        
     }
   }
