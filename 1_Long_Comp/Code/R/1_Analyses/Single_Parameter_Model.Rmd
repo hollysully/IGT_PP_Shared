@@ -16,7 +16,7 @@ library(hBayesDM)
 library(bayesplot)
 library(here)
 library(miscTools)
-library(wBoot)
+# library(wBoot)
 library(cmdstanr)
 library(stringi)
 library(ggpp)
@@ -216,14 +216,17 @@ stan_data = list(N = N,
 
 
 # -------------------------------------------
-# Fit RL Model
-```{r}
+# Fitting RL Model
+## Check Model
+```{r, eval = F}
 model_code = cmdstan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Model.stan"),
                            compile = F)
 
 model_code$check_syntax(quiet = T)
 ```
 
+
+## Fit Model
 ```{r}
 # Compile model
 RL_model = stan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Model.stan"))
@@ -233,7 +236,7 @@ RL_model = stan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Mode
 # Fit model
 RL_fit = sampling(RL_model, 
                   data   = stan_data, 
-                  iter   = 2000, 
+                  iter   = 5000, 
                   warmup = 1000, 
                   chains = 1, 
                   cores  = 4,
@@ -243,6 +246,7 @@ saveRDS(RL_fit, here("1_Long_Comp", "Data", "2_Fitted", "Single_Parameter_Model.
 ```
 
 
+## Extract Posteriors
 ```{r}
 # -----------------------------------------------------------------------------------
 # save posteriors
@@ -251,9 +255,121 @@ saveRDS(RL_posteriors, here("1_Long_Comp", "Data", "2_Fitted", "RL_posteriors.RD
   
 # -----------------------------------------------------------------------------------
 # save rhats
-RL_rhats = rhat(RL_posteriors, pars = focal_parameters) %>%
-  data.frame() %>% mutate(parameter = rownames(.)) %>% 
-  saveRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_rhats.RDS"))
+RL_rhats = rhat(RL_fit, pars = c("gamma00", "gamma10", "R", "R_chol", "sigma_U", "z_U",
+                                 "beta0", "beta1", "U", "A", "utility", "R_A")) %>%
+                  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(RL_rhats, here("1_Long_Comp", "Data", "2_Fitted", "RL_rhats.RDS"))
+```
+
+
+```{r}
+RL_posteriors = readRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_posteriors.RDS"))
+RL_rhats = readRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_rhats.RDS"))
+```
+
+
+# -------------------------------------------
+# Assess Recovery
+## Group-Level Parameters
+```{r}
+paste("Group-Level Intercept:",
+      "True =", round(mu_intercept_UT, 3), "&",
+      "Estimated =", round(mean(RL_posteriors$gamma00), 3))
+paste("Group-Level Slope:",
+      "True =", round(mu_beta_UT, 3), "&",
+      "Estimated =", round(mean(RL_posteriors$gamma10), 3))
+
+
+paste("Residual SD:",
+      "True =", round(residual_sd, 3), "&",
+      "Estimated =", round(mean(RL_posteriors$R), 3))
+paste("SD for Intercepts:",
+      "True =", round(sd_intercept_UT, 3), "&",
+      "Estimated =", round(mean(RL_posteriors$sigma_U[,1]), 3))
+paste("SD for Slopes:",
+      "True =", round(sd_beta_UT, 3), "&",
+      "Estimated  =", round(mean(RL_posteriors$sigma_U[,2]), 3))
+
+
+paste("Correlation Between RIs & RSs:",
+      "True =", round(int_slope_R, 3), "&",
+      "Estimated =", round(mean(RL_posteriors$R_A[,2,1]), 3))
+```
+
+
+## Person-Level Parameters
+```{r}
+regression_parameters = data.frame(true_beta0 = parameters[,1],
+                                   true_beta1 = parameters[,2],
+                                   est_beta0 = apply(RL_posteriors$beta0, 2, mean),
+                                   est_beta1 = apply(RL_posteriors$beta1, 2, mean))
+
+
+est_A_UTs = data.frame(iteration = 1:nrow(RL_posteriors$beta0),
+                      beta0 = RL_posteriors$beta0,
+                      beta1 = RL_posteriors$beta1) %>% 
+  pivot_longer(cols = starts_with("beta"), names_to = c("parameter", "ID"),
+               values_to = "estimate", names_sep = "\\.",
+               names_transform = list("ID" = as.integer)) %>%
+  pivot_wider(names_from = "parameter", values_from = "estimate") %>% 
+  cbind(data.frame(session1 = 1, session2 = 2, session3 = 3, 
+                   session4 = 4, session5 = 5)) %>% 
+  pivot_longer(starts_with("session"), names_to = "discard", values_to = "session") %>% 
+  mutate(est_A_UT = beta0 + beta1*(session-1)) %>% 
+  group_by(ID, session) %>% 
+  summarise(est_A_UT = mean(est_A_UT))
+
+
+RL_parameters = data.frame(ID = 1:N,
+                           true_A = As,
+                           true_A_UT = A_UTs,
+                           est_A = t(apply(RL_posteriors$A, c(2, 3), mean))) %>% 
+  pivot_longer(starts_with(c("true","est")),
+               names_to = c("parameter", "session"), values_to = "estimate",
+               names_sep = "\\.", names_transform = list("session" = as.integer)) %>% 
+  pivot_wider(names_from = "parameter", values_from = "estimate") %>% 
+  left_join(est_A_UTs) %>% 
+  pivot_longer(starts_with(c("true", "est")),
+               names_to = "parameter", values_to = "estimate") %>% 
+  mutate(type = case_when(str_detect(parameter, "true") ~ "true", T ~ "est"),
+         parameter = str_remove(parameter, "true_|est_")) %>% 
+  pivot_wider(names_from = "type", values_from = "estimate")
+```
+
+
+```{r}
+person_level_plot = RL_parameters %>% 
+    mutate(session_lab = case_when(parameter == "A_UT" ~ paste0("T", session), T ~ "")) %>% 
+    ggplot(aes(x = true, y = est)) +
+      ggpp::geom_text_npc(aes(npcx = "right", npcy = "bottom", label = session_lab),
+                          hjust = .95, vjust = .25, size = 7) +
+      geom_point() +
+      geom_smooth(method = "lm", formula = y~x, se = F) +
+      scale_x_continuous(expand = expansion(mult = .025)) +
+      scale_y_continuous(expand = expansion(mult = .025)) +
+      labs(x = "True Person-Level Estimate", y = "Estimated Person-Level Estimate") +
+      theme_classic() +
+      theme(axis.text = element_blank(),
+            axis.title = element_text(size = 16),
+            strip.text = element_blank(),
+            plot.margin = unit(c(1, .5, .5, .5), units = "cm")) +
+      lemon::facet_rep_wrap(session~parameter, scales = "free", ncol = 2)
+
+tiff(here("1_Long_Comp", "Figs_Tables",
+          "RL True v Est Person-Level Parameters.tiff"),
+     width = 10, height = 22, units = "cm", res = 300)
+
+  # plot
+  grid.newpage()
+  pushViewport(viewport(x = .5, y = .5, width = 1, height = 1))
+  grid.draw(person_level_plot)
+  
+  # text
+  grid.text(c(expression(italic(A)), expression(paste("Unbounded ", italic(A)))),
+            x = c(.325, .75), y = .98,
+            gp = gpar(fontsize = 18))
+  
+dev.off()
 ```
 
 
