@@ -219,7 +219,8 @@ stan_data = list(N = N,
 # Fitting RL Model
 ## Check Model
 ```{r, eval = F}
-model_code = cmdstan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Model.stan"),
+model_code = cmdstan_model(here("1_Long_Comp", "Code", "Stan",
+                                "RL_Model.stan"),
                            compile = F)
 
 model_code$check_syntax(quiet = T)
@@ -229,20 +230,25 @@ model_code$check_syntax(quiet = T)
 ## Fit Model
 ```{r}
 # Compile model
-RL_model = stan_model(here("1_Long_Comp", "Code", "Stan", "Single_Parameter_Model.stan"))
+RL_model = stan_model(here("1_Long_Comp", "Code", "Stan", "RL_Model.stan"))
 
 
 # -----------------------------------------------------------------------------------
 # Fit model
+timestamp = list()
+timestamp$start = Sys.time()
 RL_fit = sampling(RL_model, 
                   data   = stan_data, 
                   iter   = 5000, 
                   warmup = 1000, 
-                  chains = 1, 
+                  chains = 4, 
                   cores  = 4,
                   seed   = 43210,
                   save_warmup = F)
-saveRDS(RL_fit, here("1_Long_Comp", "Data", "2_Fitted", "Single_Parameter_Model.stan"))
+timestamp$end = Sys.time()
+
+saveRDS(timestamp, here("1_Long_Comp", "Data", "2_Fitted", "RL_Timestamp.RDS"))
+saveRDS(RL_fit, here("1_Long_Comp", "Data", "2_Fitted", "RL_Fit.RDS"))
 ```
 
 
