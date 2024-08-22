@@ -72,7 +72,7 @@ simulate_RL = function(learning_rate = .5, n_trials = 100,
 
 
 ## Test Functions
-```{r, eval = F}
+```{r, eval = T}
 set.seed(20240807)
 test_data = bind_rows(simulate_RL(learning_rate = .2, label = "hi"),
                      simulate_RL(learning_rate = .05, label = "lo")) %>% 
@@ -249,11 +249,7 @@ timestamp$end = Sys.time()
 
 saveRDS(timestamp, here("1_Long_Comp", "Data", "2_Fitted", "RL_Timestamp.RDS"))
 saveRDS(RL_fit, here("1_Long_Comp", "Data", "2_Fitted", "RL_Fit.RDS"))
-```
 
-
-## Extract Posteriors
-```{r}
 # -----------------------------------------------------------------------------------
 # save posteriors
 RL_posteriors = extract(RL_fit)
@@ -269,6 +265,8 @@ saveRDS(RL_rhats, here("1_Long_Comp", "Data", "2_Fitted", "RL_rhats.RDS"))
 
 
 ```{r}
+timestamp = readRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_Timestamp.RDS"))
+RL_fit = readRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_Fit.RDS"))
 RL_posteriors = readRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_posteriors.RDS"))
 RL_rhats = readRDS(here("1_Long_Comp", "Data", "2_Fitted", "RL_rhats.RDS"))
 ```
