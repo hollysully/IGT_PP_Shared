@@ -128,8 +128,11 @@ residual_sd = 1 # standard deviation of residuals
 mu_intercept_UT = qnorm(.1) # mean untransformed intercept for learning rate
 sd_intercept_UT = 1         # standard deviation of intercepts
 
-mu_beta_UT = .5 # slope effect for session
+mu_beta_UT = 0 # slope effect for session
 sd_beta_UT = 1  # standard deviation of intercepts
+# Westfall Approach
+# d = .05
+# mu_beta_UT = d * (sum(residual_sd^2, sd_intercept_UT^2, sd_beta_UT^2)) # Westfall et al. approach
 
 # building variance-covariance matrix
 int_slope_R = .5 # correlation between intercepts and slopes
