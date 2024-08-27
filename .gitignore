@@ -10,6 +10,8 @@
 *.txt
 *.rds
 
+*.docx
+
 # eprime data files
 1_SIGT_PP/Data/0_Raw/z_Rawest_Data/
 

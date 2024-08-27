@@ -98,7 +98,7 @@ bis_bas = bind_rows(select(readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
 # -------------------------------------------
 # Model Diagnostics
 ## Traceplots
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, 
           sample,
@@ -130,7 +130,7 @@ for(i in person_parameters){
 # Posterior Predictions
 ## Group-Level PPCs
 ### Calculate Group PPCs
-```{r, eval = T}
+```{r, eval = F}
 source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 
@@ -204,7 +204,7 @@ grp_PPCs =
 
 
 ### Within-Group PPC Plot
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Within-Group PPCs.tiff"),
      width = 14.6, height = 10, units = "cm", res = 300)
@@ -260,7 +260,7 @@ dev.off()
 
 ## Person-Level PPCs
 ### Calculate Ind PPCs
-```{r, eval = T}
+```{r, eval = F}
 ind_PPCs = data.frame(ID = stan_data$ID_participant,
                       deck = stan_data$card,
                       choice = ifelse(stan_data$choice == 1, 1, 0),
@@ -335,7 +335,7 @@ ind_parameters = data.frame(ID = stan_data$ID_participant,
 # -------------------------------------------
 # Posterior Distributions
 ## Prep Data
-```{r, eval = T}
+```{r}
 orl_grp_parameters = data.frame(
   iteration = 1:((orl_fit@sim$iter -
                     orl_fit@sim$warmup) *
@@ -381,7 +381,7 @@ orl_grp_parameters = data.frame(
 
 
 ## Descriptives
-```{r, eval = T}
+```{r, eval = F}
 orl_grp_parameters %>% 
   group_by(group, grp_parameter, orl_parameter) %>% 
   summarise(mu = mean(estimate),
@@ -512,14 +512,14 @@ con_index = ind_parameters %>%
   filter(anx == 0) %>%
   filter(parameter == "Apun") %>%
   group_by(ID) %>% 
-  summarise(sum_abs_z = sum(abs(z))) %>% 
+  summarise(sum_abs_z = abs(z)) %>% 
   arrange(sum_abs_z) %>% head(1) %>% .$ID
 
 anx_index = ind_parameters %>% 
   filter(anx == 1, group == "anx") %>%
   filter(parameter == "Apun") %>%
   group_by(ID) %>% 
-  summarise(sum_abs_z = sum(abs(z))) %>% 
+  summarise(sum_abs_z = abs(z)) %>% 
   arrange(sum_abs_z) %>% head(1) %>% .$ID
 
 anx_comparison1 = 
@@ -624,18 +624,17 @@ dev.off()
 ```{r}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Anx Beta A- Person-Level PPCs Supplement.tiff"),
-     width = 7, height = 5, units = "cm", res = 300)
+     width = 14.6, height = 10, units = "cm", res = 300)
 
   # prep data
-  Anx_PPCs %>% 
-    filter(group %in% c("Anx-", "Anx+"),
-           deck %in% c("B", "D")) %>% 
+  anx_comparison1 %>% 
+    filter(group %in% c("Anx-", "Anx+")) %>% 
     # plotting
     ggplot(aes(x = trial, color = group)) +
       # geoms
-      geom_text_npc(data = data.frame(comparison = 1, deck = c("B", "D"), lab_ = c("Deck B", "Deck D")),
+      geom_text_npc(data = data.frame(deck = c("A", "B", "C", "D"), lab_ = c("Deck A", "Deck B", "Deck C", "Deck D")),
                     aes(npcx = "left", npcy = "top", label = lab_),
-                    size = 3, hjust = 0, vjust = .75) +
+                    size = 5, hjust = 0, vjust = .75) +
       geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
                   alpha = .2) +
       geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
@@ -644,7 +643,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
       geom_point(aes(y = observed, fill = group),
                  size = .75, shape = 21, color = "black") +
       # scales
-      scale_y_continuous(limits = c(.5,1),
+      scale_y_continuous(limits = c(.45,1),
                          breaks = seq(0,1,.25)) +
       scale_color_manual(values = c("black", "#E01818"), limits = c("Anx-", "Anx+")) +
       scale_fill_manual(values = c("gray25", "#E01818"), limits = c("Anx-", "Anx+")) +
@@ -656,26 +655,18 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             legend.position = c(.2, .05),
             legend.spacing.x = unit(0, 'cm'),
             legend.spacing.y = unit(-.25, 'cm'),
-            legend.text = element_text(size = 8),
+            legend.text = element_text(size = 13),
             legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
-            legend.key.size = unit(.25, "cm"),
-            axis.title = element_text(color = "black", size = 9),
-            axis.text = element_text(color = "black", size = 8),
+            legend.key.size = unit(.75, "cm"),
+            axis.title = element_text(color = "black", size = 17),
+            axis.text = element_text(color = "black", size = 14),
             plot.margin = margin(t = .15, r = .1, unit = 'cm'),
             strip.text = element_blank(),
             panel.spacing.x = unit(-.05,"lines"),
             strip.background = element_blank()
             ) +
-      guides(color = guide_legend(override.aes = list(size = 1.25))) +
-      facet_rep_wrap(deck~comparison, scales = "free_y") +
-      facetted_pos_scales(y = list(comparison != 2 ~
-                                     scale_y_continuous(limits = c(.5,1),
-                                                        labels = c(".5", ".75", "1"),
-                                                        breaks = seq(.5,1,.25)),
-                                   comparison == 2 ~
-                                     scale_y_continuous(limits = c(0,1),
-                                                        labels = c("0", ".5", "1"),
-                                                        breaks = seq(0,1,.5))))
+      guides(color = guide_legend(override.aes = list(size = 1.25), nrow = 1)) +
+      facet_rep_wrap(deck~., scales = "free_y")
 dev.off()
 ```
 
@@ -802,7 +793,7 @@ dev.off()
 # -------------------------------------------
 # Correlations with BIS/BAS
 ## Calculate Cors
-```{r, eval = T}
+```{r, eval = F}
 ORL_BIS_BAS = data.frame()
 
 for(p in c("Arew", "Apun", "betaF", "betaB")) {

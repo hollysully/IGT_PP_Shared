@@ -149,6 +149,7 @@ X = og_data$X[sub_keep,,]
 
 
 # -------------------------------------------
+# Simulate Parameters
 ## Set Mus
 ```{r, eval = T}
 mus = data.frame(Arew_beta = apply(orl_posteriors$beta_Arew, 2, mean),
@@ -164,8 +165,7 @@ sigmas = data.frame(Arew_sigma = apply(orl_posteriors$sigma_Arew, 2, mean),
 ```
 
 
-
-## Simulated Person-Level Parameters
+## Simulate Person-Level Parameters
 ```{r, eval = T}
 set.seed(20240530)
 
@@ -194,8 +194,134 @@ saveRDS(simulated_parameters, here("1_TADS_Parents_PP", "Data",
 ```
 
 
+#***************************************
+# Side-work
+```{r}
+diag_parameters = data.frame(beta = t(mus)) %>% 
+  mutate(Con = beta.1,
+         Anx = beta.1 + beta.2,
+         Anx_Dep = beta.1 + beta.2 + beta.3,
+         Anx_SUD = beta.1 + beta.2 + beta.4,
+         Anx_Dep_SUD = beta.1 + beta.2 + beta.3 + beta.4,
+         Dep = beta.1 + beta.3,
+         Dep_SUD = beta.1 + beta.3 + beta.4,
+         SUD = beta.1 + beta.4) %>% 
+  dplyr::select(-starts_with("beta"))
 
-```{r, eval = T}
+
+
+parameters = data.frame(Arew_mu = rowSums(t(t(X) * mus[,"Arew_beta"])),
+                        Apun_mu = rowSums(t(t(X) * mus[,"Apun_beta"])),
+                        betaF_mu = rowSums(t(t(X) * mus[,"betaF_beta"])),
+                        betaB_mu = rowSums(t(t(X) * mus[,"betaB_beta"])),
+                        sigmas)
+X[1:2,]
+t(mus[,"Arew_beta"] * t(X[1:2,]))
+```
+
+
+```{r}
+betaF_betas = apply(orl_posteriors$beta_betaF, 2, mean)
+paste("Con = ", betaF_betas[1])
+paste("Anx = ", betaF_betas[1] + betaF_betas[2])
+paste("Dep = ", betaF_betas[1] + betaF_betas[3])
+paste("SUD = ", betaF_betas[1] + betaF_betas[4])
+```
+
+
+```{r}
+print("Data")
+paste("Anx =", round(mean(apply(orl_posteriors$betaF, 2, mean)*
+                            ifelse(stan_data$X[,2,1] == 1, 1, NA), na.rm = T), 3))
+paste("Dep =", round(mean(apply(orl_posteriors$betaF, 2, mean)*
+                            ifelse(stan_data$X[,3,1] == 1, 1, NA), na.rm = T), 3))
+paste(c("Con =", "Anx =", "Dep =", "SUD ="), round(apply(orl_posteriors$mu_betaF, 3, mean),3))
+
+print("Simulated")
+paste("Anx =", round(mean(apply(sim_orl_posteriors$betaF, 2, mean)*
+                            ifelse(stan_data$X[,2,1] == 1, 1, NA), na.rm = T), 3))
+paste("Dep =", round(mean(apply(sim_orl_posteriors$betaF, 2, mean)*
+                            ifelse(stan_data$X[,3,1] == 1, 1, NA), na.rm = T), 3))
+paste(c("Con =", "Anx =", "Dep =", "SUD ="), round(apply(sim_orl_posteriors$mu_betaF, 3, mean),3))
+```
+
+```{r}
+temp_simulated_parameters = left_join(simulated_parameters, 
+                                      data.frame(ID = 1:nrow(X), X))
+
+
+paste("Con =", round(mean(temp_simulated_parameters$betaF*
+                            ifelse(temp_simulated_parameters$X1 == 1, 1, NA), na.rm = T), 3))
+
+paste("Anx =", round(mean(temp_simulated_parameters$betaF*
+                            ifelse(temp_simulated_parameters$X2 == 1, 1, NA), na.rm = T), 3))
+
+paste("Dep =", round(mean(temp_simulated_parameters$betaF*
+                            ifelse(temp_simulated_parameters$X3 == 1, 1, NA), na.rm = T), 3))
+
+paste("SUD =", round(mean(temp_simulated_parameters$betaF*
+                            ifelse(temp_simulated_parameters$X4 == 1, 1, NA), na.rm = T), 3))
+
+cohens_ds = data.frame(iteration = 1:nrow(orl_posteriors$sigma_Arew),
+                       Arew = sweep(orl_posteriors$beta_Arew[,2:4], 1, 
+                                    orl_posteriors$sigma_Arew, FUN = '/'),
+                       Apun = sweep(orl_posteriors$beta_Apun[,2:4], 1, 
+                                    orl_posteriors$sigma_Apun, FUN = '/'),
+                       betaF = sweep(orl_posteriors$beta_betaF[,2:4], 1, 
+                                     orl_posteriors$sigma_betaF, FUN = '/'),
+                       betaB = sweep(orl_posteriors$beta_betaB[,2:4], 1, 
+                                     orl_posteriors$sigma_betaB, FUN = '/')) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("parameter", "group"), values_to = "d", names_sep = "\\.") %>% 
+  mutate(group = case_when(group == "1" ~ "Anx", group == "2" ~ "Dep", group == "3" ~ "SUD"))
+
+cohens_ds %>% 
+  ggplot(aes(x = d, fill = group)) +
+    # geoms
+    geom_density(alpha = .5, linewidth = .25) +
+    geom_hline(yintercept = 0) +
+    geom_vline(xintercept = 0) +
+    # scales
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+    scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                       limits = c("Anx", "Dep", "SUD")) +
+    scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                      limits = c("Anx", "Dep", "SUD")) +
+    # themes
+    labs(x = "Effect Size") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text.x = element_text(color = "black", size = 8),
+          axis.ticks.x = element_line(color = "black"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(),
+          axis.title.y = element_blank(),
+          legend.text = element_text(size = 6),
+          legend.spacing.x = unit(.05, 'cm'),
+          legend.key.size = unit(.5, "lines"), legend.spacing.y = unit(.05, "lines"),
+          legend.position = c(.125, .975),
+          legend.background = element_rect(fill = "transparent", colour = "transparent"),
+          legend.title = element_blank(),
+          plot.margin = unit(c(.05, .2, 0, .5), "cm"),
+          panel.spacing.x = unit(.3, "cm"),
+          panel.spacing.y = unit(.1, "cm"),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_wrap(parameter~., nrow = 2, ncol = 2,
+                   scales = "free") +
+    # facetted_pos_scales(x = x_scaling) +
+    guides(fill = guide_legend(nrow = 3))
+```
+
+
+
+#***************************************
+
+
+
+```{r}
 simulated_parameters = readRDS(here("1_TADS_Parents_PP", "Data",
                                     "4_Parameter_Recovery", "simulated_parameters.RDS"))
 ```
@@ -203,8 +329,8 @@ simulated_parameters = readRDS(here("1_TADS_Parents_PP", "Data",
 
 
 # -------------------------------------------
-# Simulation
-## Simulate Data
+# Simulate Data
+## Simulation
 ```{r, eval = T}
 sim_data = simulate_orl(parameter_values = simulated_parameters,
                         N = nrow(simulated_parameters),
@@ -309,8 +435,20 @@ sim_orl_posteriors <- extract(sim_orl_fit)
 saveRDS(sim_orl_posteriors,
         here("1_TADS_Parents_PP", "Data",
              "4_Parameter_Recovery", "sim_orl_posteriors.RDS"))
-```
 
+
+sim_orl_rhats = rhat(sim_orl_fit, pars = c(
+  "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+  "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+  "Arew", "Apun", "betaF", "betaB", 
+  "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB", 
+  "R_Arew", "R_Apun", "R_betaF", "R_betaB"
+)) %>%
+    data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(sim_orl_rhats,
+        here("1_TADS_Parents_PP", "Data",
+             "4_Parameter_Recovery", "sim_orl_rhats.RDS"))
+```
 
 
 ```{r}
@@ -318,6 +456,21 @@ sim_orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data",
                                   "4_Parameter_Recovery", "sim_orl_posteriors.RDS"))
 ```
 
+
+## Traceplots
+```{r, eval = T}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          "Covariate_Joint_ORL_Bias", "T1_parent_Anx_Dep_SUD",
+          "Supplement_0 Group Traceplots.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(
+    sim_orl_fit,
+    pars = c(
+      "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+      "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB",
+      "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB"))
+dev.off()
+```
 
 
 # -------------------------------------------
