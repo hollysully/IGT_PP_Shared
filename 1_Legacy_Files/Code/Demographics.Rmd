@@ -1,5 +1,5 @@
 ---
-title: "Demographics"
+title: "Drug Data Preprocessing"
 output: html_document
 author: "Jeremy Haynes"
 ---
@@ -68,8 +68,8 @@ demographics = raw_demographics %>%
   
 
 
-saveRDS(demographics, here("1_TADS_Parents_PP", "Data", "0_Raw", 
-                           "demographics.RDS"))
+saveRDS(demographics, here("1_TADS_Parents_PP", "Data", 
+                           "demographics_data.RDS"))
 ```
 
 

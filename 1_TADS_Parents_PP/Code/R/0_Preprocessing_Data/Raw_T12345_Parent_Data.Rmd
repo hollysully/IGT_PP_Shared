@@ -1,0 +1,2070 @@
+---
+title: "IGT Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Setup
+## Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(plyr)
+library(here)
+
+eprime_filenames = list()
+```
+
+
+
+## Notes
+* For E-prime data, copy lines 15-73 and delete subsetting on lines 30-32 (i.e., set "TADS_IGT_trim <- TADS_IGT")
+* For Pavlovia data, copy lines 7-15
+* Questions/Issues
+  + 5020 T1 Mom only has 40 trials at T1 and that seems to be correct according to the raw data
+  + It looks like there were a number of duplicated files in the incorrect timepoints
+    - I've removed these and commented on where I do so throughout
+  + Non-responders
+    - 5139 T1 mom did not respond on any A cards 
+    - 5091 T3 mom did not respond on any B or C cards 
+    - 5034 T4 dad did not respond on any card
+  + For the mom's IGT_List (i.e., the datafiles to import), the files in elements 219:233 are
+    excluded as questionnable; however, when looking at the elements in IGT_List, it seems
+    that it should be 224-238; they are the same length (15)
+
+
+## To-Dos
+* Figure out why version_check function is not working for some participants
+
+
+
+## Version Check Function
+```{r}
+check_version = function(data, eprime = T){
+  
+  if(eprime){
+    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "eprime_AB_outcome_list.csv")) %>% 
+  mutate(trial_seq = as.numeric(row.names(.)))
+  
+  versions = data %>%
+    select(id, card, outcome) %>% 
+    mutate(outcome = as.numeric(outcome)) %>% 
+    filter(!is.na(outcome)) %>% 
+    group_by(id, card) %>% 
+    dplyr::mutate(trial_seq = 1:n()) %>% 
+    left_join(outcome_list) %>% 
+    mutate(equal_A = outcome == Deck_A, equal_B = outcome == Deck_B,
+           equal_C = outcome == Deck_C, equal_D = outcome == Deck_D) %>% 
+    group_by(id, card) %>% 
+    reframe(A_prop = mean(equal_A), B_prop = mean(equal_B),
+            C_prop = mean(equal_C), D_prop = mean(equal_D)) %>% 
+    mutate(AB_card = case_when(A_prop == 1 ~ "AB_A",
+                               B_prop == 1 ~ "AB_B",
+                               C_prop == 1 ~ "AB_C",
+                               D_prop == 1 ~ "AB_D"),
+           checked_version = case_when(str_ends(AB_card, card) ~ "AB",
+                                       str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
+    select(-ends_with("prop"))
+  } else {
+    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "pavlovia_AB_outcome_list.csv"))
+  
+  versions = data %>%
+    select(id, block, card, outcome) %>% 
+    mutate(outcome = as.numeric(outcome)) %>% 
+    filter(!is.na(outcome)) %>% 
+    group_by(id, block, card) %>% 
+    dplyr::mutate(trial_seq = 1:n()) %>% 
+    left_join(outcome_list) %>% 
+    mutate(equal_A = outcome == Deck_A, equal_B = outcome == Deck_B,
+           equal_C = outcome == Deck_C, equal_D = outcome == Deck_D) %>% 
+    group_by(id, card) %>% 
+    reframe(A_prop = mean(equal_A), B_prop = mean(equal_B),
+            C_prop = mean(equal_C), D_prop = mean(equal_D)) %>% 
+    mutate(AB_card = case_when(A_prop == 1 ~ "AB_A",
+                               B_prop == 1 ~ "AB_B",
+                               C_prop == 1 ~ "AB_C",
+                               D_prop == 1 ~ "AB_D"),
+           checked_version = case_when(str_ends(AB_card, card) ~ "AB",
+                                       str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
+    select(-ends_with("prop"))
+  }
+  
+  return(left_join(data, versions))
+}
+```
+
+
+# --------------------------------------
+# T1
+## Child
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/T1/Child/Behavioral Tasks/IGT New")
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T1_child"]] = IGT_List
+IGT_List <- IGT_List[-c(234:249)] #dropping the questionable files
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+tinames <- colnames(TADS_IGT)
+
+TADS_IGT_trim <- TADS_IGT
+
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+TADS_IGT_trim$cardGood
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+```{r, eval = T}
+dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T1_IGT_child = TADS_IGT_trim_v %>% 
+  mutate(time = "T1",
+         participant = "child",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child")))
+```
+* NOTES
+  + 5083 and 5119 don't have 120 trials  
+  
+  
+  
+## Dad
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/T1/Dad/Behavioral Tasks/IGT New")
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T1_dad"]] = IGT_List
+IGT_List <- IGT_List[-c(79:83)] #dropping the questionable files
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+tinames <- colnames(TADS_IGT)
+
+TADS_IGT_trim <- TADS_IGT
+
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+TADS_IGT_trim$cardGood
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+```{r, eval = T}
+dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T1_IGT_dad = TADS_IGT_trim_v %>% 
+  mutate(time = "T1",
+         participant = "dad",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad")))
+```
+  
+  
+  
+## Mom
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/T1/Mom/Behavioral Tasks/IGT New")
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T1_mom"]] = IGT_List
+# IGT_List <- IGT_List[-c(219:233)] #dropping the questionable files
+IGT_List <- IGT_List[-c(224:238)] #dropping the questionable files
+# remove duplicates
+IGT_List = IGT_List[-which(IGT_List %in% c("BD/playorpass - Version 2-5003-1.txt",
+                                           "BD/playorpass - Version 2-5004-1.txt",
+                                           "BD/playorpass - Version 2-5009-1.txt"
+                                           ))]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+tinames <- colnames(TADS_IGT)
+
+TADS_IGT_trim <- TADS_IGT
+
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+TADS_IGT_trim$cardGood
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+```{r, eval = T}
+dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T1_IGT_mom = TADS_IGT_trim_v %>% 
+  mutate(time = "T1",
+         participant = "mom",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version() %>% 
+  # fix participant's data because they didn't respond on any A cards
+  mutate(AB_card = case_when(id == 5139 & card == "A" ~ "AB_A",
+                             id == 5222 & card == "B" ~ "AB_B",
+                             id == 5198 & card == "D" ~ "AB_D",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5139 & card == "A" ~ "AB",
+                                     id == 5222 & card == "B" ~ "AB",
+                                     id == 5198 & card == "D" ~ "AB",
+                                     T ~ checked_version))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom")))
+```
+
+
+
+```{r, eval = T}
+saveRDS(T1_IGT_child,
+        here("1_TADS_Raw_Data", "T1_IGT_child.RDS"))
+saveRDS(T1_IGT_dad,
+        here("1_TADS_Raw_Data", "T1_IGT_dad.RDS"))
+saveRDS(T1_IGT_mom,
+        here("1_TADS_Raw_Data", "T1_IGT_mom.RDS"))
+```
+
+
+
+```{r}
+T1_IGT_child = readRDS(here("1_TADS_Raw_Data", "T1_IGT_child.RDS"))
+T1_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T1_IGT_dad.RDS"))
+T1_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T1_IGT_mom.RDS"))
+```
+
+
+
+# --------------------------------------
+# T2
+## Child
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/9mo/Child/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T2_child"]] = IGT_List
+
+#drop unnecessary files 
+IGT_List <- IGT_List[c(1:90, 92:176)]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+```{r, eval = T}
+dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T2_IGT_child = TADS_IGT_trim_v %>% 
+  mutate(time = "T2",
+         participant = "child",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child")))
+```
+
+
+
+## Dad
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/9mo/Dad/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T2_dad"]] = IGT_List
+# removing problematic files
+IGT_List = IGT_List[-which(IGT_List %in% c("AB/playorpass - Version 1-5118-1.txt" # did not respond
+                                           ))]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+```{r, eval = T}
+dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T2_IGT_dad = TADS_IGT_trim_v %>% 
+  mutate(time = "T2",
+         participant = "dad",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad")))
+```
+
+
+
+## Mom
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/9mo/Mom/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T2_mom"]] = IGT_List
+
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+```{r, eval = T}
+dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T2_IGT_mom = TADS_IGT_trim_v %>% 
+  mutate(time = "T2",
+         participant = "mom",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom")))
+```
+
+
+
+```{r, eval = T}
+saveRDS(T2_IGT_child,
+        here("1_TADS_Raw_Data", "T2_IGT_child.RDS"))
+saveRDS(T2_IGT_dad,
+        here("1_TADS_Raw_Data", "T2_IGT_dad.RDS"))
+saveRDS(T2_IGT_mom,
+        here("1_TADS_Raw_Data", "T2_IGT_mom.RDS"))
+```
+
+
+
+```{r}
+T2_IGT_child = readRDS(here("1_TADS_Raw_Data", "T2_IGT_child.RDS"))
+T2_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T2_IGT_dad.RDS"))
+T2_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T2_IGT_mom.RDS"))
+```
+
+
+
+# --------------------------------------
+# T3
+## Child
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/18mo/Child/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T3_child"]] = IGT_List
+# remove duplicates
+IGT_List = IGT_List[-which(IGT_List %in% c("BD/playorpass - Version 2-5004-1.txt"
+                                           ))]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/18mo/Pavlovia Export/Data Files/Child")
+Pavlovia_child <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_child = ldply(Pavlovia_child, read_csv)
+
+#retain only 18mo data
+Pavlovia_18mo_child = merged_child[merged_child$session == "3" | merged_child$session == "03" | merged_child$session == "003",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T3_IGT_child_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T3",
+         participant = "child",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T3_IGT_child_pavlovia = Pavlovia_18mo_child %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T3",
+         platform = "online",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T3_IGT_child = bind_rows(T3_IGT_child_eprime, T3_IGT_child_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  filter(id != 5999) # This does not seem like an actual datafile - it's not complete and there is no data on parents
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child")))
+```
+
+
+
+## Dad
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/18mo/Dad/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T3_dad"]] = IGT_List
+
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+
+
+#Assign all participant plays as 1 and all passes as a 0 
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/18mo/Pavlovia Export/Data Files/Dad")
+Pavlovia_Dad <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_Dad <- ldply(Pavlovia_Dad, read_csv)
+
+#retain only 18mo data #check all combos (003, 03, 3)
+Pavlovia_18mo_Dad <- merged_Dad[merged_Dad$session == "3" | merged_Dad$session == "03" | merged_Dad$session == "003",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T3_IGT_dad_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T3",
+         participant = "dad",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T3_IGT_dad_pavlovia = Pavlovia_18mo_Dad %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T3",
+         platform = "online",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T3_IGT_dad = bind_rows(T3_IGT_dad_eprime, T3_IGT_dad_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  filter(# no plays
+         !(id == 5034))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad")))
+```
+
+
+
+## Mom
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/18mo/Mom/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T3_mom"]] = IGT_List
+# removing duplicates
+IGT_List = IGT_List[-which(IGT_List %in% c("AB/playorpass - Version 1-5001-1.txt",
+                                           "BD/playorpass - Version 2-5004-1.txt",
+                                           "BD/playorpass - Version 2-5009-1.txt"
+                                           ))]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+
+
+#Assign all participant plays as 1 and all passes as a 0 
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/18mo/Pavlovia Export/Data Files/Mom")
+Pavlovia_Mom <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_Mom <- ldply(Pavlovia_Mom, read_csv)
+
+#retain only 18mo data #check all combos (003, 03, 3)
+Pavlovia_18mo_Mom <- merged_Mom[merged_Mom$session == "3" | merged_Mom$session == "003" | merged_Mom$session == "003",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T3_IGT_mom_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T3",
+         participant = "mom",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T3_IGT_mom_pavlovia = Pavlovia_18mo_Mom %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T3",
+         platform = "online",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T3_IGT_mom = bind_rows(T3_IGT_mom_eprime, T3_IGT_mom_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  # fix participant's data because they didn't respond on any B or C cards
+  mutate(AB_card = case_when(id == 5091 & card == "B" ~ "AB_B", 
+                             id == 5091 & card == "C" ~ "AB_C", T ~ AB_card),
+         checked_version = case_when(id == 5091 & card == "B" ~ "AB", 
+                                     id == 5091 & card == "C" ~ "AB", T ~ checked_version))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom")))
+```
+
+
+```{r, eval = T}
+saveRDS(T3_IGT_child,
+        here("1_TADS_Raw_Data", "T3_IGT_child.RDS"))
+saveRDS(T3_IGT_dad,
+        here("1_TADS_Raw_Data", "T3_IGT_dad.RDS"))
+saveRDS(T3_IGT_mom,
+        here("1_TADS_Raw_Data", "T3_IGT_mom.RDS"))
+```
+
+
+
+```{r}
+T3_IGT_child = readRDS(here("1_TADS_Raw_Data", "T3_IGT_child.RDS"))
+T3_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T3_IGT_dad.RDS"))
+T3_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T3_IGT_mom.RDS"))
+```
+
+
+
+# --------------------------------------
+# T4
+## Child
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/27mo/Child/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T4_child"]] = IGT_List
+# removing problematic files
+IGT_List = IGT_List[-which(IGT_List %in% c("Add/playorpass - Version 2-5232.1-1.txt", # duplicate
+                                           "Add/playorpass - Version 1-5265.1-1.txt", # duplicate
+                                           "Add/playorpass - Version 2-5249.1-1.txt" # duplicate
+                                           ))]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/27mo/Pavlovia Export/Data Files/Child")
+Pavlovia_child <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_child = ldply(Pavlovia_child, read_csv)
+
+#retain only 27mo data
+Pavlovia_27mo_child = merged_child[merged_child$session == "4" | merged_child$session == "04" | merged_child$session == "004",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T4_IGT_child_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T4",
+         participant = "child",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T4_IGT_child_pavlovia = Pavlovia_27mo_child %>%
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-|\\.") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T4",
+         platform = "online",
+         participant = "child",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T4_IGT_child = bind_rows(T4_IGT_child_eprime, T4_IGT_child_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom",
+                        "T4_IGT_child")))
+```
+
+
+
+## Dad
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/27mo/Dad/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T4_dad"]] = IGT_List
+# removing problematic files
+IGT_List = IGT_List[-which(IGT_List %in% c("BD/playorpass - Version 2-5034-1.txt", # did not respond
+                                           "Add/playorpass - Version 1-5249.3-1.txt" # duplicate
+                                           ))]
+
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+
+
+#Assign all participant plays as 1 and all passes as a 0 
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/27mo/Pavlovia Export/Data Files/Dad")
+Pavlovia_Dad <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_Dad <- ldply(Pavlovia_Dad, read_csv)
+
+#retain only 27mo data #check all combos (004, 04, 4)
+Pavlovia_27mo_Dad <- merged_Dad[merged_Dad$session == "4" | merged_Dad$session == "04" | merged_Dad$session == "004",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T4_IGT_dad_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T4",
+         participant = "dad",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T4_IGT_dad_pavlovia = Pavlovia_27mo_Dad %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-|\\.") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T4",
+         platform = "online",
+         participant = "dad",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T4_IGT_dad = bind_rows(T4_IGT_dad_eprime, T4_IGT_dad_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom",
+                        "T4_IGT_child", "T4_IGT_dad")))
+```
+
+
+
+## Mom
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/27mo/Mom/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T4_mom"]] = IGT_List
+# removing problematic files
+IGT_List = IGT_List[-which(IGT_List %in% c("AB/playorpass - Version 1-5001-1.txt" # duplicate
+                                           ))]
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+
+
+#Assign all participant plays as 1 and all passes as a 0 
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/27mo/Pavlovia Export/Data Files/Mom")
+Pavlovia_Mom <- list.files(pattern = "5", recursive = T)
+
+# removing problematic files
+Pavlovia_Mom = Pavlovia_Mom[-which(Pavlovia_Mom %in% c("5312.2_IGT_Fixed_2021-02-04_18h17.01.432.csv" # extra session
+                                           ))]
+
+#read files into df
+merged_Mom <- ldply(Pavlovia_Mom, read_csv)
+
+#retain only 27mo data #check all combos (004, 04, 4)
+Pavlovia_27mo_Mom <- merged_Mom[merged_Mom$session == "4" | merged_Mom$session == "04" | merged_Mom$session == "004",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T4_IGT_mom_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T4",
+         participant = "mom",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T4_IGT_mom_pavlovia = Pavlovia_27mo_Mom %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-|\\.") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T4",
+         platform = "online",
+         participant = "mom",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T4_IGT_mom = bind_rows(T4_IGT_mom_eprime, T4_IGT_mom_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  # fix participant's data because they didn't respond on some cards
+  mutate(AB_card = case_when(id == 5108 & card == "B" ~ "AB_B", 
+                             id == 5108 & card == "D" ~ "AB_D",
+                             id == 5117 & card == "D" ~ "AB_B",
+                             id == 5132 & card == "B" ~ "AB_A",
+                             id == 5132 & card == "D" ~ "AB_B",
+                             id == 5312 & card == "A" ~ "AB_A",
+                             id == 5312 & card == "B" ~ "AB_B",
+                             id == 5312 & card == "C" ~ "AB_C",
+                             id == 5312 & card == "D" ~ "AB_D",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5108 & card == "B" ~ "AB", 
+                                     id == 5108 & card == "D" ~ "AB",
+                                     id == 5117 & card == "D" ~ "BD",
+                                     id == 5132 & card == "B" ~ "BD",
+                                     id == 5132 & card == "D" ~ "BD",
+                                     id == 5312 ~ "AB",
+                                     T ~ checked_version))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom",
+                        "T4_IGT_child", "T4_IGT_dad", "T4_IGT_mom")))
+```
+
+
+```{r, eval = T}
+saveRDS(T4_IGT_child,
+        here("1_TADS_Raw_Data", "T4_IGT_child.RDS"))
+saveRDS(T4_IGT_dad,
+        here("1_TADS_Raw_Data", "T4_IGT_dad.RDS"))
+saveRDS(T4_IGT_mom,
+        here("1_TADS_Raw_Data", "T4_IGT_mom.RDS"))
+```
+
+
+
+```{r}
+T4_IGT_child = readRDS(here("1_TADS_Raw_Data", "T4_IGT_child.RDS"))
+T4_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T4_IGT_dad.RDS"))
+T4_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T4_IGT_mom.RDS"))
+```
+
+
+# --------------------------------------
+# T5
+## Child
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/36mo/Child/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T5_child"]] = IGT_List
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/36mo/Pavlovia Export/Data/Child")
+Pavlovia_child <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_child = ldply(Pavlovia_child, read_csv)
+
+#retain only 36mo data
+Pavlovia_36mo_child = merged_child[merged_child$session == "5" | merged_child$session == "05" | merged_child$session == "005",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T5_IGT_child_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T5",
+         participant = "child",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T5_IGT_child_pavlovia = Pavlovia_36mo_child %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-|\\.") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T5",
+         platform = "online",
+         participant = "child",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T5_IGT_child = bind_rows(T5_IGT_child_eprime, T5_IGT_child_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom",
+                        "T4_IGT_child", "T4_IGT_dad", "T4_IGT_mom",
+                        "T5_IGT_child")))
+# The warning message here is not a problem - basically, participant gets filled in with NAs for 5199 because there is no "."; however, we fill that in with child in mutate.
+```
+
+
+
+## Dad
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/36mo/Dad/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T5_dad"]] = IGT_List
+
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+
+
+#Assign all participant plays as 1 and all passes as a 0 
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/36mo/Pavlovia Export/Data/Dad")
+Pavlovia_Dad <- list.files(pattern = "5", recursive = T)
+
+#read files into df
+merged_Dad <- ldply(Pavlovia_Dad, read_csv)
+
+#retain only 36mo data #check all combos (005, 05, 5)
+Pavlovia_36mo_Dad <- merged_Dad[merged_Dad$session == "5" | merged_Dad$session == "05" | merged_Dad$session == "005",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T5_IGT_dad_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T5",
+         participant = "dad",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T5_IGT_dad_pavlovia = Pavlovia_36mo_Dad %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id_participant = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id_participant", into = c("id", "participant"), sep = "-|\\.") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T5",
+         platform = "online",
+         participant = "dad",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T5_IGT_dad = bind_rows(T5_IGT_dad_eprime, T5_IGT_dad_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  # fix participant's data because they didn't respond on some cards
+  mutate(AB_card = case_when(id == 5123 & card == "B" ~ "AB_B",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5123 & card == "B" ~ "AB",
+                                     T ~ checked_version))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom",
+                        "T4_IGT_child", "T4_IGT_dad", "T4_IGT_mom",
+                        "T5_IGT_child", "T5_IGT_dad")))
+```
+
+
+
+## Mom
+### E-Prime
+```{r, eval = T}
+#Identify the directory for the files and get the list of those files, adjust for visit timepoint and parent vs kid 
+setwd("S:/CADEPP/Longitudinal Imaging Project/Interviewer 3/36mo/Mom/Behavioral Tasks/IGT New")
+
+#Create a list of all the needed data files 
+IGT_List <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), list.files(pattern = "5", recursive = T)), list.files(pattern = "*-1.txt", recursive = T))
+eprime_filenames[["T5_mom"]] = IGT_List
+
+
+#Put all files together into a dataframe
+TADS_IGT <- do.call("rbind.fill", lapply(lapply(lapply(IGT_List, read_eprime), FrameList), to_data_frame))
+
+#Assign columns to visit date , i.e. ti, 9_mo, 18_mo (wasn't sure if this was why this was named this)
+#Instrumentally, I think I just wanted an object to refer to when trying to find the names I needed.
+tinames <- colnames(TADS_IGT)
+
+#Condense DataFrame to only show relevant info
+TADS_IGT_trim <- TADS_IGT
+
+#Extract participant IDs from the file name 
+TADS_IGT_trim$id <- substr(TADS_IGT_trim$Eprime.Basename, 24, 27)
+
+#Extract version 1 or 2 character from the file name 
+TADS_IGT_trim$TVer <- substr(TADS_IGT_trim$Eprime.Basename, 22, 22)
+
+#Replace 1 or 2 in file name with AB or BD respectively 
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "1"] <- "AB"
+TADS_IGT_trim$TVer[TADS_IGT_trim$TVer == "2"] <- "BD"
+
+#Call cardgood variable
+TADS_IGT_trim$cardGood
+
+#Code plays on A and B cards in the AB version as 0 and B and D cards BD version as 0 ##Need to double check this -- i think BD = 1
+TADS_IGT_trim$cardGood <- with(TADS_IGT_trim, ifelse(TVer == 'AB'& TADS_IGT_trim$cardname %in% c("A", "B"), 0, 
+                                                     ifelse(TVer == 'BD'& TADS_IGT_trim$cardname %in% c("B", "D"), 0, 1)))
+
+
+#Assign all participant plays as 1 and all passes as a 0 
+TADS_IGT_trim$cardPlay <- ifelse(TADS_IGT_trim$card.RESP == 1, 1, 0)
+
+#Make the following variables numeric 
+TADS_IGT_trim$Sample <- as.numeric(TADS_IGT_trim$Sample)
+TADS_IGT_trim$cardPlay <- as.numeric(TADS_IGT_trim$cardPlay)
+TADS_IGT_trim$cardGood <- as.numeric(TADS_IGT_trim$cardGood)
+TADS_IGT_trim$id <- as.numeric(TADS_IGT_trim$id)
+
+
+#Define Block 1 as the first 40 plays 
+
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 0 & TADS_IGT_trim$Sample < 41] <- 1
+
+#Define Block 2 as the 42-81 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 41 & TADS_IGT_trim$Sample < 82] <- 2
+
+#Define Block 3 as plays 83-122 plays 
+TADS_IGT_trim$Block[TADS_IGT_trim$Sample > 82 & TADS_IGT_trim$Sample <= 122] <- 3
+
+#Create a subsetted dataframe with just blocks and samples 
+TADS_IGT_trim_v <- subset(TADS_IGT_trim, Block > 0 & Sample < 123)
+```
+
+
+
+### Pavlovia
+```{r, warning=F, eval = T}
+#pull files from folder 
+setwd("S:/CADEPP/Kristina/IGT/36mo/Pavlovia Export/Data/Mom")
+Pavlovia_Mom <- list.files(pattern = "5", recursive = T)
+
+# removing problematic files
+Pavlovia_Mom = Pavlovia_Mom[-which(Pavlovia_Mom %in% c("5126.2_IGT_Fixed_2020-09-21_14h38.13.907.csv" # extra session
+                                           ))]
+
+#read files into df
+merged_Mom <- ldply(Pavlovia_Mom, read_csv)
+
+#retain only 36mo data #check all combos (005, 05, 5)
+Pavlovia_36mo_Mom <- merged_Mom[merged_Mom$session == "5" | merged_Mom$session == "05" | merged_Mom$session == "005",]
+```
+
+
+
+```{r, eval = T}
+eprime_dates = TADS_IGT %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T5_IGT_mom_eprime = TADS_IGT_trim_v %>% 
+  mutate(time = "T5",
+         participant = "mom",
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         platform = "in-person",
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>%
+  select(id, time, participant, platform,
+         version = TVer, card = cardname, block = Block, trial,
+         card_good = cardGood, card_RT, card_play = cardPlay, outcome) %>% 
+  left_join(eprime_dates) %>% 
+  check_version()
+
+T5_IGT_mom_pavlovia = Pavlovia_36mo_Mom %>% 
+  filter(!is.na(ChoiceBlock.thisRepN)) %>% 
+  mutate(ChoiceBlock.thisRepN = ChoiceBlock.thisRepN + 1,
+         block = case_when(Block == 1 ~ 1, Block == 3 ~ 2, Block == 5 ~ 3),
+         trial = ChoiceBlock.thisRepN + (block - 1)*40) %>% 
+  separate(col = "date", into = c("date", "time"), sep = "_") %>% 
+  select(id = participant, date, version, card = Card, block, trial,
+         card_play = CardChoice, card_RT = ChoiceResp.rt, outcome = CurrentMoney) %>% 
+  separate(col = "id", into = c("id", "participant"), sep = "-|\\.") %>% 
+  mutate(id = as.numeric(id), card_RT = card_RT*100,
+         time = "T5",
+         platform = "online",
+         participant = "mom",
+         version = case_when(version == 1 ~ "AB", version == 2 ~ "BD"),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 0,
+                               version == "AB" & card %in% c("C", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 1),
+         card_play = case_when(card_play == "play" ~ 1, T ~ 0),
+         outcome = case_when(card_play == 1 ~ outcome)) %>% 
+  check_version(eprime = F)
+
+T5_IGT_mom = bind_rows(T5_IGT_mom_eprime, T5_IGT_mom_pavlovia) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  # fix participant's data because they didn't respond on some cards
+  mutate(AB_card = case_when(id == 5295 & card == "D" ~ "AB_B",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5295 & card == "D" ~ "BD",
+                                     T ~ checked_version))
+
+rm(list=setdiff(ls(), c("check_version", "eprime_filenames",
+                        "T1_IGT_child", "T1_IGT_dad", "T1_IGT_mom",
+                        "T2_IGT_child", "T2_IGT_dad", "T2_IGT_mom",
+                        "T3_IGT_child", "T3_IGT_dad", "T3_IGT_mom",
+                        "T4_IGT_child", "T4_IGT_dad", "T4_IGT_mom",
+                        "T5_IGT_child", "T5_IGT_dad", "T5_IGT_mom")))
+```
+
+
+```{r, eval = T}
+saveRDS(T5_IGT_child,
+        here("1_TADS_Raw_Data", "T5_IGT_child.RDS"))
+saveRDS(T5_IGT_dad,
+        here("1_TADS_Raw_Data", "T5_IGT_dad.RDS"))
+saveRDS(T5_IGT_mom,
+        here("1_TADS_Raw_Data", "T5_IGT_mom.RDS"))
+```
+
+
+
+```{r}
+T5_IGT_child = readRDS(here("1_TADS_Raw_Data", "T5_IGT_child.RDS"))
+T5_IGT_dad = readRDS(here("1_TADS_Raw_Data", "T5_IGT_dad.RDS"))
+T5_IGT_mom = readRDS(here("1_TADS_Raw_Data", "T5_IGT_mom.RDS"))
+```
+
+
+
+# --------------------------------------
+# Combined Data
+## All Timepoints
+```{r, eval = T}
+full_data = bind_rows(T1_IGT_child, T1_IGT_dad, T1_IGT_mom,
+                      T2_IGT_child, T2_IGT_dad, T2_IGT_mom,
+                      T3_IGT_child, T3_IGT_dad, T3_IGT_mom,
+                      T4_IGT_child, T4_IGT_dad, T4_IGT_mom,
+                      T5_IGT_child, T5_IGT_dad, T5_IGT_mom)
+
+saveRDS(full_data, here("1_TADS_Raw_Data", "full_IGT.RDS"))
+
+saveRDS(eprime_filenames, here("1_TADS_Raw_Data", "eprime_filenames.RDS"))
+```
+
+
+
+```{r}
+full_data = readRDS(here("1_TADS_Raw_Data", "full_IGT.RDS"))
+
+eprime_filenames = readRDS(here("1_TADS_Raw_Data", "eprime_filenames.RDS"))
+```
+
+
+
+# Find Pbxs
+```{r, eval = F}
+old_full_data = readRDS(here("1_TADS_Raw_Data", "old_full_IGT_data.RDS"))
+
+pbx_IDs = filter(full_data, is.na(AB_card)) %>% 
+  group_by(id, platform, version, participant, time, date) %>% 
+  # group_by(participant) %>% 
+  reframe(id = unique(id)) %>% 
+  left_join(select(full_data, id, platform, version, participant, time, date, checked_version)) %>% 
+  group_by(id, platform, version, participant, time, date) %>% 
+  reframe(pbx = mean(ifelse(checked_version %in% c("AB", "BD"), 0, 1)))# %>% 
+  filter(# duplicates
+         !(id == 5001 & participant == "mom"),
+         !(id == 5003 & participant == "mom"),
+         !(id == 5004 & participant == "child"),
+         !(id == 5004 & participant == "mom"),
+         !(id == 5009 & participant == "mom"),
+         !(id == 5034 & participant == "dad"),
+         # non-responders
+         !(id == 5139 & participant == "mom"),
+         !(id == 5091 & participant == "mom")
+         )
+View(filter(full_data, id == 5999, 
+            # time == "T5",
+            # platform == "online"
+            # participant == "child"
+            ), title = "Checks")
+# syntax for removing duplicates
+
+  filter(!(id == 5001 & date == "05-18-2017")) %>% 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

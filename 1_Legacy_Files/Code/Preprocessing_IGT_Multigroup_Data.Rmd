@@ -1,0 +1,188 @@
+---
+title: "IGT Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Setup
+## Load Packages
+```{r}
+library(tidyverse)
+library(here)
+library(haven)
+library(lubridate)
+library(readxl)
+```
+
+
+
+# --------------------------------------
+# Drug Questionnaire Data
+## Import Data
+```{r}
+SCID = readRDS(here("1_TADS_Parents_PP", "Drugs", "processed_SCID_data.RDS")) %>% 
+  mutate(participant = tolower(participant)) %>% 
+  select(-date)
+```
+
+
+
+# --------------------------------------
+# IGT Data
+## Import Data
+```{r}
+T1_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_IGT_child.RDS"))
+T1_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_IGT_dad.RDS"))
+T1_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_IGT_mom.RDS"))
+
+
+T2_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_IGT_child.RDS"))
+T2_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_IGT_dad.RDS"))
+T2_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_IGT_mom.RDS"))
+
+
+T3_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_IGT_child.RDS"))
+T3_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_IGT_dad.RDS"))
+T3_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_IGT_mom.RDS"))
+
+
+T4_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_IGT_child.RDS"))
+T4_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_IGT_dad.RDS"))
+T4_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_IGT_mom.RDS"))
+
+
+T5_IGT_child = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_child.RDS"))
+T5_IGT_dad = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_dad.RDS"))
+T5_IGT_mom = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_IGT_mom.RDS"))
+```
+
+
+
+## Prep Data
+```{r}
+IGT_prepped = bind_rows(T1_IGT_dad, T1_IGT_mom)
+```
+
+
+
+```{r}
+IGT_data = bind_rows(T1_IGT_dad, T1_IGT_mom) %>% 
+  select(ID = id, participant, version, date,
+         trial, cardname = card, outcome, choice = card_play) %>% 
+  mutate(participant = tolower(participant),
+         card = case_when(version == "AB" & cardname == "A" ~ 1, version == "AB" & cardname == "B" ~ 2,
+                          version == "AB" & cardname == "C" ~ 3, version == "AB" & cardname == "D" ~ 4,
+                          version == "BD" & cardname == "A" ~ 3, version == "BD" & cardname == "B" ~ 1,
+                          version == "BD" & cardname == "C" ~ 4, version == "BD" & cardname == "D" ~ 2),
+         outcome = case_when(is.na(outcome) ~ 0, T ~ outcome / 100),
+         sign = case_when(is.na(outcome) ~ 0, T ~ sign(outcome)),
+         choice = case_when(choice == 1 ~ 1, # plays
+                            T ~ 2))          # passes (including skipped trials)
+```
+
+
+
+# --------------------------------------
+# Stan Data
+## Join Data
+```{r}
+combined_data = inner_join(SCID, IGT_data) %>% 
+  filter(ID >= 5000 & ID < 6000) %>% 
+  mutate(participant = case_when(participant == "mom" ~ 0, participant == "dad" ~ 1)) %>% 
+  group_by(ID, participant) %>% 
+  mutate(ID_num = cur_group_id())
+```
+
+
+
+## Create IGT Stan Data
+```{r, eval = T}
+create_data = function(data){
+
+  ID_nums = unique(data$ID_num)
+  N = length(ID_nums)
+  T = max(data$trial)
+  G = length(unique(data$group))
+  
+  ID = vector(length = N)
+  participant = vector(length = N)
+  card = matrix(data = -1, nrow = N, ncol = T)
+  Tsubj = vector(length = N)
+  group = vector(length = N)
+  choice = matrix(data = -1, nrow = N, ncol = T)
+  outcome = matrix(data = -1, nrow = N, ncol = T)
+  sign = matrix(data = -1, nrow = N, ncol = T)
+  
+  for(i in 1:N){
+    ID[i] = data$ID[data$ID_num == ID_nums[i]]
+    participant[i] = data$participant[data$ID_num == ID_nums[i]]
+    card[i,] = data$card[data$ID_num == ID_nums[i]]
+    Tsubj[i] = ifelse(length(data$trial[data$ID_num == ID_nums[i]]) == 120, 120, 0) # lets us skip participant in ORL
+    group[i] = data$group[data$ID_num == ID_nums[i]] + 1
+    choice[i,] = data$choice[data$ID_num == ID_nums[i]]
+    outcome[i,] = data$outcome[data$ID_num == ID_nums[i]]
+    sign[i,] = data$sign[data$ID_num == ID_nums[i]]
+  }
+  
+  stan_data = list(ID_num = ID_nums,
+                   ID = ID,
+                   participant = participant,
+                   N = N,
+                   T = T,
+                   G = G,
+                   card = card,
+                   Tsubj = Tsubj,
+                   group = group,
+                   choice = choice,
+                   outcome = outcome,
+                   sign = sign)
+}
+```
+
+
+
+## Save Data
+```{r, eval = T}
+orl_stan_data = create_data(mutate(combined_data,
+                                   # group = SU
+                                   # group = anxiety
+                                   group = depression
+                                   ))
+
+# sample = "T1_parent_DD" # group = drug_drink
+# sample = "T1_parent_SU" # group = SU
+# sample = "T1_parent_Anx" # group = anxiety
+sample = "T1_parent_Dep" # group = depression
+
+saveRDS(orl_stan_data, here("1_TADS_Parents_PP", "Data", "1_Stan",
+                            paste(sample, "IGT_stan_data.RDS", sep = "_")))
+```
+
+
+
+# --------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
