@@ -390,7 +390,7 @@ orl_grp_parameters %>%
             sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
                             T ~ "")) %>% ungroup() %>% 
   mutate(sig = case_when(grp_parameter == "Mu" ~ "", T ~ sig),
-         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper,2),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper, 2),
          combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>% 
   select(-c(mu, lower, upper, sig)) %>% 
   pivot_wider(names_from = "group", values_from = "combined") %>% 
@@ -669,125 +669,6 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
       facet_rep_wrap(deck~., scales = "free_y")
 dev.off()
 ```
-
-
-
-# -------------------------------------------
-# Dep Beta BetaF Follow-up
-## Prep Data
-```{r}
-con_index = ind_parameters %>% 
-  filter(dep == 0) %>%
-  filter(parameter == "betaF") %>% 
-  group_by(ID) %>% 
-  summarise(sum_abs_z = sum(abs(z))) %>% 
-  arrange(sum_abs_z) %>% head(1) %>% .$ID
-
-dep_index = ind_parameters %>% 
-  filter(dep == 1) %>%
-  filter(parameter == "betaF") %>% 
-  group_by(ID) %>% 
-  summarise(sum_abs_z = sum(abs(z))) %>% 
-  arrange(sum_abs_z) %>% head(1) %>% .$ID
-
-dep_comparison1 = 
-  bind_rows(readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
-                         model_name,
-                         paste(sample, model_name, "Dep_PPCs.rds", sep = "_"))),
-            readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
-                         model_name,
-                         paste(sample, model_name, "Dep_Con_PPCs.rds", sep = "_")))) %>%
-  mutate(ID = "group", comparison = 1,
-         group = case_when(group == "Dep_Con" ~ "Dep-", group == "Dep" ~ "Dep+")) %>% 
-  select(pred = mu, everything()) %>% 
-  group_by(ID, comparison, trial, deck, group) %>% 
-  summarise(observed = mean(observed), pred = mean(pred),
-            lower50 = mean(lower50), upper50 = mean(upper50),
-            lower95 = mean(lower95), upper95 = mean(upper95))
-
-dep_comparison2 = 
-  ind_PPCs %>% 
-    filter(ID %in% c(con_index, dep_index)) %>%
-    mutate(group = case_when(ID %in% con_index ~ "Dep-",
-                             ID %in% dep_index ~ "Dep+"),
-           deck = chartr("1234", "ABCD", as.character(deck))) %>% 
-    group_by(ID, group, deck) %>%
-    arrange(trial) %>% 
-    mutate(trial = 1:30) %>% ungroup() %>% 
-    mutate(ID = "ind", comparison = 2, observed = choice) %>% 
-    # calculate rolling averages
-    group_by(ID, group, deck) %>% 
-    arrange(trial) %>% 
-    mutate(observed = rollapply(observed, width = 6, FUN = mean,
-                                na.rm = TRUE, fill = NA, partial = T),
-           pred = rollapply(pred, width = 6, FUN = mean,
-                            na.rm = TRUE, fill = NA, partial = T))
-
-Dep_PPCs = bind_rows(dep_comparison1, dep_comparison2)
-```
-
-
-
-## Plot
-```{r}
-tiff(here("1_TADS_Parents_PP", "Figs_Tables",
-          model_name, sample, "Dep Beta BetaF Person-Level PPCs.tiff"),
-     width = 7, height = 5, units = "cm", res = 300)
-
-  # prep data
-  Dep_PPCs %>% 
-    filter(group %in% c("Dep-", "Dep+"),
-           deck %in% c("B", "D")) %>% 
-    # plotting
-    ggplot(aes(x = trial, color = group)) +
-      # geoms
-      geom_text_npc(data = data.frame(comparison = 1, deck = c("B", "D"), lab_ = c("Deck B", "Deck D")),
-                    aes(npcx = "left", npcy = "top", label = lab_),
-                    size = 3, hjust = 0, vjust = .75) +
-      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
-                  alpha = .2) +
-      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
-                  alpha = .375) +
-      geom_line(aes(y = pred), linewidth = .5) +
-      geom_point(aes(y = observed, fill = group),
-                 size = .75, shape = 21, color = "black") +
-      # scales
-      scale_y_continuous(limits = c(.5,1),
-                         breaks = seq(0,1,.25)) +
-      scale_color_manual(values = c("black", "#2184DA"), limits = c("Dep-", "Dep+")) +
-      scale_fill_manual(values = c("gray25", "#2184DA"), limits = c("Dep-", "Dep+")) +
-      # theme
-      labs(x = "Trial", y = "Proportion Play") +
-      theme_classic() +
-      theme(legend.title = element_blank(),
-            legend.background = element_rect(fill = "transparent", colour = "transparent"),
-            legend.position = c(.2, .05),
-            legend.spacing.x = unit(0, 'cm'),
-            legend.spacing.y = unit(-.25, 'cm'),
-            legend.text = element_text(size = 8),
-            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
-            legend.key.size = unit(.25, "cm"),
-            axis.title = element_text(color = "black", size = 10),
-            axis.text = element_text(color = "black", size = 8),
-            plot.margin = margin(t = .15, r = .1, unit = 'cm'),
-            strip.text = element_blank(),
-            panel.spacing.x = unit(-.15,"lines"),
-            panel.spacing.y = unit(-.25,"lines"),
-            strip.background = element_blank()
-            ) +
-      guides(color = guide_legend(override.aes = list(size = 1.25))) +
-      facet_rep_wrap(deck~comparison, scales = "free_y") +
-      facetted_pos_scales(y = list(comparison != 2 ~
-                                     scale_y_continuous(limits = c(.5,1),
-                                                        labels = c(".5", ".75", "1"),
-                                                        breaks = seq(.5,1,.25)),
-                                   comparison == 2 ~
-                                     scale_y_continuous(limits = c(0,1),
-                                                        labels = c("0", ".5", "1"),
-                                                        breaks = seq(0,1,.5))))
-dev.off()
-```
-
 
 
 # -------------------------------------------
