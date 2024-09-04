@@ -1,4 +1,5 @@
 library(dplyr)
+library(posterior)
 
 PARAMETERS <- c("Arew", "Apun", "betaF", "betaP")
 
@@ -125,7 +126,7 @@ make_stan_data_growth <- function(task_data, survey_data, formula, time_variable
   X <- lapply(named_formulas, function(f) model.matrix(f, comb_data))
   D_end <- cumsum(sapply(X, ncol))
   D <- D_end[length(D_end)]
-  D_start <- c(1, D_end[2:length(D_end)]-1)
+  D_start <- c(1, D_end[-length(D_end)] + 1)
   names(D_start) <- names(D_end)
   design_matrix <- array(0, c(n_subj, t_max, D))
   
@@ -208,3 +209,11 @@ parse_formula <- function(text) {
   return(named_formulas)
 }
 
+par_from_draws <- function(fit, par) {
+  rvars_pars <- as_draws_rvars(
+    fit$draws(
+      c(par)
+    )
+  )
+  return(lapply(rvars_pars, draws_of))
+}
