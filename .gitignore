@@ -25,6 +25,8 @@
 # Ignore some of Jerem'ys folders
 dead_end_models/
 Manuscript/
+1_TADS_Parents_PP/Data/0_Raw/
+1_TADS_Parents_PP/Old/
 1_IGT_PP/Test-Retest IGT PP Manuscript/
 1_TADS_Parents_PP/TADS - T1 SU, Dep, Anx IGT PP Manuscript/
 1_TADS_Parents_PP/Data/0_Raw/Raw_T1_Dad/

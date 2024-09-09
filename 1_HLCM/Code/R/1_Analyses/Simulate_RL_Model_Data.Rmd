@@ -121,8 +121,8 @@ ggplot(test_data, aes(x = trial, y = prob, color = sim)) +
 # CONDITIONS
 condition = list(
                  # # small slope effect & weak correlation
-                 # mu_beta_UT  = c("Lo" = 0),
-                 # int_slope_R = c("Lo" = 0))
+                 mu_beta_UT  = c("Lo" = 0),
+                 int_slope_R = c("Lo" = 0))
                  
                  # large slope effect & weak correlation
                  # mu_beta_UT  = c("Hi" = .5),
@@ -133,8 +133,8 @@ condition = list(
                  # int_slope_R = c("Hi" = .5))
                  
                  # # large slope effect & strong correlation
-                 mu_beta_UT  = c("Hi" = .5),
-                 int_slope_R = c("Hi" = .5))
+                 # mu_beta_UT  = c("Hi" = .5),
+                 # int_slope_R = c("Hi" = .5))
 
 
 # SPECIFY SESSIONS & SAMPLE SIZE
@@ -178,12 +178,12 @@ As = pnorm(A_UTs)
 ## Inspect Parameters
 ```{r, eval = T}
 # plot untransformed As
-plot(rep(1:S, N), A_UTs) +
+plot(rep(1:S, each = N), A_UTs) +
   points(1:S, apply(A_UTs, 2, mean),
          pch = 15, col = "red", cex = 1.5)
 
 # plot transformed As
-plot(rep(1:S, N), pnorm(A_UTs)) +
+plot(rep(1:S, each = N), pnorm(A_UTs)) +
   points(1:S, apply(As, 2, mean),
          pch = 15, col = "red", cex = 1.5)
 
