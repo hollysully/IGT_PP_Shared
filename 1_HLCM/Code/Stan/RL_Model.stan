@@ -12,12 +12,12 @@ parameters {
   // THIS CAN BE USED FOR ANY SINGLE-PARAMETER MODEL
   real gamma00;          // group-level mean
   real<lower=0> sigma_U; // SD of unbounded theoretical parameter
-  vector[N] z_U;       // standardized person-specific deviations from group-level mean
+  vector[N] z_U;         // standardized person-specific deviations from group-level mean
 }
 
 
 transformed parameters {
-  vector[N] U;     // person-specific deviations (in SD units of theoretical parameter) from group-level mean
+  vector[N] U;     // person-specific deviations (in SD units of unbounded theoretical parameter) from group-level mean
   vector[N] theta; // unbounded theoretical model-parameter for each participant
   
   U = sigma_U * z_U;   // calculate person-specific deviations

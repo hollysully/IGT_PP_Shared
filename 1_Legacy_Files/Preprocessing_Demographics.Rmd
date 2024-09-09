@@ -1,0 +1,80 @@
+---
+title: "Drug Data Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# --------------------------------------
+# Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(plyr)
+library(here)
+```
+
+
+
+# --------------------------------------
+# Import Demographics
+```{r, warning=F}
+raw_demographics = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets Spring 2022/Demographic Info/FINALIZED_Demoinfo_7.1.22_KD.csv")
+```
+
+
+
+## Process Data
+```{r}
+demographics = raw_demographics %>% 
+  # removing parents with multiple children in study (they contributed two lines of data which messes up the preprocessing)
+  filter(!(id == 5003 & Age_T1Child == 13.6),
+         !(id == 5004 & Age_T1Child == 13.0),
+         !(id == 5009 & Age_T1Child == 11.0)) %>% 
+  select(ID = id, mom_age = T1_Q_Age_Mom, dad_age = T1_Q_Age_Dad, income = T1_income,
+         gender_primary = Gender_PrimaryParent, gender_secondary = Gender_SecondaryParent,
+         ethnicity_primary = Ethnicity_PrimaryParent, ethnicity_secondary = Ethnicity_SecondaryParent,
+         race_primary = Race_PrimaryParent, race_secondary = Race_SecondaryParent) %>% 
+  mutate(gender_primary = case_when(gender_primary == 2 ~ "Male", gender_primary == 1 ~ "Female"),
+         gender_secondary = case_when(gender_secondary == 2 ~ "Male", gender_secondary == 1 ~ "Female"),
+         race_primary = case_when(race_primary == 1 ~ "prefer not to anwer",
+                                  race_primary == 2 ~ "White",
+                                  race_primary == 3 ~ "Black/AA",
+                                  race_primary == 4 ~ "Asian",
+                                  race_primary == 5 ~ "Pacific Islander",
+                                  race_primary == 6 ~ "Native American/Alaskan Native",
+                                  race_primary == 7 ~ "Multiracial",
+                                  race_primary == 8 ~ "Not listed"),
+         race_secondary = case_when(race_secondary == 1 ~ "prefer not to anwer",
+                                    race_secondary == 2 ~ "White",
+                                    race_secondary == 3 ~ "Black/AA",
+                                    race_secondary == 4 ~ "Asian",
+                                    race_secondary == 5 ~ "Pacific Islander",
+                                    race_secondary == 6 ~ "Native American/Alaskan Native",
+                                    race_secondary == 7 ~ "Multiracial",
+                                    race_secondary == 8 ~ "Not listed"),
+         ethnicity_primary = case_when(ethnicity_primary == 0 ~ "non-hispanic",
+                                       ethnicity_primary == 1 ~ "hispanic"),
+         ethnicity_secondary = case_when(ethnicity_secondary == 0 ~ "non-hispanic",
+                                         ethnicity_secondary == 1 ~ "hispanic")) %>% 
+  pivot_longer(cols = c(ends_with("primary"), ends_with("secondary")),
+               names_to = "vx", values_to = "demographic") %>% 
+  mutate(parent = case_when(str_detect(vx, "primary") ~ "primary",
+                            str_detect(vx, "secondary") ~ "secondary"),
+         vx = str_remove(vx, c("_primary|_secondary"))) %>% 
+  pivot_wider(names_from = "vx", values_from = "demographic")
+  
+
+
+saveRDS(demographics, here("1_TADS_Parents_PP", "Data", "0_Raw", 
+                           "demographics_data.RDS"))
+```
+
+
+
+
+
+
+
