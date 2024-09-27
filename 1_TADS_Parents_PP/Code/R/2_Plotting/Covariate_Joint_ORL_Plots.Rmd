@@ -303,8 +303,9 @@ processed_posteriors %>%
 
 # -------------------------------------------
 # Figure 1: Diag PPC Plots
-## Prep PPC Data
-```{r}
+```{r, eval = F}
+# -------------------------------------------
+# PREP DATA
 diag_PPCs = 
   bind_rows(readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
                          model_name,
@@ -324,12 +325,10 @@ diag_PPCs =
               lower95 = mean(lower95), upper95 = mean(upper95)) %>%
     ungroup() %>% 
     mutate(group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"), ordered = T))
-```
 
 
-
-## Build Plot
-```{r}
+# -------------------------------------------
+# BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure 1 - Diag PPC Plots.tiff"),
      width = 14.6, height = 8, units = "cm", res = 300)
@@ -385,8 +384,8 @@ dev.off()
 
 # -------------------------------------------
 # Figure 2: Diag Posterior Plots
-## Prep Posterior Distribution Data
 ```{r, eval = F}
+# -------------------------------------------
 # ORGANIZE DATA
 orl_diag_parameters = data.frame(
   iteration = 1:((orl_fit@sim$iter -
@@ -427,6 +426,8 @@ orl_diag_parameters = data.frame(
          group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"),
                         ordered = T))
 
+
+# -------------------------------------------
 # SAVE DATA
 orl_diag_parameters %>% 
   group_by(group, grp_parameter, orl_parameter) %>% 
@@ -446,12 +447,10 @@ orl_diag_parameters %>%
   write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
                model_name, sample,
                "Diag_Descriptives.csv"))
-```
 
 
-
-## Build Plot
-```{r, eval = F}
+# -------------------------------------------
+# BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure 2 - Diag Posterior Distributions.tiff"),
      width = 7, height = 10, units = "cm", res = 300)
@@ -517,8 +516,9 @@ dev.off()
 
 # -------------------------------------------
 # Figure 3: Sex PPC Plots
-## Prep PPC Data
 ```{r, eval = F}
+# -------------------------------------------
+# PREP DATA
 sex_PPCs = 
   bind_rows(readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
                          model_name,
@@ -533,12 +533,10 @@ sex_PPCs =
     ungroup() %>% 
     mutate(group = factor(group, levels = c("Male", "Female"),
                           labels = c("Men", "Women"), ordered = T))
-```
 
 
-
-## Build Plot
-```{r}
+# -------------------------------------------
+# BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure 3 - Sex PPC Plots.tiff"),
      width = 6, height = 8, units = "cm", res = 300)
@@ -594,7 +592,6 @@ dev.off()
 
 # -------------------------------------------
 # Figure 4: Sex Posterior Plots
-## Prep Posterior Distribution Data
 ```{r, eval = F}
 # ORGANIZE DATA
 orl_sex_parameters = data.frame(
@@ -625,6 +622,8 @@ orl_sex_parameters = data.frame(
          sex = factor(sex, levels = c("male", "female"), labels = c("Men", "Women"),
                       ordered = T))
 
+
+# -------------------------------------------
 # SAVE DATA
 orl_sex_parameters %>% 
   group_by(sex, grp_parameter, orl_parameter) %>% 
@@ -644,12 +643,10 @@ orl_sex_parameters %>%
   write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
                model_name, sample,
                "Sex_Descriptives.csv"))
-```
 
 
-
-## Build Plot
-```{r, eval = F}
+# -------------------------------------------
+# BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure 4 - Sex Posterior Distributions.tiff"),
      width = 7, height = 10, units = "cm", res = 300)
@@ -714,8 +711,9 @@ dev.off()
 
 # -------------------------------------------
 # Figure S1: Differences w/Anxiety
-## Calculate Par Diffs
-```{r}
+```{r, eval = F}
+# -------------------------------------------
+# CALCULATE PARAMETER DIFFERENCES
 ind_parameters = data.frame(
   ID = stan_data$ID_participant,
   anx = stan_data$X[,2,],
@@ -748,12 +746,10 @@ ind_parameters = data.frame(
                values_to = "estimate_group", names_to = "group", names_prefix = "estimate_") %>% 
   mutate(con = case_when(anx + dep + sud == 0 ~ 1, T ~ 0),
          z = (estimate_group - estimate_ind) / estimate_SD)
-```
 
 
-
-## Prep Data
-```{r}
+# -------------------------------------------
+# SUBSET DATA
 con_index = ind_parameters %>% 
   filter(con == 0) %>%
   filter(parameter == "Apun") %>%
@@ -802,12 +798,10 @@ anx_comparison2 =
                             na.rm = TRUE, fill = NA, partial = T))
 
 Anx_PPCs = bind_rows(anx_comparison1, anx_comparison2)
-```
 
 
-
-## Build Plot
-```{r}
+# -------------------------------------------
+# BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure S1 - Anx Beta Apun PPCs.tiff"),
      width = 14.6, height = 10, units = "cm", res = 300)
@@ -869,57 +863,84 @@ dev.off()
 # -------------------------------------------
 # Figure S2: Sex-Differences
 ## Prep Data
-```{r}
+```{r, eval = F}
+# -------------------------------------------
+# SETUP FOR DATA
 card_indices = data.frame(A = stan_data$card[1,,] == 1,
                           B = stan_data$card[1,,] == 2,
                           C = stan_data$card[1,,] == 3,
                           D = stan_data$card[1,,] == 4)
 sex_indices = data.frame(male = stan_data$X[,5,] == 0,
                          female = stan_data$X[,5,] == 1)
-choice_pred = ifelse(orl_posteriors$choice_pred == 2, 0, 1)
+trials = 1:30
 
+
+# -------------------------------------------
+# BUILD DATA
 session_wide_data = data.frame()
 for(cur_sex in c("male", "female")){
   for(cur_card in c("A", "B", "C", "D")){
-    cur_hdi = HDIofMCMC(apply(choice_pred[,sex_indices[[cur_sex]],card_indices[[cur_card]],], 1, mean))
+    # SUBSET CURRENT DATA
+    cur_pred = ifelse(orl_posteriors$choice_pred[, sex_indices[[cur_sex]], card_indices[[cur_card]],][,,trials] == 2, 0, 1)
+    cur_obs = ifelse(stan_data$choice[sex_indices[[cur_sex]],card_indices[[cur_card]],][,trials] == 2, 0, 1)
+    cur_hdi = HDIofMCMC(apply(cur_pred, 1, mean))
+    apply(cur_obs, 1, mean)
     session_wide_data =
       data.frame(
         ID = stan_data$ID_number[sex_indices[[cur_sex]]],
         sex = cur_sex, 
         card = cur_card,
-        obs = apply(ifelse(stan_data$choice == 2, 0, 1)[sex_indices[[cur_sex]],,], 1, mean),
-        obs_mean = mean(apply(ifelse(stan_data$choice == 2, 0, 1)[sex_indices[[cur_sex]],card_indices[[cur_card]],], 1, mean)),
-        pred = mean(apply(choice_pred[,sex_indices[[cur_sex]],card_indices[[cur_card]],], 1, mean)),
+        trials = paste(min(trials), max(trials), sep = "-"),
+        obs = apply(cur_obs, 1, mean),
+        obs_mean = mean(apply(cur_obs, 1, mean)),
+        pred = mean(apply(cur_pred, 1, mean)),
         lower = cur_hdi[1],
         upper = cur_hdi[2]) %>% 
       bind_rows(session_wide_data)
   }
 }
+
+
+# -------------------------------------------
+# SAVE DATA
+saveRDS(session_wide_data, 
+        here("1_TADS_Parents_PP", "Data", "2_Fitted",
+             model_name,
+             paste(sample, model_name, "Proportion_Play_Sex_PPCs.rds", sep = "_")))
 ```
 
 
-
 ## Build Plot
-```{r}
+```{r, eval = F}
+# -------------------------------------------
+# LOAD DATA
+session_wide_data = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                 model_name,
+                                 paste(sample, model_name, "Proportion_Play_Sex_PPCs.rds", sep = "_")))
+
+
+# -------------------------------------------
+# BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure S2 - Sex Proportion Play.tiff"),
-     width = 7, height = 4, units = "cm", res = 300)
+     width = 7, height = 4.5, units = "cm", res = 300)
 
   session_wide_data %>% 
     ggplot(aes(x = card, y = obs,
                group = interaction(sex, card), fill = sex, color = sex)) +
-      geom_violin(position = position_dodge(width = .75), trim = F, alpha = .25) +
+      geom_violin(position = position_dodge(width = .75), trim = F, alpha = .35) +
       geom_crossbar(aes(y = obs_mean, ymin = obs_mean, ymax = obs_mean), show.legend = F,
                     position = position_dodge(width = .75), linewidth = .5, fatten = 0) +
-      geom_point(aes(y = pred), color = "black", shape = 21, fill = "white",
-                 show.legend = F,
-                 position = position_dodge(width = .75), alpha = .25) +
-      scale_color_manual(values = c("goldenrod3", "dodgerblue2"),
-                         labels = c("male" = "Male", "female" = "Female")) +
-      scale_fill_manual(values = c("goldenrod3", "dodgerblue2"),
-                        labels = c("male" = "Male", "female" = "Female")) +
+      geom_point(aes(y = pred), shape = 21, fill = "white",
+                 show.legend = F, stroke = .75,
+                 position = position_dodge(width = .75)) +
+      scale_color_manual(values = c("gray60", "black"),
+                         labels = c("male" = "Men", "female" = "Women")) +
+      scale_fill_manual(values = c("gray60", "black"),
+                        labels = c("male" = "Men", "female" = "Women")) +
       scale_y_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25)) +
-      labs(y = "Proportion Play") +
+      labs(x = "Deck", y = "Proportion Play") +
+      coord_cartesian(clip = "off") +
       theme_classic() +
       theme(legend.title = element_blank(),
             legend.position = c(.975, .15),
@@ -929,7 +950,6 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             legend.key.width = unit(.3, "cm"),
             legend.background = element_rect(fill = "transparent", colour = "transparent"),
             plot.margin = unit(c(.15, .65, .1, .1), "cm"),
-            axis.title.x = element_blank(),
             axis.text = element_text(color = "black"))
   
 dev.off()
@@ -940,7 +960,7 @@ dev.off()
 # -------------------------------------------
 # Correlations with BIS/BAS
 ## Calculate Cors
-```{r, eval = T}
+```{r, eval = F}
 ORL_BIS_BAS = data.frame()
 
 for(p in c("Arew", "Apun", "betaF", "betaB")) {

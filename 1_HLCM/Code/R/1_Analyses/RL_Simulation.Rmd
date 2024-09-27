@@ -1,0 +1,325 @@
+---
+title: "RL Simulation"
+output: html_document
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(MASS)
+library(ggh4x)
+library(grid)
+library(extraDistr)
+library(lme4)
+```
+
+
+## Functions
+```{r, eval = T}
+#------------------------------------------------------------------------------
+# USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
+softmax = function(values){
+  return(exp(values) / sum(exp(values)))
+}
+
+data = data.frame()
+
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_RL = function(learning_rate = .5, n_trials = 100,
+                       Sr_probs = c(.3, .7), label = "") {
+  A = learning_rate
+  utility = rep(0,2)
+    
+  for(t in 1:n_trials){
+    prob = softmax(c(utility[1], utility[2]))
+    
+    choice = sample(c(1,2), 1, prob = prob)
+    
+    outcome = rbinom(1, 1, Sr_probs[choice])
+    
+    data = data.frame(sim = label,
+                      A = A,
+                      trial = t,
+                      prob_1 = prob[1],
+                      prob_2 = prob[2],
+                      utility_1 = utility[1],
+                      utility_2 = utility[2],
+                      outcome = outcome,
+                      choice = choice) %>% 
+      bind_rows(data)
+    
+    utility[choice] = utility[choice] + A * (outcome - utility[choice])
+  }
+  data %>%
+    return()
+}
+```
+
+
+# -------------------------------------------
+# Simulation
+## Setup
+```{r}
+# -----------------------------------------------------------------------------------
+# SPECIFY CONDITIONS FOR SIMULATION
+S             = 3
+N             = 50
+n_simulations = 10
+conditions    = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+RL_model      = stan_model(here("1_HLCM", "Code", "Stan", "RL_Model.stan")) # Compile model
+HLCM_RL_model = stan_model(here("1_HLCM", "Code", "Stan", "HLCM_RL_Model.stan")) # Compile model
+n_iter        = 200
+n_warmup      = 100
+n_chains      = 4
+
+
+# -----------------------------------------------------------------------------------
+# SET VARYING PARAMETERS
+HLM_parameters = list(# small slope effect & weak correlation
+                      LoB_LoR = c(mu_beta_UT  = 0,
+                                  int_slope_R = 0),
+                      # large slope effect & weak correlation
+                      HiB_LoR = c(mu_beta_UT  = .3,
+                                  int_slope_R = 0),
+                      # small slope effect & strong correlation
+                      LoB_HiR = c(mu_beta_UT  = 0,
+                                  int_slope_R = .3),
+                      # large slope effect & strong correlation
+                      HiB_HiR = c(mu_beta_UT  = .3,
+                                  int_slope_R = .3))
+```
+
+
+## Loop Through Conditions
+```{r, eval = T}
+set.seed(20240924)
+
+for(condition in conditions){ # LOOP THROUGH CONDITIONS
+  for(sim in 1:n_simulations){
+    # -----------------------------------------------------------------------------------
+    # SET GROUP-LEVEL PARAMETERS
+    # group-level parameters
+    mu_intercept_UT = qnorm(.1) # mean untransformed intercept for learning rate
+    sd_intercept_UT = 1         # standard deviation of intercepts
+    sd_beta_UT = 1              # standard deviation of slopes
+    residual_sd = 1             # residual standard deviation
+    # mean untransformed slope for learning rate
+    mu_beta_UT = HLM_parameters$LoB_LoR[["mu_beta_UT"]]
+    # intercept-slope correlation
+    int_slope_R = HLM_parameters$LoB_LoR[["int_slope_R"]]
+    
+    # build variance-covariance matrix
+    R = matrix(data = c(1, int_slope_R, int_slope_R, 1),
+               nrow = 2, ncol = 2) # correlation matrix
+    SD = diag(c(sd_intercept_UT, sd_beta_UT)) # SD matrix
+    VC = SD%*%R%*%SD # variance-covariance matrix
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SIMULATE PERSON-LEVEL PARAMETERS
+    # intercepts & slopes
+    parameters = mvrnorm(N, mu = c(mu_intercept_UT, mu_beta_UT), Sigma = VC) # draw from MVT Normal
+    
+    # calculate learning rates
+    A_UTs = parameters[,1] + parameters[,2]%*%t(1:S-1) + replicate(S, rnorm(N, 0, residual_sd))
+    As = pnorm(A_UTs)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SIMULATE CHOICE DATA
+    sim_data = data.frame()
+    for(i in 1:N){
+      for(s in 1:S){
+        sim_data = simulate_RL(learning_rate = As[i,s], 
+                               label = as.numeric(paste(s, i, sep = "0"))) %>% 
+          mutate(ID = i, session = s) %>% 
+          bind_rows(sim_data)
+      }
+    }
+    
+    
+    # -----------------------------------------------------------------------------------
+    # CONVERT TO STAN DATA
+    Tr = max(sim_data$trial)
+    choice = array(-1, dim = c(N,Tr,S))
+    outcome = array(0, dim = c(N,Tr,S))
+    
+    for(s in 1:S){
+      for(i in 1:N){
+        cur_data = filter(sim_data, session == s, ID == i) %>% 
+          arrange(trial)
+        choice[i,,s] = cur_data$choice
+        outcome[i,,s] = cur_data$outcome
+      }
+    }
+    
+    
+    stan_data = list(N = N,
+                     T = Tr,
+                     S = S,
+                     choice = choice,
+                     outcome = outcome)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # FIT SIMPLE RL MODEL & EXTRACT ESTIMATES
+    fit_durations = list()
+    gamma00s = vector(length = S)
+    sigma_Us = vector(length = S)
+    estimated_A_UTs = matrix(data = NA, nrow = N, ncol = S)
+    estimated_As = matrix(data = NA, nrow = N, ncol = S)
+    rhats = data.frame()
+    
+    for(s in 1:stan_data$S){
+      # Fit model
+      start_time = Sys.time()
+      RL_fit = sampling(RL_model, 
+                        data   = list(N = stan_data$N,
+                                      T = stan_data$T,
+                                      choice = stan_data$choice[,,s],
+                                      outcome = stan_data$outcome[,,s]),
+                        iter   = n_iter,
+                        warmup = n_warmup,
+                        chains = n_chains,
+                        cores  = 4,
+                        seed   = 43210,
+                        save_warmup = F)
+      end_time = Sys.time()
+      # GET FIT DURATIONS
+      fit_durations[[s]] = diff.POSIXt(c(start_time, end_time))
+      
+      # EXTRACT POSTERIOR MEANS
+      RL_posteriors = extract(RL_fit) # save posteriors
+      gamma00s[s] = mean(RL_posteriors$gamma00)
+      sigma_Us[s] = mean(RL_posteriors$sigma_U)
+      estimated_A_UTs[,s] = apply(RL_posteriors$theta, 2, mean)
+      estimated_As[,s] = apply(RL_posteriors$A, 2, mean)
+      
+      # EXTRACT RHATS
+      cur_rhats = rhat(RL_fit, pars = c("gamma00", "sigma_U", "theta", "A"))
+      rhats = data.frame(parameter = names(cur_rhats), session = s, rhat = cur_rhats) %>% 
+        bind_rows(rhats)
+    }
+    
+    growth_model = data.frame(ID = 1:N, A_UTs = estimated_A_UTs) %>%
+      pivot_longer(starts_with("A_UTs"), names_to = "session", values_to = "A_UT",
+                   names_prefix = "A_UTs.", names_transform = list(session = as.numeric)) %>% 
+      lmer(A_UT ~ session + (session|ID),
+           data = ., REML = T)
+    
+    
+    saveRDS(list(
+      # SETUP FOR SIMULATION & FIT STATISTICS
+      condition = condition,
+      S = S,
+      N = N,
+      sim = sim,
+      fit_durations = fit_durations,
+      rhats = rhats,
+      lmer_singular = isSingular(growth_model),
+      # TRUE PARAMETERS
+      ## GROUP-LEVEL PARAMETERS
+      true_mu_intercept_UT = mu_intercept_UT,
+      true_sd_intercept_UT = sd_intercept_UT,
+      true_mu_beta_UT = mu_beta_UT,
+      true_sd_beta_UT = sd_beta_UT,
+      true_residual_sd = residual_sd,
+      true_int_slope_R = int_slope_R,
+      ## PERSON-LEVEL PARAMETERS
+      true_A_UT = A_UTs,
+      true_A = As,
+      # ESTIMATED PARAMETERS
+      ## GROUP-LEVEL PARAMETERS
+      est_mu_intercept_UT = summary(growth_model)$coefficients["(Intercept)", "Estimate"],
+      est_sd_intercept_UT = attr(VarCorr(growth_model)$ID, "stddev")[["(Intercept)"]],
+      est_mu_beta_UT = summary(growth_model)$coefficients["session", "Estimate"],
+      est_sd_beta_UT = attr(VarCorr(growth_model)$ID, "stddev")[["session"]],
+      est_residual_sd = sigma(growth_model),
+      est_int_slope_R = attr(VarCorr(growth_model)$ID, "correlation")["(Intercept)", "session"],
+      # CONFIDENCE INTERVALS
+      est_mu_beta_UT_CI = confint(growth_model, method = "Wald")["session",],
+      est_int_slope_R_CI = confintr::ci_cor(coef(growth_model)$ID[,1],
+                                            coef(growth_model)$ID[,2]),
+      # PERSON-LEVEL PARAMETERS
+      est_A_UTs = estimated_A_UTs,
+      est_As = estimated_As),
+      here("1_HLCM", "Data", "2_Fitted",
+           paste0("RL_", condition), paste0("sim", sim, ".RDS")))
+    
+    # -----------------------------------------------------------------------------------
+    # FIT HIERARCHICAL RL MODEL & EXTRACT ESTIMATES
+    start_time = Sys.time()
+    HLCM_RL_fit = sampling(HLCM_RL_model, 
+                           data   = stan_data, 
+                           iter   = n_iter,
+                           warmup = n_warmup,
+                           chains = n_chains,
+                           cores  = 4,
+                           seed   = 43210,
+                           save_warmup = F)
+    end_time = Sys.time()
+    # GET FIT DURATIONS
+    fit_duration = diff.POSIXt(c(start_time, end_time))
+    HLCM_RL_posteriors = extract(HLCM_RL_fit)
+        
+    
+    saveRDS(list(
+      # SETUP FOR SIMULATION & FIT STATISTICS
+      condition = condition,
+      S = S,
+      N = N,
+      sim = sim,
+      fit_durations = fit_durations,
+      rhats = rhat(HLCM_RL_fit, pars = c("gamma00", "sigma_U", "theta", "A")),
+      # TRUE PARAMETERS
+      ## GROUP-LEVEL PARAMETERS
+      true_mu_intercept_UT = mu_intercept_UT,
+      true_sd_intercept_UT = sd_intercept_UT,
+      true_mu_beta_UT = mu_beta_UT,
+      true_sd_beta_UT = sd_beta_UT,
+      true_residual_sd = residual_sd,
+      true_int_slope_R = int_slope_R,
+      ## PERSON-LEVEL PARAMETERS
+      true_A_UT = A_UTs,
+      true_A = As,
+      # ESTIMATED PARAMETERS
+      ## GROUP-LEVEL PARAMETERS
+      est_mu_intercept_UT = mean(HLCM_RL_posteriors$gamma00),
+      est_sd_intercept_UT = mean(HLCM_RL_posteriors$sigma_U[,1]),
+      est_mu_beta_UT = mean(HLCM_RL_posteriors$gamma10),
+      est_sd_beta_UT = mean(HLCM_RL_posteriors$sigma_U[,2]),
+      est_residual_sd = mean(HLCM_RL_posteriors$R),
+      est_int_slope_R = mean(HLCM_RL_posteriors$R_theta[,2,1]),
+      # CREDIBLE INTERVALS
+      est_mu_beta_UT_CI = HDIofMCMC(HLCM_RL_posteriors$gamma10),
+      est_int_slope_R_CI = HDIofMCMC(HLCM_RL_posteriors$R_theta[,2,1]),
+      # PERSON-LEVEL PARAMETERS
+      est_A_UTs = t(apply(HLCM_RL_posteriors$theta, c(2,3), mean)),
+      est_As = t(apply(HLCM_RL_posteriors$A, c(2,3), mean))),
+      here("1_HLCM", "Data", "2_Fitted",
+           paste0("HLCM_RL_", condition), paste0("sim", sim, ".RDS")))
+  }
+}
+```
+
+
+# -------------------------------------------
+
+
+
+

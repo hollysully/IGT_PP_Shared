@@ -33,8 +33,8 @@ library(lme4)
 ## Specify Condition
 ```{r}
 # condition = "LoB_LoR"
-condition = "HiB_LoR"
-# condition = "LoB_HiR"
+# condition = "HiB_LoR"
+condition = "LoB_HiR"
 # condition = "HiB_HiR"
 ```
 
@@ -101,6 +101,7 @@ for(s in 1:stan_data$S){
                     seed   = 43210,
                     save_warmup = F)
   timestamp$end = Sys.time()
+  timestamp$diff = diff.POSIXt(c(timestamp$start, timestamp$end))
   
   saveRDS(timestamp, here("1_HLCM", "Data", "2_Fitted", paste0("RL_", condition),
                           paste0("S", s, "_Timestamp.RDS")))
@@ -175,7 +176,7 @@ for(s in 1:stan_data$S){
   for(i in c("z_U", "U", "theta", "A")){
     tiff(here("1_HLCM", "Figs_Tables", paste0("RL_", condition),
               paste0("S", s, "_", i, "_traceplots.tiff")),
-         width = 100, height = 100, units = "cm", res = 300)
+         width = 50, height = 50, units = "cm", res = 300)
       traceplot(RL_fit[[paste0("S", s)]], pars = i ) %>% print()
       dev.off()
   }
@@ -279,13 +280,14 @@ growth_model
 ```{r}
 paste0("Intercept: ",
        "True = ", round(parameters$mu_intercept_UT, 3), " & ",
-       "Estimated = ", round(summary(growth_model)$coefficients["(Intercept)", "Estimate"], 3),
-       ", p = ", round(car::Anova(growth_model, type = "III")["(Intercept)", "Pr(>Chisq)"], 3))
+       "Estimated = ", round(summary(growth_model)$coefficients["(Intercept)", "Estimate"], 3))
 
+cur_p = round(car::Anova(growth_model, type = "III")["session", "Pr(>Chisq)"], 3)
+cur_p = ifelse(cur_p == 0, "< .05", paste0("= ", cur_p))
 paste0("Slope: ",
        "True = ", round(parameters$mu_beta_UT, 3), " & ",
        "Estimated = ", round(summary(growth_model)$coefficients["session", "Estimate"], 3),
-       ", p = ", round(car::Anova(growth_model, type = "III")["session", "Pr(>Chisq)"], 3))
+       ", p = ", cur_p)
 
 paste("Intercept-Slope Correlation:",
       "True =", round(parameters$int_slope_R, 3), "&",

@@ -29,24 +29,6 @@ library(extraDistr)
 ```
 
 
-## Specify Condition
-```{r}
-condition = "LoB_LoR"
-# condition = "HiB_LoR"
-# condition = "LoB_HiR"
-# condition = "HiB_HiR"
-```
-
-
-## Load Data
-```{r}
-parameters = readRDS(here("1_HLCM", "Data", "0_Simulated_RL",
-                          paste0("RL_parameters_", condition, ".RDS")))
-stan_data = readRDS(here("1_HLCM", "Data", "1_Stan",
-                         paste0("RL_choices_", condition, ".RDS")))
-```
-
-
 # -------------------------------------------
 # Check Priors
 ```{r, eval = F}
@@ -106,36 +88,61 @@ RL_model = stan_model(here("1_HLCM", "Code", "Stan", "HLCM_RL_Model.stan")) # Co
 
 # -----------------------------------------------------------------------------------
 # Fit model
-timestamp = list()
-timestamp$start = Sys.time()
-RL_fit = sampling(RL_model, 
-                  data   = stan_data, 
-                  iter   = 1200, 
-                  warmup = 500, 
-                  chains = 1, 
-                  cores  = 4,
-                  seed   = 43210,
-                  save_warmup = F)
-timestamp$end = Sys.time()
+for(condition in c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")){
+  stan_data = readRDS(here("1_HLCM", "Data", "1_Stan",
+                           paste0("RL_choices_", condition, ".RDS")))
+  
+  timestamp = list()
+  timestamp$start = Sys.time()
+  RL_fit = sampling(RL_model, 
+                    data   = stan_data, 
+                    iter   = 5000, 
+                    warmup = 1000, 
+                    chains = 4, 
+                    cores  = 4,
+                    seed   = 43210,
+                    save_warmup = F)
+  timestamp$end = Sys.time()
+  
+  saveRDS(timestamp, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
+                          paste0("HLCM_RL_", condition, "_Timestamp.RDS")))
+  saveRDS(RL_fit, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
+                       paste0("HLCM_RL_", condition, "_Fit.RDS")))
+  
+  # -----------------------------------------------------------------------------------
+  # save posteriors
+  RL_posteriors = extract(RL_fit)
+  saveRDS(RL_posteriors, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
+                              paste0("HLCM_RL_", condition, "_Posteriors.RDS")))
+  
+  # -----------------------------------------------------------------------------------
+  # save rhats
+  RL_rhats = rhat(RL_fit, pars = c("gamma00", "gamma10", "R", "R_chol", "sigma_U", "z_U",
+                                   "beta0", "beta1", "U", "theta", "A", "utility", "R_theta")) %>%
+                    data.frame() %>% mutate(parameter = rownames(.))
+  saveRDS(RL_rhats, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
+                         paste0("HLCM_RL_", condition, "_Fhats.RDS")))
+}
+```
 
-saveRDS(timestamp, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
-                        paste0("HLCM_RL_", condition, "_Timestamp.RDS")))
-saveRDS(RL_fit, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
-                     paste0("HLCM_RL_", condition, "_Fit.RDS")))
 
-# -----------------------------------------------------------------------------------
-# save posteriors
-RL_posteriors = extract(RL_fit)
-saveRDS(RL_posteriors, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
-                            paste0("HLCM_RL_", condition, "_Posteriors.RDS")))
+# -------------------------------------------
+# Check Model
+## Specify Condition
+```{r}
+condition = "LoB_LoR"
+# condition = "HiB_LoR"
+# condition = "LoB_HiR"
+# condition = "HiB_HiR"
+```
 
-# -----------------------------------------------------------------------------------
-# save rhats
-RL_rhats = rhat(RL_fit, pars = c("gamma00", "gamma10", "R", "R_chol", "sigma_U", "z_U",
-                                 "beta0", "beta1", "U", "theta", "A", "utility", "R_theta")) %>%
-                  data.frame() %>% mutate(parameter = rownames(.))
-saveRDS(RL_rhats, here("1_HLCM", "Data", "2_Fitted", paste0("HLCM_RL_", condition),
-                       paste0("HLCM_RL_", condition, "_Fhats.RDS")))
+
+## Load Data
+```{r}
+parameters = readRDS(here("1_HLCM", "Data", "0_Simulated_RL",
+                          paste0("RL_parameters_", condition, ".RDS")))
+stan_data = readRDS(here("1_HLCM", "Data", "1_Stan",
+                         paste0("RL_choices_", condition, ".RDS")))
 ```
 
 

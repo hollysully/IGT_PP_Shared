@@ -121,20 +121,20 @@ ggplot(test_data, aes(x = trial, y = prob, color = sim)) +
 # CONDITIONS
 condition = list(
                  # # small slope effect & weak correlation
-                 mu_beta_UT  = c("Lo" = 0),
-                 int_slope_R = c("Lo" = 0))
+                 # mu_beta_UT  = c("Lo" = 0),
+                 # int_slope_R = c("Lo" = 0))
                  
-                 # large slope effect & weak correlation
-                 # mu_beta_UT  = c("Hi" = .5),
+                 # # large slope effect & weak correlation
+                 # mu_beta_UT  = c("Hi" = .3),
                  # int_slope_R = c("Lo" = 0))
                  
                  # # small slope effect & strong correlation
                  # mu_beta_UT  = c("Lo" = 0),
-                 # int_slope_R = c("Hi" = .5))
+                 # int_slope_R = c("Hi" = .3))
                  
-                 # # large slope effect & strong correlation
-                 # mu_beta_UT  = c("Hi" = .5),
-                 # int_slope_R = c("Hi" = .5))
+                 # large slope effect & strong correlation
+                 mu_beta_UT  = c("Hi" = .3),
+                 int_slope_R = c("Hi" = .3))
 
 
 # SPECIFY SESSIONS & SAMPLE SIZE
@@ -147,7 +147,7 @@ mu_intercept_UT = qnorm(.1) # group-level mean untransformed intercept for learn
 sd_intercept_UT = 1         # group-level standard deviation of intercepts
 
 mu_beta_UT = condition$mu_beta_UT[1][[1]] # group-level slope effect for session
-sd_beta_UT = 1  # group-level standard deviation of intercepts
+sd_beta_UT = 1                            # group-level standard deviation of intercepts
 
 residual_sd = 1 # standard deviation of residuals
 
@@ -170,7 +170,7 @@ hist(parameters[,1])
 hist(parameters[,2])
 
 # combine the parameters into the untransformed As (i.e., on normal distribution scale)
-A_UTs = parameters[,1] + parameters[,2]%*%t(1:S-1) + replicate(5, rnorm(N, 0, residual_sd))
+A_UTs = parameters[,1] + parameters[,2]%*%t(1:S-1) + replicate(S, rnorm(N, 0, residual_sd))
 As = pnorm(A_UTs)
 ```
 

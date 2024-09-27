@@ -1,0 +1,205 @@
+---
+title: "RL Simulation"
+output: html_document
+---
+
+
+# -------------------------------------------
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(MASS)
+library(ggh4x)
+library(grid)
+library(extraDistr)
+library(lme4)
+library(kableExtra)
+library(JerBear)
+```
+
+
+
+# -------------------------------------------
+# RL Simulation
+## Setup & Load Data
+```{r}
+# -----------------------------------------------------------------------------------
+# CONDITIONS FOR SIMULATION
+S             = 3
+N             = 50
+n_simulations = 2
+conditions = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+conditions = c("LoB_LoR")
+
+
+# -----------------------------------------------------------------------------------
+# IMPORT DATA
+RL_parameters = list()
+
+for(condition in conditions){
+  for(i in 1:n_simulations){
+    RL_parameters[[condition]][[i]] = readRDS(
+      here("1_HLCM", "Data", "2_Fitted",
+           "RL_LoB_LoR", paste0("sim", i, ".RDS")))
+  }
+}
+```
+
+
+
+## Group-Level Parameters
+### Process Data
+```{r}
+RL_group_parameters = data.frame()
+
+for(condition in conditions){
+  for(i in 1:n_simulations){
+    RL_group_parameters = data.frame(
+      condition = condition,
+      sim = i,
+      max_rhat = max(RL_parameters[[condition]][[i]]$rhats$rhat),
+      # INTERCEPTS
+      true_mu_intercept_UT = RL_parameters[[condition]][[i]]$true_mu_intercept_UT,
+      est_mu_intercept_UT = RL_parameters[[condition]][[i]]$est_mu_intercept_UT,
+      true_sd_intercept_UT = RL_parameters[[condition]][[i]]$true_sd_intercept_UT,
+      est_sd_intercept_UT = RL_parameters[[condition]][[i]]$est_sd_intercept_UT,
+      # SLOPES
+      true_mu_beta_UT = RL_parameters[[condition]][[i]]$true_mu_beta_UT,
+      est_mu_beta_UT = RL_parameters[[condition]][[i]]$est_mu_beta_UT,
+      lower_mu_beta_UT = RL_parameters[[condition]][[i]]$est_mu_beta_UT_CI[[1]],
+      upper_mu_beta_UT = RL_parameters[[condition]][[i]]$est_mu_beta_UT_CI[[2]],
+      true_sd_beta_UT = RL_parameters[[condition]][[i]]$true_sd_beta_UT,
+      est_sd_beta_UT = RL_parameters[[condition]][[i]]$est_sd_beta_UT,
+      # INTERCEPT-SLOPE CORRELATION
+      true_int_slope_R = RL_parameters[[condition]][[i]]$true_int_slope_R,
+      est_int_slope_R = RL_parameters[[condition]][[i]]$est_int_slope_R,
+      lower_int_slope_R = RL_parameters[[condition]][[i]]$est_int_slope_R_CI[1],
+      upper_int_slope_R = RL_parameters[[condition]][[i]]$est_int_slope_R_CI[2]) %>% 
+      bind_rows(RL_group_parameters)
+  }
+}
+```
+
+
+### Correlation B/w True & Est Parameters
+```{r}
+group_by(RL_group_parameters, condition) %>% 
+  summarise(Intercept_Mu = cor(RL_group_parameters$true_mu_intercept_UT,
+                               RL_group_parameters$est_mu_intercept_UT),
+            Intercept_SD = cor(RL_group_parameters$true_sd_intercept_UT,
+                               RL_group_parameters$est_sd_intercept_UT),
+            Slope_Mu = cor(RL_group_parameters$true_mu_beta_UT,
+                           RL_group_parameters$est_mu_beta_UT),
+            Slope_SD = cor(RL_group_parameters$true_sd_beta_UT,
+                           RL_group_parameters$est_sd_beta_UT),
+            True_in_CI = mean(RL_group_parameters$true_mu_beta_UT >
+                              RL_group_parameters$lower_mu_beta_UT &
+                              RL_group_parameters$true_mu_beta_UT <
+                              RL_group_parameters$upper_mu_beta_UT),
+            Int_Slope_R = cor(RL_group_parameters$true_int_slope_R,
+                              RL_group_parameters$est_int_slope_R),
+            max_Rhat = max(RL_group_parameters$max_rhat)) %>% 
+  View(title = "Correlation B/w True & Est Parameters")
+  # kable(format = "html", escape = FALSE,
+  #       col.names = c("Intercept Mu",
+  #                     "Intercept SD",
+  #                     "Slope Mu",
+  #                     "Slope SD",
+  #                     "Int Slope R",
+  #                     "Max Rhat")) %>% 
+  # kable_styling()
+```
+
+
+## Person-Level Parameters
+```{r}
+RL_person_parameters = data.frame()
+
+for(condition in conditions){
+  for(i in 1:n_simulations){
+    RL_person_parameters = data.frame(
+      condition = condition,
+      sim = i,
+      ID = 1:RL_parameters[[condition]][[i]]$N,
+      # Unbounded As
+      true_A_UT = RL_parameters[[condition]][[i]]$true_A_UT,
+      est_A_UT = RL_parameters[[condition]][[i]]$est_A_UTs,
+      # As
+      true_A = RL_parameters[[condition]][[i]]$true_A,
+      est_A = RL_parameters[[condition]][[i]]$est_As) %>% 
+      bind_rows(RL_person_parameters)
+  }
+}
+
+RL_person_parameters = RL_person_parameters %>% 
+  pivot_longer(cols = starts_with(c("true", "est")), values_to = "estimate",
+               names_to = c("parameter", "session"), names_sep = "\\.",
+               names_transform = list(session = as.numeric)) %>% 
+  pivot_wider(names_from = "parameter", values_from = "estimate")
+
+RL_person_cor = RL_person_parameters %>% 
+  group_by(condition, sim) %>% 
+  summarise(r_A_UT = cor(true_A_UT, est_A_UT),
+            r_A = cor(true_A, est_A))
+```
+
+
+## Plots
+```{r}
+RL_group_parameters %>%
+  # PREP DATA
+  dplyr::select(-c(max_rhat,
+                   lower_mu_beta_UT, upper_mu_beta_UT,
+                   lower_int_slope_R, upper_int_slope_R,
+                   true_sd_intercept_UT, est_sd_intercept_UT,
+                   true_sd_beta_UT, est_sd_beta_UT)) %>% 
+  pivot_longer(cols = c("true_mu_intercept_UT", "est_mu_intercept_UT",
+                        "true_mu_beta_UT", "est_mu_beta_UT",
+                        "true_int_slope_R", "est_int_slope_R"),
+               names_to = "parameter", values_to = "estimate") %>% 
+  mutate(type = case_when(str_detect(parameter, "true") ~ "True",
+                          T ~ "Estimated"),
+         parameter = case_when(str_detect(parameter, "intercept") ~ "intercept",
+                               str_detect(parameter, "beta") ~ "beta",
+                               T ~ "R"),
+         parameter = factor(parameter, levels = c("intercept", "beta", "R"),
+                            labels = c("Intercept", expression("\u03B2"),
+                                       expression("\u03C1")),
+                            ordered = T)) %>% 
+  pivot_wider(names_from = "type", values_from = "estimate") %>% 
+  arrange(condition) %>% 
+  # PLOTTING
+  ggplot(aes(x = Estimated)) +
+    geom_histogram(alpha = .25, linewidth = 1, color = "black") +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = True), color = "red3", size = 1) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, NA)) +
+    coord_cartesian(clip = "off") +
+    labs(x = "Estimate", y = "Frequency") +
+    bear_theme() +
+    theme(plot.margin = unit(c(.1, .5, .5, .5), "cm"),
+          panel.spacing.x = unit(.75, "cm"),
+          strip.text.y = element_blank(),
+          strip.text.x = element_text(hjust = .5, vjust = 0),
+          panel.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_grid(condition~parameter, scales = "free")
+```
+
+
+
+# -------------------------------------------
+
+
+
+
