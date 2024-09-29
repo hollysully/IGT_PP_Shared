@@ -194,6 +194,7 @@ stan_data <- make_stan_data_growth(
   model_text,
   "session"
 )
+stan_data$prior_only <- 0
 
 orl_fit <- orl_model$sample(
   stan_data, 
