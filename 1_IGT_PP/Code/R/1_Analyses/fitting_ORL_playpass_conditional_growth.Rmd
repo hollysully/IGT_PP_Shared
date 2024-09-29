@@ -1,14 +1,9 @@
 ---
-title: "Fitting Joint Test-Retest ORL"
+title: "Running SBC and Testing Conditional Growth ORL"
 output: html_document
-date: "2023-03-07"
+date: "2024-09-29"
 ---
 
-
-
-# -------------------------------------------
-# Setup
-## Load Packages
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -27,12 +22,14 @@ source(here("1_IGT_PP", "Code", "R", "1_Analyses","simulate.R"))
 ```
 
 
-## Load Data
+# Load Data
 ```{r}
 all_task_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_task_data.rds"))
 all_survey_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_survey_data.rds"))
 ```
 
+
+# Run SBC
 ```{r}
 set.seed(43210)
 
@@ -45,10 +42,14 @@ orl_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_co
 
 for (iter in 1:n_sbc) {
   model_text <- "
-    Arew ~ 1;
-    Apun ~ 1;
-    betaF ~ 1;
-    betaP ~ 1
+    Arew_int ~ 1;
+    Apun_int ~ 1;
+    betaF_int ~ 1;
+    betaP_int ~ 1;
+    Arew_slope ~ 1 + scale(bis);
+    Apun_slope ~ 1 + scale(bis);
+    betaF_slope ~ 1 + scale(bis);
+    betaP_slope ~ 1 + scale(bis);
   "
   
   stan_data <- make_stan_data_growth(
@@ -136,6 +137,7 @@ for (iter in 1:n_sbc) {
 }
 ```
 
+## Plot SBC Results
 ```{r, eval = T}
 n_sbc <- 100
 
@@ -170,6 +172,34 @@ df_results %>%
   facet_wrap("par", scales = "free_y")
 ```
 
+# Fit to Real Data
 ```{r}
-orl_fit$summary()
+orl_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_conditional_growth.stan"))
+
+
+model_text <- "
+  Arew_int ~ 1;
+  Apun_int ~ 1;
+  betaF_int ~ 1;
+  betaP_int ~ 1;
+  Arew_slope ~ 1 + scale(bis);
+  Apun_slope ~ 1 + scale(bis);
+  betaF_slope ~ 1 + scale(bis);
+  betaP_slope ~ 1 + scale(bis);
+"
+  
+stan_data <- make_stan_data_growth(
+  all_task_data, 
+  all_survey_data,
+  model_text,
+  "session"
+)
+
+orl_fit <- orl_model$sample(
+  stan_data, 
+  chains = 8,
+  parallel_chains = 8,
+  iter_sampling = 500,
+  iter_warmup = 200,
+) 
 ```

@@ -10,9 +10,9 @@ data {
   int choice[N,T];                   // Choices on each trial
   real outcome[N,T];                 // Outcomes received on each trial
   real sign[N,T];                    // Signs of the outcome received on each trial
-  array[N,T,D] real X;                       // person-level predictors
-  array[4] int D_start;
-  array[4] int D_end;
+  array[N,S,D] real X;                       // person-level predictors
+  array[8] int D_start;
+  array[8] int D_end;
   int prior_only;
 }
 
@@ -31,7 +31,7 @@ parameters {
 
 transformed parameters {
   array[4] matrix[2,N] beta_tilde;
-  array[4] matrix[N,2] beta; 
+  array[4,S] matrix[N,2] beta; 
   matrix[N,S] Arew;
   matrix[N,S] Apun;
   matrix[N,S] betaF;
@@ -39,16 +39,18 @@ transformed parameters {
 
   for (p in 1:4) {
     beta_tilde[p] = diag_pre_multiply(sigma_beta[p], R_chol[p]) * beta_pr[p];  
-    beta[p][,1] = to_matrix(X[,1,D_start[p]:D_end[p]]) * gamma0[D_start[p]:D_end[p]] + to_vector(beta_tilde[p][1,]);
-    beta[p][,2] = to_matrix(X[,1,D_start[p]:D_end[p]]) * gamma1[D_start[p]:D_end[p]] + to_vector(beta_tilde[p][2,]);
+    for (s in 1:S) {
+      beta[p,s][,1] = to_matrix(X[,s,D_start[p]:D_end[p]]) * gamma0[D_start[p]:D_end[p]] + to_vector(beta_tilde[p][1,]);
+      beta[p,s][,2] = to_matrix(X[,s,D_start[p+4]:D_end[p+4]]) * gamma1[D_start[p+4]:D_end[p+4]] + to_vector(beta_tilde[p][2,]); 
+    }
   }
   
   for (s in 1:S) {
     for (i in 1:N) {
-      Arew[i,s] = Phi_approx(beta[1][i,1] + beta[1][i,2] * time[i,s] + sigma_theta[1] * theta[1][i,s]);
-      Apun[i,s] = Phi_approx(beta[2][i,1] + beta[2][i,2] * time[i,s] + sigma_theta[2] * theta[2][i,s]);
-      betaF[i,s] = beta[3][i,1] + beta[3][i,2] * time[i,s] + sigma_theta[3] * theta[3][i,s];
-      betaP[i,s] = beta[4][i,1] + beta[4][i,2] * time[i,s] + sigma_theta[4] * theta[4][i,s];
+      Arew[i,s] = Phi_approx(beta[1,s][i,1] + beta[1,s][i,2] * time[i,s] + sigma_theta[1] * theta[1][i,s]);
+      Apun[i,s] = Phi_approx(beta[2,s][i,1] + beta[2,s][i,2] * time[i,s] + sigma_theta[2] * theta[2][i,s]);
+      betaF[i,s] = beta[3,s][i,1] + beta[3,s][i,2] * time[i,s] + sigma_theta[3] * theta[3][i,s];
+      betaP[i,s] = beta[4,s][i,1] + beta[4,s][i,2] * time[i,s] + sigma_theta[4] * theta[4][i,s];
     }  
   }
 }
@@ -128,11 +130,12 @@ generated quantities {
   R_betaF = R_chol[3] * R_chol[3]';
   R_betaP = R_chol[4] * R_chol[4]';
 
-  // Set all posterior predictions to -1 (avoids NULL values)
+  // Set all posterior predictions to -99 (avoids NULL values)
   for (i in 1:N) {
     for (s in 1:S) {
       for (t in 1:T) {
-        choice_pred[i,t] = -1;
+        choice_pred[i,t] = -99;
+        log_lik[i,t] = -99;
       }
     }
   }

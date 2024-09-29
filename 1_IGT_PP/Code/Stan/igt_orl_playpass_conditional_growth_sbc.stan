@@ -16,14 +16,11 @@ data {
   int card[T/2];                     // Cards presented on each trial                    // Total number of trials presented to each subject on each session
   real outcome[4,T/8];                 // Outcomes received on each trial
   array[N,T,D] real X;                       // person-level predictors
-  array[4] int D_start;
-  array[4] int D_end;
+  array[8] int D_start;
+  array[8] int D_end;
 }
 
 generated quantities {
-  // try residual error for each person, session, parameter
-  // instead of just per-person, parameter (akin to Jeremy sim
-  // code changes)
   vector[D] gamma0;
   vector[D] gamma1;
   array[4] matrix[2,N] beta_pr;  
@@ -68,7 +65,7 @@ generated quantities {
     }
     beta_tilde[p] = diag_pre_multiply(sigma_beta[p], R_chol[p]) * beta_pr[p];  
     beta[p][,1] = to_matrix(X[,1,D_start[p]:D_end[p]]) * gamma0[D_start[p]:D_end[p]] + to_vector(beta_tilde[p][1,]);
-    beta[p][,2] = to_matrix(X[,1,D_start[p]:D_end[p]]) * gamma1[D_start[p]:D_end[p]] + to_vector(beta_tilde[p][2,]);
+    beta[p][,2] = to_matrix(X[,1,D_start[p+4]:D_end[p+4]]) * gamma1[D_start[p+4]:D_end[p+4]] + to_vector(beta_tilde[p][2,]);
   }
   
   for (s in 1:S) {
