@@ -1,5 +1,5 @@
 ---
-title: "RL Simulation"
+title: "Simulation"
 output: html_document
 ---
 
@@ -24,12 +24,24 @@ library(MASS)
 library(ggh4x)
 library(grid)
 library(extraDistr)
-library(lme4)
+library(brms)
 ```
 
 
 ## Functions
 ```{r, eval = T}
+#------------------------------------------------------------------------------
+# CALCULATE PERCENTILE
+calculate_percentile = function(true, predicted, S){
+  percentiles = matrix(nrow = nrow(true), ncol = S)
+  for(s in 1:S){
+    for(i in 1:nrow(true)){
+      percentiles[i,s] = mean(predicted[,s,i] < true[i,s])
+    }
+  }
+  return(percentiles)
+}
+
 #------------------------------------------------------------------------------
 # USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
 softmax = function(values){
@@ -79,13 +91,20 @@ simulate_RL = function(learning_rate = .5, n_trials = 100,
 # SPECIFY CONDITIONS FOR SIMULATION
 S             = 3
 N             = 50
-n_simulations = 10
+n_simulations = 1
 conditions    = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
 RL_model      = stan_model(here("1_HLCM", "Code", "Stan", "RL_Model.stan")) # Compile model
-HLCM_RL_model = stan_model(here("1_HLCM", "Code", "Stan", "HLCM_RL_Model.stan")) # Compile model
-n_iter        = 200
-n_warmup      = 100
+HLCM_model = stan_model(here("1_HLCM", "Code", "Stan", "HLCM_Model.stan")) # Compile model
+
+# SIMULATION
+n_iter        = 1500
+n_warmup      = 500
 n_chains      = 4
+
+# TESTING
+# n_iter        = 200
+# n_warmup      = 100
+# n_chains      = 2
 
 
 # -----------------------------------------------------------------------------------
@@ -109,8 +128,21 @@ HLM_parameters = list(# small slope effect & weak correlation
 ```{r, eval = T}
 set.seed(20240924)
 
+# Create initial data structure to fill during simulation
+RL_Simulations = data.frame()
+RL_Diagnostics = data.frame()
+RL_Characteristics = data.frame()
+
+HLCM_Simulations = data.frame()
+HLCM_Diagnostics = data.frame()
+HLCM_Characteristics = data.frame()
+
+timestamps = list()
+
 for(condition in conditions){ # LOOP THROUGH CONDITIONS
   for(sim in 1:n_simulations){
+    start_timestamp = Sys.time()
+    
     # -----------------------------------------------------------------------------------
     # SET GROUP-LEVEL PARAMETERS
     # group-level parameters
@@ -119,9 +151,9 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     sd_beta_UT = 1              # standard deviation of slopes
     residual_sd = 1             # residual standard deviation
     # mean untransformed slope for learning rate
-    mu_beta_UT = HLM_parameters$LoB_LoR[["mu_beta_UT"]]
+    mu_beta_UT = HLM_parameters[[condition]][["mu_beta_UT"]]
     # intercept-slope correlation
-    int_slope_R = HLM_parameters$LoB_LoR[["int_slope_R"]]
+    int_slope_R = HLM_parameters[[condition]][["int_slope_R"]]
     
     # build variance-covariance matrix
     R = matrix(data = c(1, int_slope_R, int_slope_R, 1),
@@ -174,20 +206,17 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                      S = S,
                      choice = choice,
                      outcome = outcome)
+    saveRDS(stan_data, here("1_HLCM", "Data", "1_Stan", condition,
+                            paste0("data", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
-    # FIT SIMPLE RL MODEL & EXTRACT ESTIMATES
-    fit_durations = list()
-    gamma00s = vector(length = S)
-    sigma_Us = vector(length = S)
-    estimated_A_UTs = matrix(data = NA, nrow = N, ncol = S)
-    estimated_As = matrix(data = NA, nrow = N, ncol = S)
-    rhats = data.frame()
-    
-    for(s in 1:stan_data$S){
-      # Fit model
-      start_time = Sys.time()
+    # FIT RL MODEL TO EACH SESSION'S DATA
+    ## Start with matrix to save data for growth model later
+    unbounded_A_posterior = array(dim = c(n_iter*n_chains - (n_warmup*n_chains), S, N))
+    A_posterior = array(dim = c(n_iter*n_chains - (n_warmup*n_chains), S, N))
+    start_time = Sys.time()
+    for(s in 1:S){
       RL_fit = sampling(RL_model, 
                         data   = list(N = stan_data$N,
                                       T = stan_data$T,
@@ -199,123 +228,543 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                         cores  = 4,
                         seed   = 43210,
                         save_warmup = F)
-      end_time = Sys.time()
-      # GET FIT DURATIONS
-      fit_durations[[s]] = diff.POSIXt(c(start_time, end_time))
       
-      # EXTRACT POSTERIOR MEANS
-      RL_posteriors = extract(RL_fit) # save posteriors
-      gamma00s[s] = mean(RL_posteriors$gamma00)
-      sigma_Us[s] = mean(RL_posteriors$sigma_U)
-      estimated_A_UTs[,s] = apply(RL_posteriors$theta, 2, mean)
-      estimated_As[,s] = apply(RL_posteriors$A, 2, mean)
-      
-      # EXTRACT RHATS
-      cur_rhats = rhat(RL_fit, pars = c("gamma00", "sigma_U", "theta", "A"))
-      rhats = data.frame(parameter = names(cur_rhats), session = s, rhat = cur_rhats) %>% 
-        bind_rows(rhats)
+      posteriors = extract(RL_fit)
+      unbounded_A_posterior[,s,] = posteriors$theta
+      A_posterior[,s,] = posteriors$A
+      RL_sum_model = summary(RL_fit, pars = c("mu_theta", "mu_A", "sigma_U", "theta", "A"))$summary
+      RL_Diagnostics = data.frame(parameter = rownames(RL_sum_model), condition = condition,
+                                  ESS = RL_sum_model[,"n_eff"], Rhat = RL_sum_model[,"Rhat"],
+                                  session = s, model = "RL", simulation = sim) %>%
+        bind_rows(RL_Diagnostics)
     }
     
-    growth_model = data.frame(ID = 1:N, A_UTs = estimated_A_UTs) %>%
+    
+    # -----------------------------------------------------------------------------------
+    # FIT GROWTH MODEL
+    growth_model = data.frame(ID = 1:N, A_UTs = t(apply(unbounded_A_posterior, c(2, 3), mean))) %>%
       pivot_longer(starts_with("A_UTs"), names_to = "session", values_to = "A_UT",
                    names_prefix = "A_UTs.", names_transform = list(session = as.numeric)) %>% 
-      lmer(A_UT ~ session + (session|ID),
-           data = ., REML = T)
+      brm(A_UT ~ 1 + session + (1 + session|ID), data = .,
+          iter   = n_iter,
+          warmup = n_warmup,
+          chains = n_chains,
+          cores  = 4,
+          seed   = 43210,
+          prior = c(
+            set_prior("normal(0, 1)", class = "Intercept"),
+            set_prior("normal(0, 0.05)", class = "b", coef = "session"),
+            set_prior("normal(0, 0.05)", class = "sigma"),
+            set_prior("lkj(1)", class = "cor", group = "ID"),
+            set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "Intercept"),
+            set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "session")))
+    
+    sum_growth_model = data.frame(growth_model)
+    random_intercepts = dplyr::select(sum_growth_model, 
+                                      starts_with("R_ID") & ends_with("Intercept.")) %>%
+      as.matrix()
+    random_slopes = dplyr::select(sum_growth_model, 
+                                  starts_with("R_ID") & ends_with("session.")) %>%
+      as.matrix()
     
     
-    saveRDS(list(
-      # SETUP FOR SIMULATION & FIT STATISTICS
-      condition = condition,
-      S = S,
-      N = N,
-      sim = sim,
-      fit_durations = fit_durations,
-      rhats = rhats,
-      lmer_singular = isSingular(growth_model),
-      # TRUE PARAMETERS
-      ## GROUP-LEVEL PARAMETERS
-      true_mu_intercept_UT = mu_intercept_UT,
-      true_sd_intercept_UT = sd_intercept_UT,
-      true_mu_beta_UT = mu_beta_UT,
-      true_sd_beta_UT = sd_beta_UT,
-      true_residual_sd = residual_sd,
-      true_int_slope_R = int_slope_R,
-      ## PERSON-LEVEL PARAMETERS
-      true_A_UT = A_UTs,
-      true_A = As,
-      # ESTIMATED PARAMETERS
-      ## GROUP-LEVEL PARAMETERS
-      est_mu_intercept_UT = summary(growth_model)$coefficients["(Intercept)", "Estimate"],
-      est_sd_intercept_UT = attr(VarCorr(growth_model)$ID, "stddev")[["(Intercept)"]],
-      est_mu_beta_UT = summary(growth_model)$coefficients["session", "Estimate"],
-      est_sd_beta_UT = attr(VarCorr(growth_model)$ID, "stddev")[["session"]],
-      est_residual_sd = sigma(growth_model),
-      est_int_slope_R = attr(VarCorr(growth_model)$ID, "correlation")["(Intercept)", "session"],
-      # CONFIDENCE INTERVALS
-      est_mu_beta_UT_CI = confint(growth_model, method = "Wald")["session",],
-      est_int_slope_R_CI = confintr::ci_cor(coef(growth_model)$ID[,1],
-                                            coef(growth_model)$ID[,2]),
-      # PERSON-LEVEL PARAMETERS
-      est_A_UTs = estimated_A_UTs,
-      est_As = estimated_As),
-      here("1_HLCM", "Data", "2_Fitted",
-           paste0("RL_", condition), paste0("sim", sim, ".RDS")))
+    # -----------------------------------------------------------------------------------
+    # SAVE GROUP-LEVEL GROWTH DATA
+    ## Intercept
+    cur_parameter = "intercept"
+    cur_true_parameter = mu_intercept_UT
+    cur_posterior = sum_growth_model$b_Intercept
+    cur_hdi = HDIofMCMC(cur_posterior)
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    ## SD of Intercepts
+    cur_parameter = "intercept_SD"
+    cur_true_parameter = sd_intercept_UT
+    cur_posterior = sum_growth_model$sd_ID__Intercept
+    cur_hdi = HDIofMCMC(cur_posterior)
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    ## Slope
+    cur_parameter = "slope"
+    cur_true_parameter = mu_beta_UT
+    cur_posterior = sum_growth_model$b_session
+    cur_hdi = HDIofMCMC(cur_posterior)
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    ## SD of Slopes
+    cur_parameter = "slope_SD"
+    cur_true_parameter = sd_beta_UT
+    cur_posterior = sum_growth_model$sd_ID__session
+    cur_hdi = HDIofMCMC(cur_posterior)
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    ## Intercept-Slope Correlation
+    cur_parameter = "int_slope_R"
+    cur_true_parameter = int_slope_R
+    cur_posterior = sum_growth_model$cor_ID__Intercept__session
+    cur_hdi = HDIofMCMC(cur_posterior)
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    ## Residual
+    cur_parameter = "residual_SD"
+    cur_true_parameter = residual_sd
+    cur_posterior = sum_growth_model$sigma
+    cur_hdi = HDIofMCMC(cur_posterior)
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE PERSON-LEVEL GROWTH DATA
+    ## Intercepts
+    cur_parameter = "intercept"
+    cur_true_parameter = parameters[,1]
+    cur_posterior = random_intercepts
+    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = paste0("person_", 1:N), session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = apply(cur_posterior, 2, mean),
+                 posterior_SD = apply(cur_posterior, 2, sd),
+                 lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    ## Slopes
+    cur_parameter = "slope"
+    cur_true_parameter = parameters[,2]
+    cur_posterior = random_slopes
+    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = paste0("person_", 1:N), session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = apply(cur_posterior, 2, mean),
+                 posterior_SD = apply(cur_posterior, 2, sd),
+                 lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(RL_Simulations)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE PERSON-LEVEL RL DATA
+    ## Unbounded Learning Rates
+    cur_parameter = "unbounded_A"
+    cur_true_parameter = A_UTs
+    cur_posterior = unbounded_A_posterior
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim,
+                 parameter_type = paste0("person_", 1:N),
+                 true_value = cur_true_parameter, 
+                 posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
+                 posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
+                 percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
+                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
+      dplyr::select(X1.1 = X1, X2.1 = X2, X1.2 = X3, X2.2 = X4, X1.3 = X5, X2.3 = X6,
+                    everything()) %>% 
+      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+                   names_to = c("parameter", "session"), names_sep = "\\.",
+                   names_transform = list(session = as.numeric)) %>%
+      mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
+                                   parameter == "X2" ~ "upper_HDI95",
+                                   T ~ parameter)) %>%
+      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      mutate(parameter = cur_parameter,
+             true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>% 
+      bind_rows(RL_Simulations)
+    ## Learning Rates
+    cur_parameter = "A"
+    cur_true_parameter = As
+    cur_posterior = A_posterior
+    RL_Simulations =
+      data.frame(condition = condition, simulation = sim,
+                 parameter_type = paste0("person_", 1:N),
+                 true_value = cur_true_parameter, 
+                 posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
+                 posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
+                 percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
+                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
+      dplyr::select(X1.1 = X1, X2.1 = X2, X1.2 = X3, X2.2 = X4, X1.3 = X5, X2.3 = X6,
+                    everything()) %>% 
+      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+                   names_to = c("parameter", "session"), names_sep = "\\.",
+                   names_transform = list(session = as.numeric)) %>%
+      mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
+                                   parameter == "X2" ~ "upper_HDI95",
+                                   T ~ parameter)) %>%
+      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      mutate(parameter = cur_parameter,
+             true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>%
+      bind_rows(RL_Simulations)
+    
+    saveRDS(dplyr::select(RL_Simulations,
+                          condition, simulation, session, parameter, parameter_type,
+                          true_value, posterior_mean, posterior_SD, percentile,
+                          lower_HDI95, upper_HDI95, true_in_HDI95),
+            here("1_HLCM", "Data", "2_Fitted", "RL_Simulations.RDS"))
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE DIAGNOSTIC DATA
+    # Growth Model Diagnostics
+    Rhats = rhat(growth_model)
+    RL_growth_diagnostics = data.frame(Parameter = names(Rhats), Rhat = Rhats) %>% 
+      left_join(bayestestR::effective_sample(growth_model, "all")) %>% 
+      dplyr::select(parameter = Parameter, everything()) %>% 
+      filter(!(parameter %in% c("Intercept", "lprior", "lp__")))
+    RL_Diagnostics = RL_growth_diagnostics %>% 
+      mutate(parameter = case_when(parameter == "b_Intercept" ~ "gamma00",
+                                   parameter == "b_session" ~ "gamma10",
+                                   parameter == "sd_ID__Intercept" ~ "sigma_U[1]",
+                                   parameter == "sd_ID__session" ~ "sigma_U[2]",
+                                   parameter == "sigma" ~ "R",
+                                   parameter == "cor_ID__Intercept__session" ~ "R_theta[2,1]",
+                                   T ~ parameter),
+             person_parameter = case_when(str_detect(parameter, "Intercept") ~ "beta0",
+                                          str_detect(parameter, "session") ~ "beta1"),
+             person_number = str_remove(parameter, "r_ID\\["),
+             person_number = str_remove(person_number, ",Intercept\\]"),
+             person_number = str_remove(person_number, ",session\\]"),
+             parameter = case_when(!is.na(person_parameter) ~ paste0(person_parameter,"[",person_number,"]"),
+                                   T ~ parameter),
+             model = "growth", condition = condition,
+             simulation = sim, session = 0) %>% 
+      dplyr::select(condition, simulation, model, session, parameter, ESS, Rhat) %>% 
+      bind_rows(RL_Diagnostics)
+    
+    saveRDS(dplyr::select(RL_Diagnostics,
+                          condition, simulation, session, parameter,
+                          model, ESS, Rhat),
+            here("1_HLCM", "Data", "2_Fitted", "RL_Diagnostics.RDS"))
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE CHARACTERISTICS OF SIMULATION
+    RL_Characteristics = data.frame(
+      condition     = condition,
+      simulation    = sim,
+      start         = start_time,
+      end           = Sys.time(),
+      duration      = difftime(Sys.time(), start_time),
+      S             = S,
+      N             = N,
+      n_simulations = n_simulations,
+      n_iter        = n_iter,
+      n_warmup      = n_warmup,
+      n_chains      = n_chains) %>% 
+      bind_rows(RL_Characteristics)
+    
+    saveRDS(RL_Characteristics,
+            here("1_HLCM", "Data", "2_Fitted", "RL_Characteristics.RDS"))
+    
     
     # -----------------------------------------------------------------------------------
     # FIT HIERARCHICAL RL MODEL & EXTRACT ESTIMATES
     start_time = Sys.time()
-    HLCM_RL_fit = sampling(HLCM_RL_model, 
-                           data   = stan_data, 
-                           iter   = n_iter,
-                           warmup = n_warmup,
-                           chains = n_chains,
-                           cores  = 4,
-                           seed   = 43210,
-                           save_warmup = F)
-    end_time = Sys.time()
-    # GET FIT DURATIONS
-    fit_duration = diff.POSIXt(c(start_time, end_time))
-    HLCM_RL_posteriors = extract(HLCM_RL_fit)
-        
+    HLCM_fit = sampling(HLCM_model, 
+                        data   = stan_data, 
+                        iter   = n_iter,
+                        warmup = n_warmup,
+                        chains = n_chains,
+                        cores  = 4,
+                        seed   = 43210,
+                        save_warmup = F)
+    HLCM_posteriors = extract(HLCM_fit)
     
-    saveRDS(list(
-      # SETUP FOR SIMULATION & FIT STATISTICS
-      condition = condition,
-      S = S,
-      N = N,
-      sim = sim,
-      fit_durations = fit_durations,
-      rhats = rhat(HLCM_RL_fit, pars = c("gamma00", "sigma_U", "theta", "A")),
-      # TRUE PARAMETERS
-      ## GROUP-LEVEL PARAMETERS
-      true_mu_intercept_UT = mu_intercept_UT,
-      true_sd_intercept_UT = sd_intercept_UT,
-      true_mu_beta_UT = mu_beta_UT,
-      true_sd_beta_UT = sd_beta_UT,
-      true_residual_sd = residual_sd,
-      true_int_slope_R = int_slope_R,
-      ## PERSON-LEVEL PARAMETERS
-      true_A_UT = A_UTs,
-      true_A = As,
-      # ESTIMATED PARAMETERS
-      ## GROUP-LEVEL PARAMETERS
-      est_mu_intercept_UT = mean(HLCM_RL_posteriors$gamma00),
-      est_sd_intercept_UT = mean(HLCM_RL_posteriors$sigma_U[,1]),
-      est_mu_beta_UT = mean(HLCM_RL_posteriors$gamma10),
-      est_sd_beta_UT = mean(HLCM_RL_posteriors$sigma_U[,2]),
-      est_residual_sd = mean(HLCM_RL_posteriors$R),
-      est_int_slope_R = mean(HLCM_RL_posteriors$R_theta[,2,1]),
-      # CREDIBLE INTERVALS
-      est_mu_beta_UT_CI = HDIofMCMC(HLCM_RL_posteriors$gamma10),
-      est_int_slope_R_CI = HDIofMCMC(HLCM_RL_posteriors$R_theta[,2,1]),
-      # PERSON-LEVEL PARAMETERS
-      est_A_UTs = t(apply(HLCM_RL_posteriors$theta, c(2,3), mean)),
-      est_As = t(apply(HLCM_RL_posteriors$A, c(2,3), mean))),
-      here("1_HLCM", "Data", "2_Fitted",
-           paste0("HLCM_RL_", condition), paste0("sim", sim, ".RDS")))
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE GROUP-LEVEL GROWTH DATA
+    ## Intercept
+    cur_parameter = "intercept"
+    cur_true_parameter = mu_intercept_UT
+    cur_posterior = HLCM_posteriors$gamma00
+    cur_hdi = HDIofMCMC(cur_posterior)
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    ## SD of Intercepts
+    cur_parameter = "intercept_SD"
+    cur_true_parameter = sd_intercept_UT
+    cur_posterior = HLCM_posteriors$sigma_U[,1]
+    cur_hdi = HDIofMCMC(cur_posterior)
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    ## Slopes
+    cur_parameter = "slope"
+    cur_true_parameter = mu_beta_UT
+    cur_posterior = HLCM_posteriors$gamma10
+    cur_hdi = HDIofMCMC(cur_posterior)
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    ## SD of Slopes
+    cur_parameter = "slope_SD"
+    cur_true_parameter = sd_beta_UT
+    cur_posterior = HLCM_posteriors$sigma_U[,2]
+    cur_hdi = HDIofMCMC(cur_posterior)
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    ## Intercept-Slope Correlation
+    cur_parameter = "int_slope_R"
+    cur_true_parameter = int_slope_R
+    cur_posterior = HLCM_posteriors$R_theta[,2,1]
+    cur_hdi = HDIofMCMC(cur_posterior)
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    ## Residual
+    cur_parameter = "residual_SD"
+    cur_true_parameter = residual_sd
+    cur_posterior = HLCM_posteriors$R
+    cur_hdi = HDIofMCMC(cur_posterior)
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = "group", session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = mean(cur_posterior),
+                 posterior_SD = sd(cur_posterior),
+                 lower_HDI95 = cur_hdi[1], upper_HDI95 = cur_hdi[2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[1] & cur_true_parameter < cur_hdi[2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE PERSON-LEVEL GROWTH DATA
+    ## Intercepts
+    cur_parameter = "intercept"
+    cur_true_parameter = parameters[,1]
+    cur_posterior = HLCM_posteriors$beta0
+    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = paste0("person_", 1:N), session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = apply(cur_posterior, 2, mean),
+                 posterior_SD = apply(cur_posterior, 2, sd),
+                 lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    ## Slopes
+    cur_parameter = "slope"
+    cur_true_parameter = parameters[,2]
+    cur_posterior = HLCM_posteriors$beta1
+    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+                 parameter_type = paste0("person_", 1:N), session = 0,
+                 true_value = cur_true_parameter,
+                 posterior_mean = apply(cur_posterior, 2, mean),
+                 posterior_SD = apply(cur_posterior, 2, sd),
+                 lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
+                 true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
+                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+      bind_rows(HLCM_Simulations)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE PERSON-LEVEL RL DATA
+    ## Unbounded Learning Rates
+    cur_parameter = "unbounded_A"
+    cur_true_parameter = A_UTs
+    cur_posterior = HLCM_posteriors$theta
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim,
+                 parameter_type = paste0("person_", 1:N),
+                 true_value = cur_true_parameter, 
+                 posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
+                 posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
+                 percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
+                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
+      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+                   names_to = c("parameter", "session"), names_sep = "\\.",
+                   names_transform = list(session = as.numeric)) %>%
+      mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
+                                   parameter == "X2" ~ "upper_HDI95",
+                                   T ~ parameter)) %>%
+      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      mutate(parameter = cur_parameter,
+             true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>% 
+      bind_rows(HLCM_Simulations)
+    ## Learning Rates
+    cur_parameter = "A"
+    cur_true_parameter = As
+    cur_posterior = HLCM_posteriors$A
+    HLCM_Simulations =
+      data.frame(condition = condition, simulation = sim,
+                 parameter_type = paste0("person_", 1:N),
+                 true_value = cur_true_parameter, 
+                 posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
+                 posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
+                 percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
+                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
+      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+                   names_to = c("parameter", "session"), names_sep = "\\.",
+                   names_transform = list(session = as.numeric)) %>%
+      mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
+                                   parameter == "X2" ~ "upper_HDI95",
+                                   T ~ parameter)) %>%
+      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      mutate(parameter = cur_parameter,
+             true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>% 
+      bind_rows(HLCM_Simulations)
+    
+    saveRDS(dplyr::select(HLCM_Simulations,
+                          condition, simulation, session, parameter, parameter_type,
+                          true_value, posterior_mean, posterior_SD, percentile,
+                          lower_HDI95, upper_HDI95, true_in_HDI95),
+            here("1_HLCM", "Data", "2_Fitted", "HLCM_Simulations.RDS"))
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE DIAGNOSTIC DATA
+    HLCM_sum_model = summary(HLCM_fit, pars = c("gamma00", "gamma10", "R", "sigma_U",
+                                                "beta0", "beta1", "theta", "A","R_theta"))$summary
+    cur_diagnostics = data.frame(parameter = rownames(HLCM_sum_model),
+                                 ESS = HLCM_sum_model[,"n_eff"], Rhat = HLCM_sum_model[,"Rhat"])
+    ## RL Diagnostics
+    HLCM_RL_diagnostics = cur_diagnostics %>% 
+      filter(str_detect(parameter, c("theta|A")), !str_detect(parameter, "R_theta")) %>% 
+      mutate(session = case_when(str_detect(parameter, "\\[1,") ~ 1,
+                                 str_detect(parameter, "\\[2,") ~ 2,
+                                 str_detect(parameter, "\\[3,") ~ 3),
+             parameter = str_replace(parameter, "\\[1,|\\[2,|\\[3,", "\\["),
+             model = "RL")
+    # Growth Model Diagnostics
+    HLCM_growth_diagnostics = cur_diagnostics %>% 
+      filter(parameter %in% c("gamma00", "gamma10", "R", "R_theta[2,1]")|
+             str_detect(parameter, "beta0|beta1|sigma_U")) %>% 
+      mutate(session = 0,
+             model = "growth")
+    
+    HLCM_Diagnostics = bind_rows(HLCM_RL_diagnostics, HLCM_growth_diagnostics) %>% 
+      mutate(simulation = sim, condition = condition) %>% 
+      bind_rows(HLCM_Diagnostics)
+    
+    saveRDS(dplyr::select(HLCM_Diagnostics,
+                          condition, simulation, session, parameter,
+                          model, ESS, Rhat),
+            here("1_HLCM", "Data", "2_Fitted", "HLCM_Diagnostics.RDS"))
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SAVE CHARACTERISTICS OF SIMULATION
+    HLCM_Characteristics = data.frame(
+      condition     = condition,
+      simulation    = sim,
+      start         = start_time,
+      end           = Sys.time(),
+      duration      = difftime(Sys.time(), start_time),
+      S             = S,
+      N             = N,
+      n_simulations = n_simulations,
+      n_iter        = n_iter,
+      n_warmup      = n_warmup,
+      n_chains      = n_chains) %>% 
+      bind_rows(HLCM_Characteristics)
+    
+    saveRDS(HLCM_Characteristics,
+            here("1_HLCM", "Data", "2_Fitted", "HLCM_Characteristics.RDS"))
+    
+    
+    # -----------------------------------------------------------------------------------
+    # RECORD TIMESTAMPS
+    end_timestamp = Sys.time()
+    diff_timestamp = difftime(end_timestamp, start_timestamp)
+    timestamps[[condition]][[sim]] = list(start = start_timestamp, end = end_timestamp, diff = diff_timestamp)
   }
 }
+saveRDS(timestamps, here("1_HLCM", "Data", "TimeStamps.RDS"))
 ```
+
 
 
 # -------------------------------------------

@@ -51,6 +51,7 @@ model {
   R_chol  ~ lkj_corr_cholesky(1);       // cholesky correlation
   to_vector(sigma_U)  ~ normal(0,0.05); // SD of intercepts and slopes
   to_vector(z_U[1,:]) ~ normal(0,1);    // uncorrelated standardized person-specific deviations
+  to_vector(z_U[2,:]) ~ normal(0,1);    // uncorrelated standardized person-specific deviations
   
   // LIKELIHOOD: THIS SHOULD BE ADJUSTED FOR THE THEORETICAL MODEL OF INTEREST
   vector[2] utility; // declare utility variable
