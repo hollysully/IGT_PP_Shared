@@ -1,0 +1,7 @@
+"","id","time","participant","platform","version","card","block","trial","card_good","card_RT","card_play","outcome","date","AB_card","checked_version"
+"1",5002,"T1","dad","in-person","AB","D",1,1,1,4000,0,NA,"10-02-2016","AB_D","AB"
+"2",5002,"T1","dad","in-person","AB","A",1,2,0,4000,0,NA,"10-02-2016","AB_A","AB"
+"3",5002,"T1","dad","in-person","AB","A",1,3,0,3223,1,100,"10-02-2016","AB_A","AB"
+"4",5002,"T1","dad","in-person","AB","B",1,4,0,2142,0,NA,"10-02-2016","AB_B","AB"
+"5",5002,"T1","dad","in-person","AB","B",1,5,0,2185,1,100,"10-02-2016","AB_B","AB"
+"6",5002,"T1","dad","in-person","AB","C",1,6,1,2715,0,NA,"10-02-2016","AB_C","AB"

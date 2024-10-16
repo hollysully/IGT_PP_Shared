@@ -63,11 +63,11 @@ model {
   
 generated quantities {
   // THIS SHOULD BE ADJUSTED TO THE DATA FOR THE THEORETICAL MODEL OF INTEREST
-  vector[2] utility;    // declare utility variable
-  real log_lik[N];      // log-likelihoods for calculating LOOIC
-  int choice_pred[N,T]; // posterior predicted values
-  vector[N] A;          // declare bounded theoretical model-parameter
-  real mu_A;            // bounded group-level learning rate
+  vector[2] utility;          // declare utility variable
+  array[N] real log_lik;      // log-likelihoods for calculating LOOIC
+  array[N,T] int choice_pred; // posterior predicted values
+  vector[N] A;                // declare bounded theoretical model-parameter
+  real mu_A;                  // bounded group-level learning rate
   
   mu_A = Phi_approx_group_mean_rng(mu_theta, sigma_U, 10000); // calculate posterior of bounded group-level learning rates
   

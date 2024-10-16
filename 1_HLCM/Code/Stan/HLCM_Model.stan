@@ -75,11 +75,11 @@ model {
   
 generated quantities {
   // THIS SHOULD BE ADJUSTED TO THE DATA FOR THE THEORETICAL MODEL OF INTEREST
-  vector[2] utility;      // declare utility variable
-  real log_lik[N];        // log-likelihoods for calculating LOOIC
-  int choice_pred[N,T,S]; // posterior predicted values
-  corr_matrix[2] R_theta; // correlation matrix
-  matrix[S,N] A;          // declare bounded theoretical model-parameter
+  vector[2] utility;              // declare utility variable
+  array[N] real log_lik;          // log-likelihoods for calculating LOOIC
+  array[N, T, S] int choice_pred; // posterior predicted values
+  corr_matrix[2] R_theta;         // correlation matrix
+  matrix[S,N] A;                  // declare bounded theoretical model-parameter
   
   // calculate correlation matrix
   R_theta = R_chol * R_chol';

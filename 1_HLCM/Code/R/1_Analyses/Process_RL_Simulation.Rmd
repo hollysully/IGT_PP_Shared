@@ -63,12 +63,14 @@ library(kableExtra)
 
 # SIMULATION
 RL_Characteristics = readRDS(here("1_HLCM", "Data", "2_Fitted", "RL_Characteristics.RDS"))
-RL_Simulations     = readRDS(here("1_HLCM", "Data", "2_Fitted", "RL_Simulations.RDS"))
+RL_Simulations     = readRDS(here("1_HLCM", "Data", "2_Fitted", "LoB_LoR", "RL_Simulation_1.RDS"))
 RL_Diagnostics     = readRDS(here("1_HLCM", "Data", "2_Fitted", "RL_Diagnostics.RDS"))
 
 HLCM_Characteristics = readRDS(here("1_HLCM", "Data", "2_Fitted", "HLCM_Characteristics.RDS"))
 HLCM_Simulations     = readRDS(here("1_HLCM", "Data", "2_Fitted", "HLCM_Simulations.RDS"))
 HLCM_Diagnostics     = readRDS(here("1_HLCM", "Data", "2_Fitted", "HLCM_Diagnostics.RDS"))
+
+Total_Duration = readRDS(here("1_HLCM", "Data", "TimeStamps.RDS"))
 ```
 
 
