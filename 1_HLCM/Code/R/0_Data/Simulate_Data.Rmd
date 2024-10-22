@@ -1,0 +1,263 @@
+---
+title: "Simulation"
+output: html_document
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(ggh4x)
+library(grid)
+library(extraDistr)
+library(brms)
+library(posterior)
+library(foreach)
+library(doParallel)
+```
+
+
+## Functions
+```{r, eval = T}
+#------------------------------------------------------------------------------
+# CALCULATE PERCENTILE
+calculate_percentile = function(true, predicted, S){
+  percentiles = matrix(nrow = nrow(true), ncol = S)
+  for(s in 1:S){
+    for(i in 1:nrow(true)){
+      percentiles[i,s] = mean(predicted[,s,i] < true[i,s])
+    }
+  }
+  return(percentiles)
+}
+
+
+#------------------------------------------------------------------------------
+# USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
+softmax = function(values){
+  return(exp(values) / sum(exp(values)))
+}
+
+
+#------------------------------------------------------------------------------
+# SIMULATION FUNCTION
+simulate_RL = function(learning_rate = .5, n_trials = 100,
+                       Sr_probs = c(.3, .7), label = "") {
+
+  data = data.frame()
+  A = learning_rate
+  utility = rep(0,2)
+    
+  for(t in 1:n_trials){
+    prob = softmax(c(utility[1], utility[2]))
+    
+    choice = sample(c(1,2), 1, prob = prob)
+    
+    outcome = rbinom(1, 1, Sr_probs[choice])
+    
+    data = data.frame(sim = label,
+                      A = A,
+                      trial = t,
+                      prob_1 = prob[1],
+                      prob_2 = prob[2],
+                      utility_1 = utility[1],
+                      utility_2 = utility[2],
+                      outcome = outcome,
+                      choice = choice) %>% 
+      bind_rows(data)
+    
+    utility[choice] = utility[choice] + A * (outcome - utility[choice])
+  }
+  data %>%
+    return()
+}
+
+
+#------------------------------------------------------------------------------
+# GRABBING POSTERIOR FUNCTION
+par_from_draws <- function(fit, par) {
+  rvars_pars <- as_draws_rvars(
+    fit$draws(
+      c(par)
+    )
+  )
+  return(lapply(rvars_pars, draws_of))
+}
+```
+
+
+# -------------------------------------------
+# Simulation
+## Setup
+```{r}
+# -----------------------------------------------------------------------------------
+# SPECIFY CONDITIONS FOR SIMULATION
+clusters = makeCluster(4)
+S             = 3
+N             = 50
+n_simulations = 100
+conditions    = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+numbers = c(1000:9999)
+
+
+# -----------------------------------------------------------------------------------
+# SET VARYING PARAMETERS
+HLM_parameters = list(# small slope effect & weak correlation
+                      LoB_LoR = c(mu_beta_UT  = 0,
+                                  int_slope_R = 0),
+                      # large slope effect & weak correlation
+                      HiB_LoR = c(mu_beta_UT  = .3,
+                                  int_slope_R = 0),
+                      # small slope effect & strong correlation
+                      LoB_HiR = c(mu_beta_UT  = 0,
+                                  int_slope_R = .3),
+                      # large slope effect & strong correlation
+                      HiB_HiR = c(mu_beta_UT  = .3,
+                                  int_slope_R = .3))
+```
+
+
+## Generate Data
+```{r, eval = T}
+set.seed(20241021)
+start_timestamp = Sys.time()
+registerDoParallel(clusters)
+random_numbers = data.frame(condition = conditions) %>% 
+  group_by(condition) %>% 
+  summarise(simulation = 1:n_simulations) %>% 
+  bind_cols(data.frame(seed = sample(numbers, length(conditions) * n_simulations, replace = F)))
+
+# -----------------------------------------------------------------------------------
+# START SIMULATION
+foreach(cond = conditions) %:% # LOOP THROUGH CONDITIONS
+  foreach(sim = 1:n_simulations) %dopar% {
+    paste("Started at", Sys.time())
+    require(dplyr)
+    require(posterior)
+    cur_seed = filter(random_numbers, condition == cond & simulation == sim)$seed
+    set.seed(cur_seed)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SET GROUP-LEVEL PARAMETERS
+    # group-level parameters
+    mu_intercept_UT = qnorm(.1) # mean untransformed intercept for learning rate
+    sd_intercept_UT = 1         # standard deviation of intercepts
+    sd_beta_UT = 1              # standard deviation of slopes
+    residual_sd = 1             # residual standard deviation
+    # mean untransformed slope for learning rate
+    mu_beta_UT = HLM_parameters[[cond]][["mu_beta_UT"]]
+    # intercept-slope correlation
+    int_slope_R = HLM_parameters[[cond]][["int_slope_R"]]
+    
+    # build variance-covariance matrix
+    R = matrix(data = c(1, int_slope_R, int_slope_R, 1),
+               nrow = 2, ncol = 2) # correlation matrix
+    SD = diag(c(sd_intercept_UT, sd_beta_UT)) # SD matrix
+    VC = SD%*%R%*%SD # variance-covariance matrix
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SIMULATE PERSON-LEVEL PARAMETERS
+    # intercepts & slopes
+    parameters = MASS::mvrnorm(N, mu = c(mu_intercept_UT, mu_beta_UT), Sigma = VC) # draw from MVT Normal
+    
+    # calculate learning rates
+    A_UTs = parameters[,1] + parameters[,2]%*%t(1:S-1) + replicate(S, rnorm(N, 0, residual_sd))
+    As = pnorm(A_UTs)
+    
+    
+    # -----------------------------------------------------------------------------------
+    # SIMULATE CHOICE DATA
+    sim_data = data.frame()
+    for(i in 1:N){
+      for(s in 1:S){
+        sim_data = simulate_RL(learning_rate = As[i,s], 
+                               label = as.numeric(paste(s, i, sep = "0"))) %>% 
+          mutate(ID = i, session = s) %>% 
+          bind_rows(sim_data)
+      }
+    }
+    
+    
+    # -----------------------------------------------------------------------------------
+    # CONVERT TO STAN DATA
+    Tr = max(sim_data$trial)
+    choice = array(-1, dim = c(N,Tr,S))
+    outcome = array(0, dim = c(N,Tr,S))
+    
+    for(s in 1:S){
+      for(i in 1:N){
+        cur_data = filter(sim_data, session == s, ID == i) %>% 
+          arrange(trial)
+        choice[i,,s] = cur_data$choice
+        outcome[i,,s] = cur_data$outcome
+      }
+    }
+    
+    
+    stan_data = list(N = N,
+                     T = Tr,
+                     S = S,
+                     choice = choice,
+                     outcome = outcome)
+    
+    simulation = list(condition = cond,
+                      simulation = sim,
+                      data_seed = cur_seed,
+                      stan_data = stan_data,
+                      mu_intercept_UT = mu_intercept_UT,
+                      sd_intercept_UT = sd_intercept_UT,
+                      sd_beta_UT = sd_beta_UT,
+                      residual_sd = residual_sd,
+                      mu_beta_UT = mu_beta_UT,
+                      int_slope_R = int_slope_R,
+                      parameters = parameters,
+                      A_UTs = A_UTs,
+                      As = As)
+    saveRDS(simulation, here::here("1_HLCM", "Data", "1_Simulations", cond,
+                                   paste0("Data_", sim, ".RDS")))
+    return(paste("Finished at", Sys.time()))
+  }
+```
+
+
+# -------------------------------------------
+# Check Seeds
+```{r}
+seeds = data.frame()
+j = 1
+for(condition in conditions){
+  for(sim in 1:n_simulations){
+    seeds = data.frame(j = j,
+                       condition = condition,
+                       simulation = sim,
+                       seed = readRDS(here::here("1_HLCM", "Data", "1_Simulations", condition,
+                                                 paste0("Data_", sim, ".RDS")))$data_seed) %>% 
+      bind_rows(seeds)
+    j = j+1
+  }
+}
+
+seeds %>% 
+  group_by(seed) %>% 
+  reframe(number = n()) %>%
+  summarise(max = max(number))
+```
+
+
+
+

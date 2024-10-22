@@ -105,15 +105,14 @@ par_from_draws <- function(fit, par) {
 ```{r}
 # -----------------------------------------------------------------------------------
 # SPECIFY CONDITIONS FOR SIMULATION
-n_iter        = 1500
-n_warmup      = 500
-n_chains      = 4
-clusters = makeCluster(1)
-
-S             = 3
-N             = 50
-n_simulations = 5
-conditions    = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+n_iter      = 200
+n_warmup    = 100
+n_chains    = 1
+N           = 50
+S           = 3
+clusters    = makeCluster(1)
+sim_numbers = 1:5
+conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
 
 
 # -----------------------------------------------------------------------------------
@@ -130,28 +129,11 @@ growth_model = data.frame(ID = 1:N) %>% group_by(ID) %>% summarise(session = 1:S
                     set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "Intercept"),
                     set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "session")))
 HLCM_model   = cmdstan_model(here("1_HLCM", "Code", "Stan", "HLCM_Model.stan")) # Compile model
-
-
-# -----------------------------------------------------------------------------------
-# SET VARYING PARAMETERS
-HLM_parameters = list(# small slope effect & weak correlation
-                      LoB_LoR = c(mu_beta_UT  = 0,
-                                  int_slope_R = 0),
-                      # large slope effect & weak correlation
-                      HiB_LoR = c(mu_beta_UT  = .3,
-                                  int_slope_R = 0),
-                      # small slope effect & strong correlation
-                      LoB_HiR = c(mu_beta_UT  = 0,
-                                  int_slope_R = .3),
-                      # large slope effect & strong correlation
-                      HiB_HiR = c(mu_beta_UT  = .3,
-                                  int_slope_R = .3))
 ```
 
 
 ## Loop Through Conditions
 ```{r, eval = T}
-set.seed(20240924)
 start_timestamp = Sys.time()
 registerDoParallel(clusters)
 
@@ -159,11 +141,25 @@ registerDoParallel(clusters)
 # -----------------------------------------------------------------------------------
 # START SIMULATION
 foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
-  foreach(sim = 1:n_simulations) %dopar% {
-    # condition = conditions[1]
-    # sim = 1
+  foreach(sim = sim_numbers) %dopar% {
+    condition = conditions[1]
+    sim = 1
+    # -----------------------------------------------------------------------------------
+    # Setup for current simulation
     require(dplyr)
     require(posterior)
+    simulation = readRDS(here::here("1_HLCM", "Data", "1_Simulations", condition,
+                                    paste0("Data_", sim, ".RDS")))
+    stan_data = simulation$stan_data
+    mu_intercept_UT = simulation$mu_intercept_UT
+    sd_intercept_UT = simulation$sd_intercept_UT
+    mu_beta_UT = simulation$mu_beta_UT
+    sd_beta_UT = simulation$sd_beta_UT
+    int_slope_R = simulation$int_slope_R
+    residual_sd = simulation$residual_sd
+    parameters = simulation$parameters
+    A_UTs = simulation$A_UTs
+    As = simulation$As
     
     
     # -----------------------------------------------------------------------------------
@@ -175,73 +171,6 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     HLCM_Simulations = data.frame()
     HLCM_Diagnostics = data.frame()
     HLCM_Characteristics = data.frame()
-    
-    
-    # -----------------------------------------------------------------------------------
-    # SET GROUP-LEVEL PARAMETERS
-    # group-level parameters
-    mu_intercept_UT = qnorm(.1) # mean untransformed intercept for learning rate
-    sd_intercept_UT = 1         # standard deviation of intercepts
-    sd_beta_UT = 1              # standard deviation of slopes
-    residual_sd = 1             # residual standard deviation
-    # mean untransformed slope for learning rate
-    mu_beta_UT = HLM_parameters[[condition]][["mu_beta_UT"]]
-    # intercept-slope correlation
-    int_slope_R = HLM_parameters[[condition]][["int_slope_R"]]
-    
-    # build variance-covariance matrix
-    R = matrix(data = c(1, int_slope_R, int_slope_R, 1),
-               nrow = 2, ncol = 2) # correlation matrix
-    SD = diag(c(sd_intercept_UT, sd_beta_UT)) # SD matrix
-    VC = SD%*%R%*%SD # variance-covariance matrix
-    
-    
-    # -----------------------------------------------------------------------------------
-    # SIMULATE PERSON-LEVEL PARAMETERS
-    # intercepts & slopes
-    parameters = MASS::mvrnorm(N, mu = c(mu_intercept_UT, mu_beta_UT), Sigma = VC) # draw from MVT Normal
-    
-    # calculate learning rates
-    A_UTs = parameters[,1] + parameters[,2]%*%t(1:S-1) + replicate(S, rnorm(N, 0, residual_sd))
-    As = pnorm(A_UTs)
-    
-    
-    # -----------------------------------------------------------------------------------
-    # SIMULATE CHOICE DATA
-    sim_data = data.frame()
-    for(i in 1:N){
-      for(s in 1:S){
-        sim_data = simulate_RL(learning_rate = As[i,s], 
-                               label = as.numeric(paste(s, i, sep = "0"))) %>% 
-          mutate(ID = i, session = s) %>% 
-          bind_rows(sim_data)
-      }
-    }
-    
-    
-    # -----------------------------------------------------------------------------------
-    # CONVERT TO STAN DATA
-    Tr = max(sim_data$trial)
-    choice = array(-1, dim = c(N,Tr,S))
-    outcome = array(0, dim = c(N,Tr,S))
-    
-    for(s in 1:S){
-      for(i in 1:N){
-        cur_data = filter(sim_data, session == s, ID == i) %>% 
-          arrange(trial)
-        choice[i,,s] = cur_data$choice
-        outcome[i,,s] = cur_data$outcome
-      }
-    }
-    
-    
-    stan_data = list(N = N,
-                     T = Tr,
-                     S = S,
-                     choice = choice,
-                     outcome = outcome)
-    saveRDS(stan_data, here::here("1_HLCM", "Data", "1_Stan", condition,
-                            paste0("Data_", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
@@ -525,6 +454,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     # -----------------------------------------------------------------------------------
     # SAVE CHARACTERISTICS OF SIMULATION
     RL_Characteristics = data.frame(
+      data_seed     = stan_data$data_seed,
       condition     = condition,
       simulation    = sim,
       start         = start_time,
