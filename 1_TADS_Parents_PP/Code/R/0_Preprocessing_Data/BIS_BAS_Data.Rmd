@@ -21,15 +21,15 @@ library(haven)
 
 
 # --------------------------------------
-# Load & Process Data
+# Time 1
 ```{r}
 T1_child_A = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
                            "Finalized Datasets Spring 2022/Finalized Scored Data",
                            "T1", "Questionnaires",
                            "5.23.2022_TADS T1 - Child - A - Cleaned Scored_4.26.21.sav")) %>% 
-  mutate(participant = "child", packet = "A",
+  mutate(participant = "child", packet = "A", session = 1,
          participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
-  select(ID = id, participant, participant_number, packet, date = chdoqa, sex = chsex, session = Timepoint,
+  select(ID = id, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
          bas_drive = basdriv0_T1, bas_fun = basfuns0_T1, bas_rew = basrewr0_T1, 
          bas_tot = bastot0_T1, bis = bis0_T1)
 
@@ -37,9 +37,9 @@ T1_dad_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
                          "Finalized Datasets Spring 2022/Finalized Scored Data",
                          "T1", "Questionnaires",
                          "5.23.2022_TADS T1 - Dad - B - Cleaned Scored_4.26.21.sav")) %>% 
-  mutate(participant = "dad", packet = "B",
+  mutate(participant = "dad", packet = "B", session = 1,
          participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
-  select(ID = id, participant, participant_number, packet, date = chdoqa, sex = chsex, session = Timepoint,
+  select(ID = id, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
          bas_drive = basdriv0_T1, bas_fun = basfuns0_T1, bas_rew = basrewr0_T1, 
          bas_tot = bastot0_T1, bis = bis0_T1)
 
@@ -47,9 +47,9 @@ T1_mom_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
                          "Finalized Datasets Spring 2022/Finalized Scored Data",
                          "T1", "Questionnaires",
                          "5.23.2022_TADS T1 - Mom - B - Cleaned Scored_5.sav")) %>% 
-  mutate(participant = "mom", packet = "B",
+  mutate(participant = "mom", packet = "B", session = 1,
          participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
-  select(ID = id, participant, participant_number, packet, date = chdoqa, sex = chsex, session = Timepoint,
+  select(ID = id, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
          bas_drive = basdriv0_T1, bas_fun = basfuns0_T1, bas_rew = basrewr0_T1, 
          bas_tot = bastot0_T1, bis = bis0_T1)
 ```
@@ -66,6 +66,203 @@ saveRDS(T1_mom_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T1_mom_BIS_BAS.RDS
 
 
 # --------------------------------------
+# Time 2
+```{r}
+T2_child_A = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                           "Finalized Datasets Spring 2022/Finalized Scored Data",
+                           "T2", "Questionnaires",
+                           "5.23.2022_TADS T2 - Child - A - Cleaned Scored_5.5.21.sav")) %>% 
+  mutate(participant = "child", packet = "A", session = 2,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID = id, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
+         bas_drive = basdriv0, bas_fun = basfuns0, bas_rew = basrewr0, 
+         bas_tot = bastot0, bis = bis0)
+
+T2_dad_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T2", "Questionnaires",
+                         "5.23.2022_TADS T2 - Dad - B - Cleaned Scored_12.7.21.sav")) %>% 
+  mutate(participant = "dad", packet = "B", session = 2,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID = id, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self)
+
+T2_mom_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T2", "Questionnaires",
+                         "5.23.2022_TADS T2 - Mom - B - Cleaned Scored_5.5.21.sav")) %>% 
+  mutate(participant = "mom", packet = "B", session = 2,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID = id, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self)
+```
+
+
+
+# Save Data
+```{r}
+saveRDS(T2_child_A, here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_child_BIS_BAS.RDS"))
+saveRDS(T2_dad_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_dad_BIS_BAS.RDS"))
+saveRDS(T2_mom_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T2_mom_BIS_BAS.RDS"))
+```
+
+
+
+# --------------------------------------
+# Time 3
+```{r}
+T3_child_A = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                           "Finalized Datasets Spring 2022/Finalized Scored Data",
+                           "T3", "Questionnaires",
+                           "5.23.2022_TADS T3 ChildA - Cleaned&Scored_KD.sav")) %>% 
+  mutate(participant = "child", packet = "A", session = 3,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv0, bas_fun = basfuns0, bas_rew = basrewr0, 
+         bas_tot = bastot0, bis = bis0) %>% 
+  mutate(date = as.Date(date))
+
+T3_dad_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T3", "Questionnaires",
+                         "5.23.2022_TADS T3 DadB - Cleaned&Scored_KD.sav")) %>% 
+  mutate(participant = "dad", packet = "B", session = 3,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"))
+
+T3_mom_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T3", "Questionnaires",
+                         "5.23.2022_TADS T3 MomB - CleanedScored.sav")) %>% 
+  mutate(participant = "mom", packet = "B", session = 3,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"))
+```
+
+
+
+# Save Data
+```{r}
+saveRDS(T3_child_A, here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_child_BIS_BAS.RDS"))
+saveRDS(T3_dad_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_dad_BIS_BAS.RDS"))
+saveRDS(T3_mom_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T3_mom_BIS_BAS.RDS"))
+```
+
+
+
+# --------------------------------------
+# Time 4
+```{r}
+T4_child_A = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                           "Finalized Datasets Spring 2022/Finalized Scored Data",
+                           "T4", "Questionnaires",
+                           "5.23.2022_TADS T4 ChildA - Cleaned&Scored.sav")) %>% 
+  mutate(participant = "child", packet = "A", session = 4,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv0, bas_fun = basfuns0, bas_rew = basrewr0, 
+         bas_tot = bastot0, bis = bis0) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"))
+
+T4_dad_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T4", "Questionnaires",
+                         "5.23.2022_TADS T4 DadB - Cleaned&Scored.sav")) %>% 
+  mutate(participant = "dad", packet = "B", session = 4,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = chdoqa, child_sex = chsex, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"),
+         child_sex = as.numeric(child_sex))
+
+T4_mom_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T4", "Questionnaires",
+                         "6.17.2022_TADS T4 MomB - Cleaned & Scored.sav")) %>% 
+  mutate(participant = "mom", packet = "B", session = 4,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"))
+```
+
+
+
+# Save Data
+```{r}
+saveRDS(T4_child_A, here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_child_BIS_BAS.RDS"))
+saveRDS(T4_dad_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_dad_BIS_BAS.RDS"))
+saveRDS(T4_mom_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T4_mom_BIS_BAS.RDS"))
+```
+
+
+
+# --------------------------------------
+# Time 5
+```{r}
+T5_child_A = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                           "Finalized Datasets Spring 2022/Finalized Scored Data",
+                           "T5", "Questionnaires",
+                           "5.23.2022_36mo_ChildA_cleanedandscored.sav")) %>%
+  mutate(participant = "child", packet = "A", session = 5,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv0, bas_fun = basfuns0, bas_rew = basrewr0, 
+         bas_tot = bastot0, bis = bis0)
+
+T5_dad_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T5", "Questionnaires",
+                         "5.23.2022_36mo_DadB_cleanedandscored.sav")) %>%
+  mutate(participant = "dad", packet = "B", session = 5,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self)
+
+T5_mom_B = read_sav(here("S:/CADEPP/Longitudinal Imaging Project",
+                         "Finalized Datasets Spring 2022/Finalized Scored Data",
+                         "T5", "Questionnaires",
+                         "6.17.2022_36mo_MomB_cleanedandscored.sav")) %>% 
+  mutate(participant = "mom", packet = "B", session = 5,
+         participant_number = match(participant, c("child", "dad", "mom")[1:3])) %>% 
+  select(ID, participant, participant_number, packet, date = CHDOQA, child_sex = CHSEX, session,
+         bas_drive = basdriv_self0, bas_fun = basfun_self0, bas_rew = basrewr_self0, 
+         bas_tot = bastot_self0, bis = bis0_self)
+```
+
+
+
+# Save Data
+```{r}
+saveRDS(T5_child_A, here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_child_BIS_BAS.RDS"))
+saveRDS(T5_dad_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_dad_BIS_BAS.RDS"))
+saveRDS(T5_mom_B, here("1_TADS_Parents_PP", "Data", "0_Raw", "T5_mom_BIS_BAS.RDS"))
+```
+
+
+
+# --------------------------------------
+# Save Full Data
+```{r}
+full_data = bind_rows(T1_child_A, T1_dad_B, T1_mom_B,
+                      T2_child_A, T2_dad_B, T2_mom_B,
+                      T3_child_A, T3_dad_B, T3_mom_B,
+                      T4_child_A, T4_dad_B, T4_mom_B,
+                      T5_child_A, T5_dad_B, T5_mom_B)
+
+saveRDS(full_data, here("1_TADS_Parents_PP", "Data", "0_Raw", "Full_BIS_BAS.RDS"))
+```
 
 
 

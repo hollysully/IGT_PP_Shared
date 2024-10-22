@@ -1,0 +1,201 @@
+---
+title: "IGT Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+# --------------------------------------
+# Setup
+## Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(plyr)
+library(here)
+```
+
+
+## Version Check Function
+```{r}
+check_version = function(data, eprime = T){
+  
+  if(eprime){
+    outcome_list = read.csv(here::here("1_TADS_Parents_PP", "Data", "3_Helper",
+                                       "eprime_AB_outcome_list.csv")) %>% 
+  mutate(trial_seq = as.numeric(row.names(.)))
+  
+  versions = data %>%
+    select(id, card, outcome) %>% 
+    mutate(outcome = as.numeric(outcome)) %>% 
+    filter(!is.na(outcome)) %>% 
+    group_by(id, card) %>% 
+    dplyr::mutate(trial_seq = 1:n()) %>% 
+    left_join(outcome_list) %>% 
+    mutate(equal_A = outcome == Deck_A, equal_B = outcome == Deck_B,
+           equal_C = outcome == Deck_C, equal_D = outcome == Deck_D) %>% 
+    group_by(id, card) %>% 
+    reframe(A_prop = mean(equal_A), B_prop = mean(equal_B),
+            C_prop = mean(equal_C), D_prop = mean(equal_D)) %>% 
+    mutate(AB_card = case_when(A_prop == 1 ~ "AB_A",
+                               B_prop == 1 ~ "AB_B",
+                               C_prop == 1 ~ "AB_C",
+                               D_prop == 1 ~ "AB_D"),
+           checked_version = case_when(str_ends(AB_card, card) ~ "AB",
+                                       str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
+    select(-ends_with("prop"))
+  } else {
+    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "pavlovia_AB_outcome_list.csv"))
+  
+  versions = data %>%
+    select(id, block, card, outcome) %>% 
+    mutate(outcome = as.numeric(outcome)) %>% 
+    filter(!is.na(outcome)) %>% 
+    group_by(id, block, card) %>% 
+    dplyr::mutate(trial_seq = 1:n()) %>% 
+    left_join(outcome_list) %>% 
+    mutate(equal_A = outcome == Deck_A, equal_B = outcome == Deck_B,
+           equal_C = outcome == Deck_C, equal_D = outcome == Deck_D) %>% 
+    group_by(id, card) %>% 
+    reframe(A_prop = mean(equal_A), B_prop = mean(equal_B),
+            C_prop = mean(equal_C), D_prop = mean(equal_D)) %>% 
+    mutate(AB_card = case_when(A_prop == 1 ~ "AB_A",
+                               B_prop == 1 ~ "AB_B",
+                               C_prop == 1 ~ "AB_C",
+                               D_prop == 1 ~ "AB_D"),
+           checked_version = case_when(str_ends(AB_card, card) ~ "AB",
+                                       str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
+    select(-ends_with("prop"))
+  }
+  
+  return(left_join(data, versions))
+}
+```
+
+
+# --------------------------------------
+# Dad
+```{r}
+# Identify the directory for the files and get the list of those files
+setwd(here::here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T3_Dad"))
+T3_dad_filenames <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), 
+                                        list.files(pattern = "5", recursive = T)),
+                              list.files(pattern = "*-1.txt", recursive = T))
+
+T3_dad_raw <- do.call("rbind.fill", lapply(lapply(lapply(T3_dad_filenames, read_eprime),
+                                                  FrameList),
+                                           to_data_frame))
+T3_dad_dates = T3_dad_raw %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T3_dad_eprime = T3_dad_raw %>% 
+  dplyr::mutate(id = as.numeric(substr(Eprime.Basename, 24, 27)),
+                time = "T3",
+                participant = "dad",
+                platform = "in-person",
+                version = substr(Eprime.Basename, 22, 22),
+                version = case_when(version == "1" ~ "AB", version == "2" ~ "BD"),
+                card = cardname,
+                Sample = as.numeric(Sample),
+                block = case_when(Sample > 0 & Sample < 41 ~ 1,
+                                  Sample > 41 & Sample < 82 ~ 2,
+                                  Sample > 82 & Sample < 123 ~ 3),
+                trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+                card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 1,
+                                      version == "AB" & card %in% c("C", "D") ~ 0,
+                                      version == "BD" & card %in% c("B", "D") ~ 1,
+                                      version == "BD" & card %in% c("A", "C") ~ 0),
+                card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+                card_play = case_when(card.RESP == 1 ~ 1, T ~ 0),
+                outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>% 
+  filter(!is.na(block)) %>%
+  select(id, time, participant, platform, version, card, block, 
+         trial, card_good, card_RT, card_play, outcome) %>% 
+  left_join(T3_dad_dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+```
+
+
+# --------------------------------------
+# Mom
+```{r}
+# Identify the directory for the files and get the list of those files
+setwd(here::here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T3_Mom"))
+T3_mom_filenames <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), 
+                                        list.files(pattern = "5", recursive = T)),
+                              list.files(pattern = "*-1.txt", recursive = T))
+
+T3_mom_raw <- do.call("rbind.fill", lapply(lapply(lapply(T3_mom_filenames, read_eprime),
+                                                  FrameList),
+                                           to_data_frame))
+T3_mom_dates = T3_mom_raw %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T3_mom_subclean = T3_mom_raw %>% 
+  dplyr::mutate(id = as.numeric(substr(Eprime.Basename, 24, 27)),
+                time = "T3",
+                participant = "mom",
+                platform = "in-person",
+                version = substr(Eprime.Basename, 22, 22),
+                version = case_when(version == "1" ~ "AB", version == "2" ~ "BD"),
+                card = cardname,
+                Sample = as.numeric(Sample),
+                block = case_when(Sample > 0 & Sample < 41 ~ 1,
+                                  Sample > 41 & Sample < 82 ~ 2,
+                                  Sample > 82 & Sample < 123 ~ 3),
+                trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+                card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 1,
+                                      version == "AB" & card %in% c("C", "D") ~ 0,
+                                      version == "BD" & card %in% c("B", "D") ~ 1,
+                                      version == "BD" & card %in% c("A", "C") ~ 0),
+                card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+                card_play = case_when(card.RESP == 1 ~ 1, T ~ 0),
+                outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>% 
+  filter(!is.na(block)) %>% 
+  select(id, time, participant, platform, version, card, block, 
+         trial, card_good, card_RT, card_play, outcome) %>% 
+  left_join(T3_mom_dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+```
+
+
+# --------------------------------------
+# Combine & Save
+```{r}
+bind_rows(T3_dad_subclean, T3_mom_subclean) %>%
+  # exclude participant that did not respond
+  filter(!(id == 5118 & participant == "dad" & time == "T3")) %>%
+  saveRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "Processed_Raw_T3_Parents.RDS"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
