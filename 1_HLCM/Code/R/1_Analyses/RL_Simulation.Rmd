@@ -142,8 +142,6 @@ registerDoParallel(clusters)
 # START SIMULATION
 foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
   foreach(sim = sim_numbers) %dopar% {
-    condition = conditions[1]
-    sim = 1
     # -----------------------------------------------------------------------------------
     # Setup for current simulation
     require(dplyr)
@@ -194,7 +192,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
       A_posterior[,s,] = par_from_draws(RL_fit, "A")$A
       RL_Diagnostics = RL_fit$summary(variables = c("mu_theta", "mu_A", "sigma_U", "theta", "A")) %>% 
         dplyr::select(parameter = variable, rhat, ess_bulk, ess_tail) %>% 
-        mutate(condition = condition, session = s, model = "RL", simulation = sim) %>% 
+        mutate(hypermodel = "RL", model = "RL", condition = condition, session = s, simulation = sim) %>% 
         bind_rows(RL_Diagnostics)
     }
     
@@ -224,7 +222,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = sum_growth_model$b_Intercept
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -239,7 +238,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = sum_growth_model$sd_ID__Intercept
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -254,7 +254,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = sum_growth_model$b_session
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -269,7 +270,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = sum_growth_model$sd_ID__session
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -284,7 +286,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = sum_growth_model$cor_ID__Intercept__session
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -299,7 +302,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = sum_growth_model$sigma
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -318,7 +322,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = random_intercepts
     cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = apply(cur_posterior, 2, mean),
@@ -333,7 +338,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = random_slopes
     cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "RL", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = apply(cur_posterior, 2, mean),
@@ -351,7 +357,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_true_parameter = A_UTs
     cur_posterior = unbounded_A_posterior
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim,
+      data.frame(hypermodel = "RL", model = "RL",
+                 condition = condition, simulation = sim,
                  parameter_type = paste0("person_", 1:N),
                  true_value = cur_true_parameter, 
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
@@ -375,7 +382,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_true_parameter = As
     cur_posterior = A_posterior
     RL_Simulations =
-      data.frame(condition = condition, simulation = sim,
+      data.frame(hypermodel = "RL", model = "RL",
+                 condition = condition, simulation = sim,
                  parameter_type = paste0("person_", 1:N),
                  true_value = cur_true_parameter, 
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
@@ -396,6 +404,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
       bind_rows(RL_Simulations)
     
     saveRDS(dplyr::select(RL_Simulations,
+                          hypermodel, model,
                           condition, simulation, session, parameter, parameter_type,
                           true_value, posterior_mean, posterior_SD, percentile,
                           lower_HDI95, upper_HDI95, true_in_HDI95),
@@ -440,12 +449,13 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
              person_number = stringr::str_remove(person_number, ",session\\]"),
              parameter = case_when(!is.na(person_parameter) ~ paste0(person_parameter,"[",person_number,"]"),
                                    T ~ parameter),
-             model = "growth", condition = condition,
+             hypermodel = "RL", model = "growth", condition = condition,
              simulation = sim, session = 0) %>% 
       dplyr::select(condition, simulation, model, session, parameter, rhat, ess_bulk, ess_tail) %>% 
       bind_rows(RL_Diagnostics)
     
     saveRDS(dplyr::select(RL_Diagnostics,
+                          hypermodel, model,
                           condition, simulation, model, session, parameter,
                           rhat, ess_bulk, ess_tail),
             here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("RL_Diagnostics_", sim, ".RDS")))
@@ -454,6 +464,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     # -----------------------------------------------------------------------------------
     # SAVE CHARACTERISTICS OF SIMULATION
     RL_Characteristics = data.frame(
+      hypermodel    = "RL",
       data_seed     = simulation$data_seed,
       condition     = condition,
       simulation    = sim,
@@ -490,7 +501,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "gamma00")$gamma00
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -505,7 +517,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "sigma_U")$sigma_U[,1]
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -520,7 +533,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "gamma10")$gamma10
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -535,7 +549,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "sigma_U")$sigma_U[,2]
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -550,7 +565,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "R_theta")$R_theta[,2,1]
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -565,7 +581,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "R")$R
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = mean(cur_posterior),
@@ -584,7 +601,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "beta0")$beta0
     cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = apply(cur_posterior, 2, mean),
@@ -599,7 +617,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_posterior = par_from_draws(HLCM_fit, "beta1")$beta1
     cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
+      data.frame(hypermodel = "HLCM", model = "growth",
+                 condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
                  true_value = cur_true_parameter,
                  posterior_mean = apply(cur_posterior, 2, mean),
@@ -617,7 +636,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_true_parameter = A_UTs
     cur_posterior = par_from_draws(HLCM_fit, "theta")$theta
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim,
+      data.frame(hypermodel = "HLCM", model = "RL",
+                 condition = condition, simulation = sim,
                  parameter_type = paste0("person_", 1:N),
                  true_value = cur_true_parameter, 
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
@@ -639,7 +659,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     cur_true_parameter = As
     cur_posterior = par_from_draws(HLCM_fit, "A")$A
     HLCM_Simulations =
-      data.frame(condition = condition, simulation = sim,
+      data.frame(hypermodel = "HLCM", model = "RL",
+                 condition = condition, simulation = sim,
                  parameter_type = paste0("person_", 1:N),
                  true_value = cur_true_parameter, 
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
@@ -658,6 +679,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
       bind_rows(HLCM_Simulations)
     
     saveRDS(dplyr::select(HLCM_Simulations,
+                          hypermodel, model,
                           condition, simulation, session, parameter, parameter_type,
                           true_value, posterior_mean, posterior_SD, percentile,
                           lower_HDI95, upper_HDI95, true_in_HDI95),
@@ -670,7 +692,8 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
                                                       "beta0", "beta1", "theta", "A","R_theta")) %>% 
       dplyr::select(parameter = variable, rhat, ess_bulk, ess_tail) %>%
       filter(!(parameter %in% c("R_theta[1,1]", "R_theta[1,2]", "R_theta[2,2]"))) %>% 
-      mutate(condition = condition, simulation = sim,
+      mutate(hypermodel = "HLCM", model = case_when(parameter %in% c("theta", "A") ~ "RL", T ~ "growth"),
+             condition = condition, simulation = sim,
              model = case_when(stringr::str_starts(parameter, "theta|A") ~ "RL", T ~ "growth"),
              session = case_when(stringr::str_detect(parameter, "\\[1,") ~ 1,
                                  stringr::str_detect(parameter, "\\[2,") ~ 2,
@@ -679,6 +702,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
       bind_rows(HLCM_Diagnostics)
     
     saveRDS(dplyr::select(HLCM_Diagnostics,
+                          hypermodel, model,
                           condition, simulation, model, session, parameter,
                           rhat, ess_bulk, ess_tail),
             here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("HLCM_Diagnostics_", sim, ".RDS")))
@@ -687,6 +711,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     # -----------------------------------------------------------------------------------
     # SAVE CHARACTERISTICS OF SIMULATION
     HLCM_Characteristics = data.frame(
+      hypermodel    = "HLCM",
       data_seed     = simulation$data_seed,
       condition     = condition,
       simulation    = sim,
