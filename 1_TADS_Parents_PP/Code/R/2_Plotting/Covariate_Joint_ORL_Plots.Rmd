@@ -111,7 +111,7 @@ horizontal_lab = data.frame(
 
 
 ## X-Axis
-```{r, eval = F}
+```{r}
 x_scaling = list(grp_parameter == "Mu" & orl_parameter == "Arew" ~
                    scale_x_continuous(limits = c(.05, .25), breaks = seq(.05, .25, length.out = 3),
                                       expand = expansion(mult = .05)),
@@ -465,9 +465,9 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
         # scales
         scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
         scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
-                           limits = c("Con", "Anx", "Dep", "SUD")) +
+                           limits = c("Comparison", "Anx", "Dep", "SUD")) +
         scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
-                          limits = c("Con", "Anx", "Dep", "SUD")) +
+                          limits = c("Comparison", "Anx", "Dep", "SUD")) +
         # themes
         labs(x = "Estimate") +
         coord_cartesian(clip = "off") +
@@ -481,9 +481,9 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
               axis.title.x = element_text(size = 16),
               axis.title.y = element_blank(),
               # legend elements
-              legend.title = element_text(size = 12),
+              legend.title = element_text(size = 10),
               legend.background = element_rect(fill = "white", colour = "white"),
-              legend.position = c(.49, 1.05), 
+              legend.position = c(.49, 1.06), 
               legend.spacing.x = unit(.05, 'cm'),
               legend.spacing.y = unit(-.25, 'cm'),
               legend.text = element_text(size = 12),
@@ -491,7 +491,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
               legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
               legend.key.size = unit(.5, "cm"),
               # plot elements
-              plot.margin = unit(c(t = .75, r = .25, b = 0, l = .25), "cm"),
+              plot.margin = unit(c(t = 1.1, r = .25, b = 0, l = .25), "cm"),
               panel.spacing.x = unit(.75, "cm"),
               panel.spacing.y = unit(.1, "cm"),
               strip.text = element_blank(),
@@ -501,7 +501,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
         facet_rep_wrap(orl_parameter~grp_parameter, nrow = 4, ncol = 2,
                        scales = "free") +
         facetted_pos_scales(x = x_scaling) +
-        guides(fill = guide_legend(title = "Group: ", nrow = 1))
+        guides(fill = guide_legend(title = "Group: ", nrow = 2))
   # TEXT
   grid.text(c(expression(paste(italic(A),"+",sep="")),
               expression(paste(italic(A),"-",sep="")),

@@ -20,11 +20,13 @@ library(cmdstanr)
 library(stringi)
 library(ggpp)
 library(lemon)
-library(MASS)
 library(ggh4x)
 library(grid)
 library(extraDistr)
 library(brms)
+library(posterior)
+library(foreach)
+library(doParallel)
 ```
 
 
@@ -42,18 +44,20 @@ calculate_percentile = function(true, predicted, S){
   return(percentiles)
 }
 
+
 #------------------------------------------------------------------------------
 # USE SOFTMAX TO OBTAIN CHOICE PROBABILITIES - USED IN SIMULATIONS
 softmax = function(values){
   return(exp(values) / sum(exp(values)))
 }
 
-data = data.frame()
 
 #------------------------------------------------------------------------------
 # SIMULATION FUNCTION
 simulate_RL = function(learning_rate = .5, n_trials = 100,
                        Sr_probs = c(.3, .7), label = "") {
+
+  data = data.frame()
   A = learning_rate
   utility = rep(0,2)
     
@@ -80,6 +84,18 @@ simulate_RL = function(learning_rate = .5, n_trials = 100,
   data %>%
     return()
 }
+
+
+#------------------------------------------------------------------------------
+# GRABBING POSTERIOR FUNCTION
+par_from_draws <- function(fit, par) {
+  rvars_pars <- as_draws_rvars(
+    fit$draws(
+      c(par)
+    )
+  )
+  return(lapply(rvars_pars, draws_of))
+}
 ```
 
 
@@ -89,125 +105,72 @@ simulate_RL = function(learning_rate = .5, n_trials = 100,
 ```{r}
 # -----------------------------------------------------------------------------------
 # SPECIFY CONDITIONS FOR SIMULATION
-S             = 3
-N             = 50
-n_simulations = 1
-conditions    = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
-RL_model      = stan_model(here("1_HLCM", "Code", "Stan", "RL_Model.stan")) # Compile model
-HLCM_model = stan_model(here("1_HLCM", "Code", "Stan", "HLCM_Model.stan")) # Compile model
-
-# SIMULATION
-n_iter        = 1500
-n_warmup      = 500
-n_chains      = 4
-
-# TESTING
-# n_iter        = 200
-# n_warmup      = 100
-# n_chains      = 2
+n_iter      = 200
+n_warmup    = 100
+n_chains    = 1
+N           = 50
+S           = 3
+clusters    = makeCluster(1)
+sim_numbers = 1:5
+conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
 
 
 # -----------------------------------------------------------------------------------
-# SET VARYING PARAMETERS
-HLM_parameters = list(# small slope effect & weak correlation
-                      LoB_LoR = c(mu_beta_UT  = 0,
-                                  int_slope_R = 0),
-                      # large slope effect & weak correlation
-                      HiB_LoR = c(mu_beta_UT  = .3,
-                                  int_slope_R = 0),
-                      # small slope effect & strong correlation
-                      LoB_HiR = c(mu_beta_UT  = 0,
-                                  int_slope_R = .3),
-                      # large slope effect & strong correlation
-                      HiB_HiR = c(mu_beta_UT  = .3,
-                                  int_slope_R = .3))
+# COMPILE MODELS
+RL_model     = cmdstan_model(here("1_HLCM", "Code", "Stan", "RL_Model.stan")) # Compile model
+growth_model = data.frame(ID = 1:N) %>% group_by(ID) %>% summarise(session = 1:S) %>% 
+  group_by(ID, session) %>% summarise(A_UT = 0) %>% 
+      brm(A_UT ~ 1 + session + (1 + session|ID), data = ., seed = 43210,
+          iter   = n_iter, warmup = n_warmup, chains = 0, cores  = 4,
+          prior = c(set_prior("normal(0, 1)", class = "Intercept"),
+                    set_prior("normal(0, 0.05)", class = "b", coef = "session"),
+                    set_prior("normal(0, 0.05)", class = "sigma"),
+                    set_prior("lkj(1)", class = "cor", group = "ID"),
+                    set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "Intercept"),
+                    set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "session")))
+HLCM_model   = cmdstan_model(here("1_HLCM", "Code", "Stan", "HLCM_Model.stan")) # Compile model
 ```
 
 
 ## Loop Through Conditions
 ```{r, eval = T}
-set.seed(20240924)
+start_timestamp = Sys.time()
+registerDoParallel(clusters)
 
-# Create initial data structure to fill during simulation
-RL_Simulations = data.frame()
-RL_Diagnostics = data.frame()
-RL_Characteristics = data.frame()
 
-HLCM_Simulations = data.frame()
-HLCM_Diagnostics = data.frame()
-HLCM_Characteristics = data.frame()
-
-timestamps = list()
-
-for(condition in conditions){ # LOOP THROUGH CONDITIONS
-  for(sim in 1:n_simulations){
-    start_timestamp = Sys.time()
-    
+# -----------------------------------------------------------------------------------
+# START SIMULATION
+foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
+  foreach(sim = sim_numbers) %dopar% {
+    condition = conditions[1]
+    sim = 1
     # -----------------------------------------------------------------------------------
-    # SET GROUP-LEVEL PARAMETERS
-    # group-level parameters
-    mu_intercept_UT = qnorm(.1) # mean untransformed intercept for learning rate
-    sd_intercept_UT = 1         # standard deviation of intercepts
-    sd_beta_UT = 1              # standard deviation of slopes
-    residual_sd = 1             # residual standard deviation
-    # mean untransformed slope for learning rate
-    mu_beta_UT = HLM_parameters[[condition]][["mu_beta_UT"]]
-    # intercept-slope correlation
-    int_slope_R = HLM_parameters[[condition]][["int_slope_R"]]
-    
-    # build variance-covariance matrix
-    R = matrix(data = c(1, int_slope_R, int_slope_R, 1),
-               nrow = 2, ncol = 2) # correlation matrix
-    SD = diag(c(sd_intercept_UT, sd_beta_UT)) # SD matrix
-    VC = SD%*%R%*%SD # variance-covariance matrix
+    # Setup for current simulation
+    require(dplyr)
+    require(posterior)
+    simulation = readRDS(here::here("1_HLCM", "Data", "1_Simulations", condition,
+                                    paste0("Data_", sim, ".RDS")))
+    stan_data = simulation$stan_data
+    mu_intercept_UT = simulation$mu_intercept_UT
+    sd_intercept_UT = simulation$sd_intercept_UT
+    mu_beta_UT = simulation$mu_beta_UT
+    sd_beta_UT = simulation$sd_beta_UT
+    int_slope_R = simulation$int_slope_R
+    residual_sd = simulation$residual_sd
+    parameters = simulation$parameters
+    A_UTs = simulation$A_UTs
+    As = simulation$As
     
     
     # -----------------------------------------------------------------------------------
-    # SIMULATE PERSON-LEVEL PARAMETERS
-    # intercepts & slopes
-    parameters = mvrnorm(N, mu = c(mu_intercept_UT, mu_beta_UT), Sigma = VC) # draw from MVT Normal
+    # Create initial data structure to fill during simulation
+    RL_Simulations = data.frame()
+    RL_Diagnostics = data.frame()
+    RL_Characteristics = data.frame()
     
-    # calculate learning rates
-    A_UTs = parameters[,1] + parameters[,2]%*%t(1:S-1) + replicate(S, rnorm(N, 0, residual_sd))
-    As = pnorm(A_UTs)
-    
-    
-    # -----------------------------------------------------------------------------------
-    # SIMULATE CHOICE DATA
-    sim_data = data.frame()
-    for(i in 1:N){
-      for(s in 1:S){
-        sim_data = simulate_RL(learning_rate = As[i,s], 
-                               label = as.numeric(paste(s, i, sep = "0"))) %>% 
-          mutate(ID = i, session = s) %>% 
-          bind_rows(sim_data)
-      }
-    }
-    
-    
-    # -----------------------------------------------------------------------------------
-    # CONVERT TO STAN DATA
-    Tr = max(sim_data$trial)
-    choice = array(-1, dim = c(N,Tr,S))
-    outcome = array(0, dim = c(N,Tr,S))
-    
-    for(s in 1:S){
-      for(i in 1:N){
-        cur_data = filter(sim_data, session == s, ID == i) %>% 
-          arrange(trial)
-        choice[i,,s] = cur_data$choice
-        outcome[i,,s] = cur_data$outcome
-      }
-    }
-    
-    
-    stan_data = list(N = N,
-                     T = Tr,
-                     S = S,
-                     choice = choice,
-                     outcome = outcome)
-    saveRDS(stan_data, here("1_HLCM", "Data", "1_Stan", condition,
-                            paste0("data", sim, ".RDS")))
+    HLCM_Simulations = data.frame()
+    HLCM_Diagnostics = data.frame()
+    HLCM_Characteristics = data.frame()
     
     
     # -----------------------------------------------------------------------------------
@@ -217,49 +180,34 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     A_posterior = array(dim = c(n_iter*n_chains - (n_warmup*n_chains), S, N))
     start_time = Sys.time()
     for(s in 1:S){
-      RL_fit = sampling(RL_model, 
-                        data   = list(N = stan_data$N,
-                                      T = stan_data$T,
-                                      choice = stan_data$choice[,,s],
-                                      outcome = stan_data$outcome[,,s]),
-                        iter   = n_iter,
-                        warmup = n_warmup,
-                        chains = n_chains,
-                        cores  = 4,
-                        seed   = 43210,
-                        save_warmup = F)
+      RL_fit = RL_model$sample(data = list(N = stan_data$N,
+                                           T = stan_data$T,
+                                           choice = stan_data$choice[,,s],
+                                           outcome = stan_data$outcome[,,s]),
+                               chains = n_chains,
+                               parallel_chains = 4,
+                               iter_warmup = n_warmup,
+                               iter_sampling = n_iter - n_warmup,
+                               seed = 43210)
       
-      posteriors = extract(RL_fit)
-      unbounded_A_posterior[,s,] = posteriors$theta
-      A_posterior[,s,] = posteriors$A
-      RL_sum_model = summary(RL_fit, pars = c("mu_theta", "mu_A", "sigma_U", "theta", "A"))$summary
-      RL_Diagnostics = data.frame(parameter = rownames(RL_sum_model), condition = condition,
-                                  ESS = RL_sum_model[,"n_eff"], Rhat = RL_sum_model[,"Rhat"],
-                                  session = s, model = "RL", simulation = sim) %>%
+      unbounded_A_posterior[,s,] = par_from_draws(RL_fit, "theta")$theta
+      A_posterior[,s,] = par_from_draws(RL_fit, "A")$A
+      RL_Diagnostics = RL_fit$summary(variables = c("mu_theta", "mu_A", "sigma_U", "theta", "A")) %>% 
+        dplyr::select(parameter = variable, rhat, ess_bulk, ess_tail) %>% 
+        mutate(condition = condition, session = s, model = "RL", simulation = sim) %>% 
         bind_rows(RL_Diagnostics)
     }
     
     
     # -----------------------------------------------------------------------------------
     # FIT GROWTH MODEL
-    growth_model = data.frame(ID = 1:N, A_UTs = t(apply(unbounded_A_posterior, c(2, 3), mean))) %>%
-      pivot_longer(starts_with("A_UTs"), names_to = "session", values_to = "A_UT",
+    growth_fit = data.frame(ID = 1:N, A_UTs = t(apply(unbounded_A_posterior, c(2, 3), mean))) %>%
+      tidyr::pivot_longer(starts_with("A_UTs"), names_to = "session", values_to = "A_UT",
                    names_prefix = "A_UTs.", names_transform = list(session = as.numeric)) %>% 
-      brm(A_UT ~ 1 + session + (1 + session|ID), data = .,
-          iter   = n_iter,
-          warmup = n_warmup,
-          chains = n_chains,
-          cores  = 4,
-          seed   = 43210,
-          prior = c(
-            set_prior("normal(0, 1)", class = "Intercept"),
-            set_prior("normal(0, 0.05)", class = "b", coef = "session"),
-            set_prior("normal(0, 0.05)", class = "sigma"),
-            set_prior("lkj(1)", class = "cor", group = "ID"),
-            set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "Intercept"),
-            set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "session")))
+      update(growth_model, newdata = ., recompile = F, seed   = 43210,
+             iter   = n_iter, warmup = n_warmup, chains = n_chains, cores  = 4)
     
-    sum_growth_model = data.frame(growth_model)
+    sum_growth_model = data.frame(growth_fit)
     random_intercepts = dplyr::select(sum_growth_model, 
                                       starts_with("R_ID") & ends_with("Intercept.")) %>%
       as.matrix()
@@ -274,7 +222,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "intercept"
     cur_true_parameter = mu_intercept_UT
     cur_posterior = sum_growth_model$b_Intercept
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -289,7 +237,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "intercept_SD"
     cur_true_parameter = sd_intercept_UT
     cur_posterior = sum_growth_model$sd_ID__Intercept
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -304,7 +252,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "slope"
     cur_true_parameter = mu_beta_UT
     cur_posterior = sum_growth_model$b_session
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -319,7 +267,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "slope_SD"
     cur_true_parameter = sd_beta_UT
     cur_posterior = sum_growth_model$sd_ID__session
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -334,7 +282,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "int_slope_R"
     cur_true_parameter = int_slope_R
     cur_posterior = sum_growth_model$cor_ID__Intercept__session
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -349,7 +297,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "residual_SD"
     cur_true_parameter = residual_sd
     cur_posterior = sum_growth_model$sigma
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -368,7 +316,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "intercept"
     cur_true_parameter = parameters[,1]
     cur_posterior = random_intercepts
-    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
@@ -383,7 +331,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     cur_parameter = "slope"
     cur_true_parameter = parameters[,2]
     cur_posterior = random_slopes
-    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     RL_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
@@ -409,16 +357,16 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
                  posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
                  percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
-                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
+                 aperm(apply(cur_posterior, c(2,3), hBayesDM::HDIofMCMC), c(3, 1, 2))) %>%
       dplyr::select(X1.1 = X1, X2.1 = X2, X1.2 = X3, X2.2 = X4, X1.3 = X5, X2.3 = X6,
                     everything()) %>% 
-      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+      tidyr::pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
                    names_to = c("parameter", "session"), names_sep = "\\.",
                    names_transform = list(session = as.numeric)) %>%
       mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
                                    parameter == "X2" ~ "upper_HDI95",
                                    T ~ parameter)) %>%
-      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      tidyr::pivot_wider(names_from = "parameter", values_from = "value") %>%
       mutate(parameter = cur_parameter,
              true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>% 
       bind_rows(RL_Simulations)
@@ -433,16 +381,16 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
                  posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
                  percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
-                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
+                 aperm(apply(cur_posterior, c(2,3), hBayesDM::HDIofMCMC), c(3, 1, 2))) %>%
       dplyr::select(X1.1 = X1, X2.1 = X2, X1.2 = X3, X2.2 = X4, X1.3 = X5, X2.3 = X6,
                     everything()) %>% 
-      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+      tidyr::pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
                    names_to = c("parameter", "session"), names_sep = "\\.",
                    names_transform = list(session = as.numeric)) %>%
       mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
                                    parameter == "X2" ~ "upper_HDI95",
                                    T ~ parameter)) %>%
-      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      tidyr::pivot_wider(names_from = "parameter", values_from = "value") %>%
       mutate(parameter = cur_parameter,
              true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>%
       bind_rows(RL_Simulations)
@@ -451,17 +399,32 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                           condition, simulation, session, parameter, parameter_type,
                           true_value, posterior_mean, posterior_SD, percentile,
                           lower_HDI95, upper_HDI95, true_in_HDI95),
-            here("1_HLCM", "Data", "2_Fitted", "RL_Simulations.RDS"))
+            here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("RL_Simulation_", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
     # SAVE DIAGNOSTIC DATA
     # Growth Model Diagnostics
-    Rhats = rhat(growth_model)
-    RL_growth_diagnostics = data.frame(Parameter = names(Rhats), Rhat = Rhats) %>% 
-      left_join(bayestestR::effective_sample(growth_model, "all")) %>% 
-      dplyr::select(parameter = Parameter, everything()) %>% 
-      filter(!(parameter %in% c("Intercept", "lprior", "lp__")))
+    rhats = rhat(growth_fit)
+    ESS = bind_rows(dplyr::select(summary(growth_fit)$fixed,
+                                  ess_bulk = Bulk_ESS, ess_tail = Tail_ESS),
+                    dplyr::select(summary(growth_fit)$random$ID,
+                                  ess_bulk = Bulk_ESS, ess_tail = Tail_ESS),
+                    dplyr::select(summary(growth_fit)$spec_pars,
+                                  ess_bulk = Bulk_ESS, ess_tail = Tail_ESS)) %>% 
+      mutate(parameter = rownames(.),
+             parameter = case_when(parameter == "session" ~
+                                     "b_session",
+                                   parameter == "sd(Intercept)" ~
+                                     "sd_ID__Intercept",
+                                   parameter == "sd(session)" ~
+                                     "sd_ID__session",
+                                   parameter == "cor(Intercept,session)" ~
+                                     "cor_ID__Intercept__session",
+                                   T ~ parameter))
+    RL_growth_diagnostics = data.frame(parameter = names(rhats), rhat = rhats) %>% 
+      left_join(ESS) %>% 
+      filter(!(parameter %in% c("lprior", "lp__")))
     RL_Diagnostics = RL_growth_diagnostics %>% 
       mutate(parameter = case_when(parameter == "b_Intercept" ~ "gamma00",
                                    parameter == "b_session" ~ "gamma10",
@@ -470,27 +433,28 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                                    parameter == "sigma" ~ "R",
                                    parameter == "cor_ID__Intercept__session" ~ "R_theta[2,1]",
                                    T ~ parameter),
-             person_parameter = case_when(str_detect(parameter, "Intercept") ~ "beta0",
-                                          str_detect(parameter, "session") ~ "beta1"),
-             person_number = str_remove(parameter, "r_ID\\["),
-             person_number = str_remove(person_number, ",Intercept\\]"),
-             person_number = str_remove(person_number, ",session\\]"),
+             person_parameter = case_when(stringr::str_detect(parameter, ",Intercept") ~ "beta0",
+                                          stringr::str_detect(parameter, ",session") ~ "beta1"),
+             person_number = stringr::str_remove(parameter, "r_ID\\["),
+             person_number = stringr::str_remove(person_number, ",Intercept\\]"),
+             person_number = stringr::str_remove(person_number, ",session\\]"),
              parameter = case_when(!is.na(person_parameter) ~ paste0(person_parameter,"[",person_number,"]"),
                                    T ~ parameter),
              model = "growth", condition = condition,
              simulation = sim, session = 0) %>% 
-      dplyr::select(condition, simulation, model, session, parameter, ESS, Rhat) %>% 
+      dplyr::select(condition, simulation, model, session, parameter, rhat, ess_bulk, ess_tail) %>% 
       bind_rows(RL_Diagnostics)
     
     saveRDS(dplyr::select(RL_Diagnostics,
-                          condition, simulation, session, parameter,
-                          model, ESS, Rhat),
-            here("1_HLCM", "Data", "2_Fitted", "RL_Diagnostics.RDS"))
+                          condition, simulation, model, session, parameter,
+                          rhat, ess_bulk, ess_tail),
+            here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("RL_Diagnostics_", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
     # SAVE CHARACTERISTICS OF SIMULATION
     RL_Characteristics = data.frame(
+      data_seed     = stan_data$data_seed,
       condition     = condition,
       simulation    = sim,
       start         = start_time,
@@ -505,21 +469,18 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
       bind_rows(RL_Characteristics)
     
     saveRDS(RL_Characteristics,
-            here("1_HLCM", "Data", "2_Fitted", "RL_Characteristics.RDS"))
+            here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("RL_Characteristics_", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
     # FIT HIERARCHICAL RL MODEL & EXTRACT ESTIMATES
     start_time = Sys.time()
-    HLCM_fit = sampling(HLCM_model, 
-                        data   = stan_data, 
-                        iter   = n_iter,
-                        warmup = n_warmup,
-                        chains = n_chains,
-                        cores  = 4,
-                        seed   = 43210,
-                        save_warmup = F)
-    HLCM_posteriors = extract(HLCM_fit)
+    HLCM_fit = HLCM_model$sample(data = stan_data,
+                                 chains = n_chains,
+                                 parallel_chains = 4,
+                                 iter_warmup = n_warmup,
+                                 iter_sampling = n_iter - n_warmup,
+                                 seed = 43210)
     
     
     # -----------------------------------------------------------------------------------
@@ -527,8 +488,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Intercept
     cur_parameter = "intercept"
     cur_true_parameter = mu_intercept_UT
-    cur_posterior = HLCM_posteriors$gamma00
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_posterior = par_from_draws(HLCM_fit, "gamma00")$gamma00
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -542,8 +503,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## SD of Intercepts
     cur_parameter = "intercept_SD"
     cur_true_parameter = sd_intercept_UT
-    cur_posterior = HLCM_posteriors$sigma_U[,1]
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_posterior = par_from_draws(HLCM_fit, "sigma_U")$sigma_U[,1]
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -557,8 +518,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Slopes
     cur_parameter = "slope"
     cur_true_parameter = mu_beta_UT
-    cur_posterior = HLCM_posteriors$gamma10
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_posterior = par_from_draws(HLCM_fit, "gamma10")$gamma10
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -572,8 +533,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## SD of Slopes
     cur_parameter = "slope_SD"
     cur_true_parameter = sd_beta_UT
-    cur_posterior = HLCM_posteriors$sigma_U[,2]
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_posterior = par_from_draws(HLCM_fit, "sigma_U")$sigma_U[,2]
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -587,8 +548,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Intercept-Slope Correlation
     cur_parameter = "int_slope_R"
     cur_true_parameter = int_slope_R
-    cur_posterior = HLCM_posteriors$R_theta[,2,1]
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_posterior = par_from_draws(HLCM_fit, "R_theta")$R_theta[,2,1]
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -602,8 +563,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Residual
     cur_parameter = "residual_SD"
     cur_true_parameter = residual_sd
-    cur_posterior = HLCM_posteriors$R
-    cur_hdi = HDIofMCMC(cur_posterior)
+    cur_posterior = par_from_draws(HLCM_fit, "R")$R
+    cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = "group", session = 0,
@@ -621,8 +582,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Intercepts
     cur_parameter = "intercept"
     cur_true_parameter = parameters[,1]
-    cur_posterior = HLCM_posteriors$beta0
-    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    cur_posterior = par_from_draws(HLCM_fit, "beta0")$beta0
+    cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
@@ -636,8 +597,8 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Slopes
     cur_parameter = "slope"
     cur_true_parameter = parameters[,2]
-    cur_posterior = HLCM_posteriors$beta1
-    cur_hdi = t(apply(cur_posterior, 2, HDIofMCMC))
+    cur_posterior = par_from_draws(HLCM_fit, "beta1")$beta1
+    cur_hdi = t(apply(cur_posterior, 2, hBayesDM::HDIofMCMC))
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim, parameter = cur_parameter,
                  parameter_type = paste0("person_", 1:N), session = 0,
@@ -655,7 +616,7 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
     ## Unbounded Learning Rates
     cur_parameter = "unbounded_A"
     cur_true_parameter = A_UTs
-    cur_posterior = HLCM_posteriors$theta
+    cur_posterior = par_from_draws(HLCM_fit, "theta")$theta
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim,
                  parameter_type = paste0("person_", 1:N),
@@ -663,21 +624,21 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
                  posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
                  percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
-                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
-      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+                 aperm(apply(cur_posterior, c(2,3), hBayesDM::HDIofMCMC), c(3, 1, 2))) %>%
+      dplyr::select(lower_HDI95.1 = X1, upper_HDI95.1 = X2,
+                    lower_HDI95.2 = X3, upper_HDI95.2 = X4,
+                    lower_HDI95.3 = X5, upper_HDI95.3 = X6, everything()) %>% 
+      tidyr::pivot_longer(starts_with(c("true", "posterior", "percentile", "lower", "upper")), values_to = "value",
                    names_to = c("parameter", "session"), names_sep = "\\.",
                    names_transform = list(session = as.numeric)) %>%
-      mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
-                                   parameter == "X2" ~ "upper_HDI95",
-                                   T ~ parameter)) %>%
-      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      tidyr::pivot_wider(names_from = "parameter", values_from = "value") %>%
       mutate(parameter = cur_parameter,
              true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>% 
       bind_rows(HLCM_Simulations)
     ## Learning Rates
     cur_parameter = "A"
     cur_true_parameter = As
-    cur_posterior = HLCM_posteriors$A
+    cur_posterior = par_from_draws(HLCM_fit, "A")$A
     HLCM_Simulations =
       data.frame(condition = condition, simulation = sim,
                  parameter_type = paste0("person_", 1:N),
@@ -685,14 +646,14 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                  posterior_mean = t(apply(cur_posterior, c(2,3), mean)),
                  posterior_SD = t(apply(cur_posterior, c(2,3), sd)),
                  percentile = calculate_percentile(cur_true_parameter, cur_posterior, S),
-                 aperm(apply(cur_posterior, c(2,3), HDIofMCMC), c(3, 1, 2))) %>%
-      pivot_longer(starts_with(c("true", "posterior", "percentile", "X")), values_to = "value",
+                 aperm(apply(cur_posterior, c(2,3), hBayesDM::HDIofMCMC), c(3, 1, 2))) %>%
+      dplyr::select(lower_HDI95.1 = X1, upper_HDI95.1 = X2,
+                    lower_HDI95.2 = X3, upper_HDI95.2 = X4,
+                    lower_HDI95.3 = X5, upper_HDI95.3 = X6, everything()) %>% 
+      tidyr::pivot_longer(starts_with(c("true", "posterior", "percentile", "lower", "upper")), values_to = "value",
                    names_to = c("parameter", "session"), names_sep = "\\.",
                    names_transform = list(session = as.numeric)) %>%
-      mutate(parameter = case_when(parameter == "X1" ~ "lower_HDI95",
-                                   parameter == "X2" ~ "upper_HDI95",
-                                   T ~ parameter)) %>%
-      pivot_wider(names_from = "parameter", values_from = "value") %>%
+      tidyr::pivot_wider(names_from = "parameter", values_from = "value") %>%
       mutate(parameter = cur_parameter,
              true_in_HDI95 = true_value > lower_HDI95 & true_value < upper_HDI95) %>% 
       bind_rows(HLCM_Simulations)
@@ -701,38 +662,27 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
                           condition, simulation, session, parameter, parameter_type,
                           true_value, posterior_mean, posterior_SD, percentile,
                           lower_HDI95, upper_HDI95, true_in_HDI95),
-            here("1_HLCM", "Data", "2_Fitted", "HLCM_Simulations.RDS"))
+            here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("HLCM_Simulation_", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
     # SAVE DIAGNOSTIC DATA
-    HLCM_sum_model = summary(HLCM_fit, pars = c("gamma00", "gamma10", "R", "sigma_U",
-                                                "beta0", "beta1", "theta", "A","R_theta"))$summary
-    cur_diagnostics = data.frame(parameter = rownames(HLCM_sum_model),
-                                 ESS = HLCM_sum_model[,"n_eff"], Rhat = HLCM_sum_model[,"Rhat"])
-    ## RL Diagnostics
-    HLCM_RL_diagnostics = cur_diagnostics %>% 
-      filter(str_detect(parameter, c("theta|A")), !str_detect(parameter, "R_theta")) %>% 
-      mutate(session = case_when(str_detect(parameter, "\\[1,") ~ 1,
-                                 str_detect(parameter, "\\[2,") ~ 2,
-                                 str_detect(parameter, "\\[3,") ~ 3),
-             parameter = str_replace(parameter, "\\[1,|\\[2,|\\[3,", "\\["),
-             model = "RL")
-    # Growth Model Diagnostics
-    HLCM_growth_diagnostics = cur_diagnostics %>% 
-      filter(parameter %in% c("gamma00", "gamma10", "R", "R_theta[2,1]")|
-             str_detect(parameter, "beta0|beta1|sigma_U")) %>% 
-      mutate(session = 0,
-             model = "growth")
-    
-    HLCM_Diagnostics = bind_rows(HLCM_RL_diagnostics, HLCM_growth_diagnostics) %>% 
-      mutate(simulation = sim, condition = condition) %>% 
+    HLCM_Diagnostics = HLCM_fit$summary(variables = c("gamma00", "gamma10", "R", "sigma_U",
+                                                      "beta0", "beta1", "theta", "A","R_theta")) %>% 
+      dplyr::select(parameter = variable, rhat, ess_bulk, ess_tail) %>%
+      filter(!(parameter %in% c("R_theta[1,1]", "R_theta[1,2]", "R_theta[2,2]"))) %>% 
+      mutate(condition = condition, simulation = sim,
+             model = case_when(stringr::str_starts(parameter, "theta|A") ~ "RL", T ~ "growth"),
+             session = case_when(stringr::str_detect(parameter, "\\[1,") ~ 1,
+                                 stringr::str_detect(parameter, "\\[2,") ~ 2,
+                                 stringr::str_detect(parameter, "\\[3,") ~ 3,
+                                 T ~ 0)) %>% 
       bind_rows(HLCM_Diagnostics)
     
     saveRDS(dplyr::select(HLCM_Diagnostics,
-                          condition, simulation, session, parameter,
-                          model, ESS, Rhat),
-            here("1_HLCM", "Data", "2_Fitted", "HLCM_Diagnostics.RDS"))
+                          condition, simulation, model, session, parameter,
+                          rhat, ess_bulk, ess_tail),
+            here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("HLCM_Diagnostics_", sim, ".RDS")))
     
     
     # -----------------------------------------------------------------------------------
@@ -752,17 +702,20 @@ for(condition in conditions){ # LOOP THROUGH CONDITIONS
       bind_rows(HLCM_Characteristics)
     
     saveRDS(HLCM_Characteristics,
-            here("1_HLCM", "Data", "2_Fitted", "HLCM_Characteristics.RDS"))
+            here::here("1_HLCM", "Data", "2_Fitted", condition, paste0("HLCM_Characteristics_", sim, ".RDS")))
     
-    
-    # -----------------------------------------------------------------------------------
-    # RECORD TIMESTAMPS
-    end_timestamp = Sys.time()
-    diff_timestamp = difftime(end_timestamp, start_timestamp)
-    timestamps[[condition]][[sim]] = list(start = start_timestamp, end = end_timestamp, diff = diff_timestamp)
+    # STOP TIME
+    return(paste("Finished at", Sys.time()))
   }
-}
-saveRDS(timestamps, here("1_HLCM", "Data", "TimeStamps.RDS"))
+stopCluster(clusters)
+
+
+# -----------------------------------------------------------------------------------
+# RECORD TIMESTAMPS
+saveRDS(list(start = start_timestamp,
+             end = Sys.time(),
+             duration = difftime(Sys.time(), start_timestamp)),
+        here::here("1_HLCM", "Data", "TimeStamp.RDS"))
 ```
 
 
