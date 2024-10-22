@@ -454,7 +454,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     # -----------------------------------------------------------------------------------
     # SAVE CHARACTERISTICS OF SIMULATION
     RL_Characteristics = data.frame(
-      data_seed     = stan_data$data_seed,
+      data_seed     = simulation$data_seed,
       condition     = condition,
       simulation    = sim,
       start         = start_time,
@@ -462,7 +462,6 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
       duration      = difftime(Sys.time(), start_time),
       S             = S,
       N             = N,
-      n_simulations = n_simulations,
       n_iter        = n_iter,
       n_warmup      = n_warmup,
       n_chains      = n_chains) %>% 
@@ -688,6 +687,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     # -----------------------------------------------------------------------------------
     # SAVE CHARACTERISTICS OF SIMULATION
     HLCM_Characteristics = data.frame(
+      data_seed     = simulation$data_seed,
       condition     = condition,
       simulation    = sim,
       start         = start_time,
@@ -695,7 +695,6 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
       duration      = difftime(Sys.time(), start_time),
       S             = S,
       N             = N,
-      n_simulations = n_simulations,
       n_iter        = n_iter,
       n_warmup      = n_warmup,
       n_chains      = n_chains) %>% 
