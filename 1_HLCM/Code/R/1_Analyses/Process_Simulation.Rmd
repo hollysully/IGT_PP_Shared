@@ -50,10 +50,10 @@ library(kableExtra)
 ```
 
 
-## Import Data
+## Import Models
 ```{r}
 conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
-sim_numbers = 1:5
+sim_numbers = 1:20
 
 characteristics = data.frame()
 diagnostics     = data.frame()
@@ -76,6 +76,76 @@ for(condition in conditions){
                                          paste0("RL_Simulation_", sim, ".RDS"))),
                             readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
                                          paste0("HLCM_Simulation_", sim, ".RDS"))))
+  }
+}
+```
+
+
+## Check Data
+```{r, eval = F}
+checks = data.frame()
+
+for(cond in conditions){
+  for(sim in 1:100){
+    data = readRDS(here::here("1_HLCM", "Data", "1_Simulations", cond,
+                              paste0("Data_", sim, ".RDS")))
+    check_data = readRDS(here::here("1_HLCM", "Data", "1_Simulations", "Check", cond,
+                                    paste0("Data_", sim, ".RDS")))
+    
+    
+    # INTERCEPTS & SLOPES
+    checks = data.frame(ID = 1:50,
+               cur = data$parameters,
+               check = check_data$parameters) %>%
+      pivot_longer(starts_with(c("cur", "check")), values_to = "datum",
+                   names_to = c("type", "parameter"), names_sep = "\\.") %>% 
+      pivot_wider(names_from = "type", values_from = "datum") %>% 
+      mutate(diff = cur-check) %>% 
+      summarise(simulation = sim,
+                parameter = "int-slope",
+                check = mean(diff)) %>% 
+      bind_rows(checks)
+    
+    
+    # UNBOUNDED As
+    data.frame(ID = 1:50,
+               cur = data$A_UTs,
+               check = check_data$A_UTs) %>%
+      pivot_longer(starts_with(c("cur", "check")), values_to = "datum",
+                   names_to = c("type", "parameter"), names_sep = "\\.") %>% 
+      pivot_wider(names_from = "type", values_from = "datum") %>% 
+      mutate(diff = cur-check) %>% 
+      summarise(simulation = sim,
+                parameter = "Unbounded As",
+                check = mean(diff)) %>% 
+      bind_rows(checks)
+    
+    
+    # BOUNDED As
+    data.frame(ID = 1:50,
+               cur = data$As,
+               check = check_data$As) %>%
+      pivot_longer(starts_with(c("cur", "check")), values_to = "datum",
+                   names_to = c("type", "parameter"), names_sep = "\\.") %>% 
+      pivot_wider(names_from = "type", values_from = "datum") %>% 
+      mutate(diff = cur-check) %>% 
+      summarise(simulation = sim,
+                parameter = "Bounded As",
+                check = mean(diff)) %>% 
+      bind_rows(checks)
+    
+    # CHOICE
+    data.frame(ID = 1:50,
+               cur = data$stan_data$choice,
+               check = check_data$stan_data$choice) %>%
+      pivot_longer(starts_with(c("cur", "check")), values_to = "datum",
+                   names_to = c("type", "parameter"), names_sep = "\\.") %>% 
+      pivot_wider(names_from = "type", values_from = "datum") %>% 
+      mutate(diff = cur-check) %>% 
+      summarise(simulation = sim,
+                parameter = "Choice",
+                check = mean(diff)) %>% 
+      bind_rows(checks)
   }
 }
 ```
