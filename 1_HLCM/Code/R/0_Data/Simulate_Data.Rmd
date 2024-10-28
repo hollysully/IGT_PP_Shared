@@ -119,13 +119,13 @@ HLM_parameters = list(# small slope effect & weak correlation
                       LoB_LoR = c(mu_beta_UT  = 0,
                                   int_slope_R = 0),
                       # large slope effect & weak correlation
-                      HiB_LoR = c(mu_beta_UT  = .15,
+                      HiB_LoR = c(mu_beta_UT  = .3,
                                   int_slope_R = 0),
                       # small slope effect & strong correlation
                       LoB_HiR = c(mu_beta_UT  = 0,
                                   int_slope_R = .3),
                       # large slope effect & strong correlation
-                      HiB_HiR = c(mu_beta_UT  = .15,
+                      HiB_HiR = c(mu_beta_UT  = .3,
                                   int_slope_R = .3))
 ```
 

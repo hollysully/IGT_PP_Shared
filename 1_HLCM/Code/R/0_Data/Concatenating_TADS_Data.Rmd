@@ -26,25 +26,16 @@ SCID    = readRDS(here("1_HLCM", "Data", "0_Raw_TADS", "SCID_Anx_Dep_SUD.RDS"))
 
 
 ```{r}
-SCID_BIS_BAS = full_join(select(SCID, -session), BIS_BAS) %>% 
-  mutate(sex = case_when(participant == "mom" ~ "female", participant == "dad" ~ "male"),
-         participant_num = case_when(participant == "mom" ~ 3, participant == "dad" ~ 2),
-         participant0ID = as.numeric(paste(participant_num, ID, sep = "0"))) %>% 
-  select(participant0ID, ID, participant, session, anxiety, depression, SUD, sex, bis, bas_tot, bas_drive, bas_fun, bas_rew)
-IGT_SCID_BIS_BAS = left_join(IGT, SCID_BIS_BAS)
-
-
 SCID_processed = SCID %>% 
   mutate(sex = case_when(participant == "mom" ~ "female", participant == "dad" ~ "male"),
          participant_num = case_when(participant == "mom" ~ 3, participant == "dad" ~ 2),
          participant0ID = as.numeric(paste(participant_num, ID, sep = "0"))) %>% 
   select(participant0ID, ID, participant, session, anxiety, depression, SUD, sex)
-IGT_SCID_BIS_BAS = left_join(IGT, SCID_BIS_BAS)
 ```
 
 
 ```{r}
-saveRDS(SCID_BIS_BAS, here("1_HLCM", "Data", "0_Raw_TADS", "SCID_BIS_BAS.RDS"))
+saveRDS(SCID_processed, here("1_HLCM", "Data", "0_Raw_TADS", "TADS_SCID.RDS"))
 ```
 
 

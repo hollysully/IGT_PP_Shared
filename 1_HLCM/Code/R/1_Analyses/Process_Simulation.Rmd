@@ -53,7 +53,7 @@ library(kableExtra)
 ## Import Models
 ```{r}
 conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
-sim_numbers = 1:20
+sim_numbers = 1:100
 
 characteristics = data.frame()
 diagnostics     = data.frame()
