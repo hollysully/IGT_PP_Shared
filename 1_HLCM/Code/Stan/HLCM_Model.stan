@@ -11,9 +11,10 @@ data {
 
 parameters {
   // THIS CAN BE USED FOR ANY SINGLE-PARAMETER MODEL
-  real gamma00;    // group-level intercepts
-  real gamma10;    // group-level slopes
-  real<lower=0> R; // residual error
+  real gamma00;              // group-level intercepts
+  real gamma10;              // group-level slopes
+  real<lower=0> sigma_resid; // residual SD
+  matrix[S,N] resid;         // residual error
   
   cholesky_factor_corr[2] R_chol; // Cholesky correlation matrix for intercept-slope correlation
   vector<lower=0>[2] sigma_U;     // SD of intercepts (sigma_U[1]) and slopes (sigma_U[2])
@@ -35,7 +36,7 @@ transformed parameters {
     beta1[i] = gamma10 + U[2,i]; // calculate person-specific slopes
     
     for(s in 1:S){ // loop through sessions
-      theta[s,i] = beta0[i] + beta1[i]*(s-1) + R; // combine intercepts & slopes into unbounded theoretical model-parameter
+      theta[s,i] = beta0[i] + beta1[i]*(s-1) + resid[s,i]*sigma_resid; // combine intercepts & slopes into unbounded theoretical model-parameter
     }
   }
 }
@@ -44,14 +45,18 @@ transformed parameters {
 model {
   
   // PRIORS: THESE CAN BE USED FOR ANY SINGLE-PARAMETER THEORETICAL MODEL
-  gamma00 ~ normal(0,1);    // group-level intercepts
-  gamma10 ~ normal(0,0.05); // group-level slopes
-  R       ~ normal(0,0.05); // residual error
+  gamma00     ~ normal(0,1); // group-level intercepts
+  gamma10     ~ normal(0,1); // group-level slopes
+  sigma_resid ~ normal(0,1); // residual error SD
   
-  R_chol  ~ lkj_corr_cholesky(1);       // cholesky correlation
-  to_vector(sigma_U)  ~ normal(0,0.05); // SD of intercepts and slopes
-  to_vector(z_U[1,:]) ~ normal(0,1);    // uncorrelated standardized person-specific deviations
-  to_vector(z_U[2,:]) ~ normal(0,1);    // uncorrelated standardized person-specific deviations
+  R_chol  ~ lkj_corr_cholesky(1);    // cholesky correlation
+  to_vector(sigma_U)  ~ normal(0,1); // SD of intercepts and slopes
+  to_vector(z_U[1,:]) ~ normal(0,1); // uncorrelated standardized person-specific deviations
+  to_vector(z_U[2,:]) ~ normal(0,1); // uncorrelated standardized person-specific deviations
+  
+  for(s in 1:S){
+    to_vector(resid[s,:]) ~ normal(0,1); // person-specific residuals
+  }
   
   // LIKELIHOOD: THIS SHOULD BE ADJUSTED FOR THE THEORETICAL MODEL OF INTEREST
   vector[2] utility; // declare utility variable

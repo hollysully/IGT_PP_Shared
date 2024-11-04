@@ -578,7 +578,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     ## Residual
     cur_parameter = "residual_SD"
     cur_true_parameter = residual_sd
-    cur_posterior = par_from_draws(HLCM_fit, "R")$R
+    cur_posterior = par_from_draws(HLCM_fit, "sigma_resid")$sigma_resid
     cur_hdi = hBayesDM::HDIofMCMC(cur_posterior)
     HLCM_Simulations =
       data.frame(hypermodel = "HLCM", model = "growth",
@@ -688,7 +688,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     
     # -----------------------------------------------------------------------------------
     # SAVE DIAGNOSTIC DATA
-    HLCM_Diagnostics = HLCM_fit$summary(variables = c("gamma00", "gamma10", "R", "sigma_U",
+    HLCM_Diagnostics = HLCM_fit$summary(variables = c("gamma00", "gamma10", "sigma_resid", "sigma_U",
                                                       "beta0", "beta1", "theta", "A","R_theta")) %>% 
       dplyr::select(parameter = variable, rhat, ess_bulk, ess_tail) %>%
       filter(!(parameter %in% c("R_theta[1,1]", "R_theta[1,2]", "R_theta[2,2]"))) %>% 
