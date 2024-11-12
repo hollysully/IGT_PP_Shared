@@ -122,12 +122,11 @@ growth_model = data.frame(ID = 1:N) %>% group_by(ID) %>% summarise(session = 1:S
   group_by(ID, session) %>% summarise(A_UT = 0) %>% 
       brm(A_UT ~ 1 + session + (1 + session|ID), data = ., seed = 43210,
           iter   = n_iter, warmup = n_warmup, chains = 0, cores  = 4,
-          prior = c(set_prior("normal(0, 1)", class = "Intercept"),
-                    set_prior("normal(0, 0.05)", class = "b", coef = "session"),
-                    set_prior("normal(0, 0.05)", class = "sigma"),
-                    set_prior("lkj(1)", class = "cor", group = "ID"),
-                    set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "Intercept"),
-                    set_prior("normal(0, 0.05)", class = "sd", group = "ID", coef = "session")))
+          prior = c(set_prior("normal(0, 1)", class = "b"),
+                    set_prior("normal(0, 1)", class = "Intercept"),
+                    set_prior("lkj(1)", class = "cor"),
+                    set_prior("normal(0, 1)", class = "sd"),
+                    set_prior("normal(0, 1)", class = "sigma")))
 HLCM_model   = cmdstan_model(here("1_HLCM", "Code", "Stan", "HLCM_Model.stan")) # Compile model
 ```
 
