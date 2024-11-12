@@ -1,0 +1,404 @@
+---
+title: "Manuscript Plots"
+output: 
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
+---
+
+
+```{css, echo = F}
+#TOC {
+    max-width: fit-content;
+    white-space: nowrap;
+  }
+  
+  div:has(> #TOC) {
+    display: flex;
+    flex-direction: row-reverse;
+}
+div.tocify {
+width: 100%;
+}
+```
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = F, warning = F, message = F, fig.align = "center")
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(MASS)
+library(ggh4x)
+library(grid)
+library(extraDistr)
+library(lme4)
+library(kableExtra)
+```
+
+
+## Import Models
+```{r}
+conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+sim_numbers = 1:100
+
+characteristics = data.frame()
+diagnostics     = data.frame()
+simulations     = data.frame()
+
+for(condition in conditions){
+  for(sim in sim_numbers){
+    characteristics = bind_rows(characteristics,
+                                readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                             paste0("RL_Characteristics_", sim, ".RDS"))),
+                                readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                             paste0("HLCM_Characteristics_", sim, ".RDS"))))
+    diagnostics = bind_rows(diagnostics,
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("RL_Diagnostics_", sim, ".RDS"))),
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("HLCM_Diagnostics_", sim, ".RDS"))))
+    simulations = bind_rows(simulations,
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("RL_Simulation_", sim, ".RDS"))),
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("HLCM_Simulation_", sim, ".RDS"))))
+  }
+}
+```
+
+
+```{r}
+characteristics %>%
+  group_by(hypermodel) %>% 
+  summarise(avg = round(mean(as.numeric(duration, units = "mins")), 2),
+            sd = round(sd(as.numeric(duration, units = "mins")), 2))
+```
+
+
+# -------------------------------------------
+# Group-Level Growth Parameters
+## Posterior Means
+### Define Aspects of Plot
+```{r}
+# EXPANSION
+cur_exp = expansion(mult = c(0, .2))
+# X-AXIS SCALES
+ind_x_scales = list(
+  parameter == "Intercept"            ~ scale_x_continuous(limits = c(-2.5, 0), breaks = seq(-2.5, 0, length.out = 3), labels = c("-2.5", "-1.25", "0")),
+  parameter == "Slope"                ~ scale_x_continuous(limits = c(-1, 1),   breaks = seq(-1, 1, length.out = 3)),
+  parameter == expression("rho[0,1]") ~ scale_x_continuous(limits = c(-1, 1),   breaks = seq(-1, 1, length.out = 3)),
+  parameter == "Intercept SD"         ~ scale_x_continuous(limits = c(0, 2),    breaks = seq(0, 2, length.out = 3)),
+  parameter == "Slope SD"             ~ scale_x_continuous(limits = c(0, 2),    breaks = seq(0, 2, length.out = 3)),
+  parameter == "Residual SD"          ~ scale_x_continuous(limits = c(0, 2),    breaks = seq(0, 2, length.out = 3)))
+# Y-AXIS SCALES
+ind_y_scales = list(
+  # INTERCEPT
+  parameter == "Intercept" & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 30), expand = cur_exp, breaks = seq(0, 30, length.out = 3)),
+  parameter == "Intercept" & condition != "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 30), expand = cur_exp, breaks = seq(0, 30, length.out = 3), labels = rep("", 3)),
+  # SLOPE
+  parameter == "Slope" & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 40), expand = cur_exp, breaks = seq(0, 40, length.out = 3)),
+  parameter == "Slope" & condition != "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 40), expand = cur_exp, breaks = seq(0, 40, length.out = 3), labels = rep("", 3)),
+  # INTERCEPT-SLOPE CORRELATION
+  parameter == expression("rho[0,1]") & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 20), expand = cur_exp, breaks = seq(0, 20, length.out = 3)),
+  parameter == expression("rho[0,1]") & condition != "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 20), expand = cur_exp, breaks = seq(0, 20, length.out = 3), labels = rep("", 3)),
+  # INTERCEPT SD
+  parameter == "Intercept SD" & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 40), expand = cur_exp, breaks = seq(0, 40, length.out = 3)),
+  parameter == "Intercept SD" & condition != "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 40), expand = cur_exp, breaks = seq(0, 40, length.out = 3), labels = rep("", 3)),
+  # SLOPE SD
+  parameter == "Slope SD" & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 30), expand = cur_exp, breaks = seq(0, 30, length.out = 3)),
+  parameter == "Slope SD" & condition != "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 30), expand = cur_exp, breaks = seq(0, 30, length.out = 3), labels = rep("", 3)),
+  # RESIDUAL SD
+  parameter == "Residual SD" & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 50), expand = cur_exp, breaks = seq(0, 50, length.out = 3)),
+  parameter == "Residual SD" & condition != "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 50), expand = cur_exp, breaks = seq(0, 50, length.out = 3), labels = rep("", 3)))
+```
+
+
+### Make & Save Plot
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "1 - Distribution of Group-Level Growth Parameters.tiff"),
+     width = 14.6, height = 15, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type == "group") %>%
+    group_by(hypermodel, condition, parameter) %>% 
+    mutate(mean_posterior_mean = mean(posterior_mean)) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "int_slope_R", 
+                                         "intercept_SD", "slope_SD", "residual_SD"),
+                              labels = c("Intercept", "Slope", expression("rho[0,1]"),
+                                         "Intercept SD", "Slope SD", "Residual SD")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")),
+           avg_y = case_when(parameter == "Intercept" ~ 33.5, parameter == "Slope" ~ 44.5,
+                             parameter == expression("rho[0,1]") ~ 22, parameter == "Intercept SD" ~ 44.5,
+                             parameter == "Slope SD" ~ 33.5, parameter == "Residual SD" ~ 56)) %>% 
+    ggplot(aes(x = posterior_mean, fill = hypermodel)) +
+      # GEOMS
+      geom_histogram(color = "black", linewidth = .75, bins = 25) +
+      geom_hline(yintercept = 0) +
+      geom_vline(aes(xintercept = true_value), color = "red2", linewidth = .75) +
+      # geom_vline(aes(xintercept = mean_posterior_mean, color = hypermodel), 
+      #            linewidth = .75, linetype = "dashed", show.legend = F) +
+      geom_point(aes(x = mean_posterior_mean, y = avg_y),
+                 shape = 21, size = 1.6, stroke = 1, show.legend = F) +
+      # SCALES
+      scale_color_manual(values = c("goldenrod3", "dodgerblue3")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(x = "Posterior Mean", y = "Frequency") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 12),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title = element_text(size = 14),
+            legend.title = element_blank(),
+            legend.position = c(.5, 1.075),
+            legend.direction = "horizontal",
+            plot.margin = unit(c(1.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(parameter~condition, ncol = 4, scales = "free") +
+      facetted_pos_scales(x = ind_x_scales, y = ind_y_scales)
+  
+dev.off()
+```
+
+
+## True in HDI
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "2 - Percent Group-Level Growth Parameters in HDIs.tiff"),
+     width = 7, height = 10, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type == "group") %>%
+    group_by(condition, parameter, hypermodel) %>% 
+    summarise(true_in_HDI95 = mean(true_in_HDI95)*100) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "int_slope_R", 
+                                         "intercept_SD", "slope_SD", "residual_SD"),
+                              labels = c(expression("Intercept"), expression("Slope"), expression("\u03c1"),
+                                         expression("Intercept SD"), expression("Slope SD"), expression("Residual SD"))),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                              labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
+                                         "Low Slope\nMod Cor", "Mod Slope\nMod Cor"))) %>% 
+    ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
+      # GEOMS
+      geom_bar(color = "black", linewidth = .75, stat = "identity") +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 2, angle = 90) +
+      # SCALES
+      scale_y_continuous(limits = c(0,100), expand = c(0,0), 
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(y = "Percent of HDIs Encompassing True Parameter") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 8, angle = 90, vjust = .5, hjust = 1),
+            axis.text.y = element_text(color = "black", size = 8),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title.y = element_text(size = 9),
+            axis.title.x = element_blank(),
+            legend.position = "none",
+            plot.margin = unit(c(.5, .05, .1, .2), "cm"),
+            panel.spacing.x = unit(.25, "cm"),
+            panel.spacing.y = unit(.75, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(condition~hypermodel, scales = "free")
+
+dev.off()
+```
+
+
+# -------------------------------------------
+# Person-Level Parameters
+## True vs. Estimated Correlations
+### Define Aspects of Plot
+```{r}
+# EXPANSION
+cur_exp = expansion(mult = c(0, .2))
+# Y-AXIS SCALES
+ind_y_scales = list(
+  # INTERCEPT
+  parameter == "Intercept" ~
+    scale_y_continuous(limits = c(0, 30), expand = cur_exp, breaks = seq(0, 30, length.out = 3)),
+  # SLOPE
+  parameter == "Slope" & condition == "LoB_LoR" ~
+    scale_y_continuous(limits = c(0, 60), expand = cur_exp, breaks = seq(0, 60, length.out = 3)),
+  # UNBOUNDED LEARNING RATE
+  parameter == "'A" ~
+    scale_y_continuous(limits = c(0, 60), expand = cur_exp, breaks = seq(0, 60, length.out = 3)),
+  # BOUNDED LEARNING RATE
+  parameter == "A" ~
+    scale_y_continuous(limits = c(0, 80), expand = cur_exp, breaks = seq(0, 80, length.out = 3)))
+
+correlations = simulations %>% 
+  filter(parameter_type != "group") %>%
+  group_by(simulation, condition, hypermodel, parameter) %>% 
+  reframe(r = cor(true_value, posterior_mean)) %>% 
+  mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                             labels = c("Two-Stage", "HLCM"), ordered = T),
+         parameter = factor(parameter, ordered = T,
+                            levels = c("intercept", "slope", "unbounded_A", "A"),
+                            labels = c("Intercept", "Slope", "'A", "A")),
+         condition = factor(condition, ordered = T,
+                            levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                            labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
+                                       "Low Slope\nMod Cor", "Mod Slope\nMod Cor")))
+
+mean_correlation = correlations %>% 
+  group_by(hypermodel, condition, parameter) %>%
+  reframe(mean_r = mean(r)) %>% 
+  mutate(avg_y = case_when(parameter == "Intercept" ~ 30,
+                            parameter == "Slope" ~ 60,
+                            parameter == "'A" ~ 60,
+                            parameter == "A" ~ 80),
+         hypermodel = case_when(hypermodel == "HLCM" ~ "HLCM", T ~ "Two_Stage")) %>% 
+  pivot_wider(names_from = "hypermodel", values_from = "mean_r")
+```
+
+
+### Make & Save Plot
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "3 - Correlation Bw True & Estimated Parameters.tiff"),
+     width = 14.6, height = 12, units = "cm", res = 300)
+
+  correlations %>% 
+    ggplot(aes(x = r, fill = hypermodel)) +
+      # GEOMS
+      geom_histogram(color = "black", linewidth = .25, bins = 50) +
+      geom_hline(yintercept = 0) +
+      geom_point(data = mean_correlation, aes(x = Two_Stage, y = avg_y), fill = "goldenrod3",
+                 shape = 21, size = 1.6, stroke = 1, show.legend = F) +
+      geom_point(data = mean_correlation, aes(x = HLCM, y = avg_y), fill = "dodgerblue3",
+                 shape = 21, size = 1.6, stroke = 1, show.legend = F) +
+      geom_text_npc(data = mean_correlation, color = "goldenrod4", size = 2.5,
+                    aes(npcx = "left", npcy = .975, label = paste0("r = ", round(Two_Stage, 2)))) +
+      geom_text_npc(data = mean_correlation, color = "dodgerblue4", size = 2.5,
+                    aes(npcx = "left", npcy = .85, label = paste0("r = ", round(HLCM, 2)))) +
+      # SCALES
+      scale_x_continuous(limits = c(-1,1), expand = expansion(mult = .05),
+                         breaks = c(-1, 0, 1), labels = c("-1", "0", "+1")) +
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .1)), n.breaks = 3) +
+      scale_color_manual(values = c("goldenrod3", "dodgerblue3")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(x = "Correlation Between True & Estimated Parameter", y = "Frequency") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 12),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title = element_text(size = 14),
+            legend.title = element_blank(),
+            legend.position = c(.5, 1.1),
+            legend.direction = "horizontal",
+            plot.margin = unit(c(1.25, .3, .1, .3), "cm"),
+            panel.spacing.x = unit(.4, "cm"),
+            panel.spacing.y = unit(.375, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(parameter~condition, scales = "free") +
+      facetted_pos_scales(y = ind_y_scales)
+
+dev.off()
+```
+
+
+## True in HDI
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "4 - Percent Person-Level Parameters in HDIs.tiff"),
+     width = 7, height = 10, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type != "group") %>%
+    group_by(condition, parameter, hypermodel) %>% 
+    summarise(true_in_HDI95 = mean(true_in_HDI95)*100) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "unbounded_A", "A"),
+                              labels = c("Intercept", "Slope", "'A", "A")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                              labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
+                                         "Low Slope\nMod Cor", "Mod Slope\nMod Cor"))) %>% 
+    ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
+      # GEOMS
+      geom_bar(color = "black", linewidth = .75, stat = "identity") +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 2, angle = 90) +
+      # SCALES
+      scale_y_continuous(limits = c(0,100), expand = c(0,0), 
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(y = "Percent of HDIs Encompassing True Parameter") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 8, angle = 90, vjust = .5, hjust = 1),
+            axis.text.y = element_text(color = "black", size = 8),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title.y = element_text(size = 9),
+            axis.title.x = element_blank(),
+            legend.position = "none",
+            plot.margin = unit(c(.5, .05, .1, .2), "cm"),
+            panel.spacing.x = unit(.25, "cm"),
+            panel.spacing.y = unit(.75, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(condition~hypermodel, scales = "free")
+
+dev.off()
+```
+
+
+# -------------------------------------------
+
+
+
+

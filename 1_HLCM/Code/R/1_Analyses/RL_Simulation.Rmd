@@ -105,13 +105,13 @@ par_from_draws <- function(fit, par) {
 ```{r}
 # -----------------------------------------------------------------------------------
 # SPECIFY CONDITIONS FOR SIMULATION
-n_iter      = 200
-n_warmup    = 100
+n_iter      = 1000
+n_warmup    = 500
 n_chains    = 1
 N           = 50
 S           = 3
 clusters    = makeCluster(1)
-sim_numbers = 1:5
+sim_numbers = 1:100
 conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
 
 
@@ -415,31 +415,20 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     # SAVE DIAGNOSTIC DATA
     # Growth Model Diagnostics
     rhats = rhat(growth_fit)
-    ESS = bind_rows(dplyr::select(summary(growth_fit)$fixed,
-                                  ess_bulk = Bulk_ESS, ess_tail = Tail_ESS),
-                    dplyr::select(summary(growth_fit)$random$ID,
-                                  ess_bulk = Bulk_ESS, ess_tail = Tail_ESS),
-                    dplyr::select(summary(growth_fit)$spec_pars,
-                                  ess_bulk = Bulk_ESS, ess_tail = Tail_ESS)) %>% 
-      mutate(parameter = rownames(.),
-             parameter = case_when(parameter == "session" ~
-                                     "b_session",
-                                   parameter == "sd(Intercept)" ~
-                                     "sd_ID__Intercept",
-                                   parameter == "sd(session)" ~
-                                     "sd_ID__session",
-                                   parameter == "cor(Intercept,session)" ~
-                                     "cor_ID__Intercept__session",
-                                   T ~ parameter))
+    growth_draws = as_draws_df(growth_fit)
+    ESS = data.frame(parameter = names(growth_draws),
+                     ess_bulk = sapply(growth_draws, posterior::ess_bulk),
+                     ess_tail = sapply(growth_draws, posterior::ess_tail))
     RL_growth_diagnostics = data.frame(parameter = names(rhats), rhat = rhats) %>% 
       left_join(ESS) %>% 
       filter(!(parameter %in% c("lprior", "lp__")))
-    RL_Diagnostics = RL_growth_diagnostics %>% 
+    # RL_Diagnostics = 
+      RL_growth_diagnostics %>% 
       mutate(parameter = case_when(parameter == "b_Intercept" ~ "gamma00",
                                    parameter == "b_session" ~ "gamma10",
                                    parameter == "sd_ID__Intercept" ~ "sigma_U[1]",
                                    parameter == "sd_ID__session" ~ "sigma_U[2]",
-                                   parameter == "sigma" ~ "R",
+                                   parameter == "sigma" ~ "residual_SD",
                                    parameter == "cor_ID__Intercept__session" ~ "R_theta[2,1]",
                                    T ~ parameter),
              person_parameter = case_when(stringr::str_detect(parameter, ",Intercept") ~ "beta0",
@@ -451,7 +440,7 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
                                    T ~ parameter),
              hypermodel = "RL", model = "growth", condition = condition,
              simulation = sim, session = 0) %>% 
-      dplyr::select(condition, simulation, model, session, parameter, rhat, ess_bulk, ess_tail) %>% 
+      dplyr::select(hypermodel, condition, simulation, model, session, parameter, rhat, ess_bulk, ess_tail) %>% 
       bind_rows(RL_Diagnostics)
     
     saveRDS(dplyr::select(RL_Diagnostics,

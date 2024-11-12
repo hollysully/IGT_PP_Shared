@@ -86,7 +86,7 @@ for(condition in conditions){
 checks = data.frame()
 
 for(cond in conditions){
-  for(sim in 1:100){
+  for(sim in 1:5){
     data = readRDS(here::here("1_HLCM", "Data", "1_Simulations", cond,
                               paste0("Data_", sim, ".RDS")))
     check_data = readRDS(here::here("1_HLCM", "Data", "1_Simulations", "Check", cond,
@@ -604,6 +604,61 @@ simulations %>%
           panel.background = element_rect(fill = "transparent", colour = "transparent"),
           plot.background = element_rect(fill = "transparent", color = "transparent")) +
     facet_rep_grid(condition_lab~hypermodel, scales = "free", labeller = label_parsed)
+```
+
+
+# -------------------------------------------
+# Diagnostics
+```{r, fig.height=6, fig.width=6}
+summarized_durations = characteristics %>%
+  group_by(hypermodel) %>% 
+  summarise(total = round(sum(as.numeric(duration, units = "hours")), 2),
+            avg = round(mean(as.numeric(duration, units = "mins")), 2)) %>% 
+  pivot_wider(names_from = "hypermodel", values_from = c("total", "avg"))
+
+characteristics %>% 
+  group_by(hypermodel, condition) %>% 
+  mutate(duration = as.numeric(duration, units = "mins"),
+         mean_duration = mean(duration)) %>% 
+  mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"), ordered = T),
+         condition_lab = factor(condition, levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                                labels = c(expression("Lo~\u03B2~Lo~r"),
+                                           expression("Hi~\u03B2~Lo~r"),
+                                           expression("Lo~\u03B2~Hi~r"),
+                                           expression("Hi~\u03B2~Hi~r")))) %>% 
+  ggplot(aes(x = duration, fill = hypermodel)) +
+    # GEOMS
+    geom_histogram(color = "black", linewidth = .75, bins = 50) +
+    geom_hline(yintercept = 0) +
+    geom_vline(aes(xintercept = mean_duration, color = hypermodel),
+               linewidth = .75, linetype = "dashed", show.legend = F) +
+    # SCALES
+    scale_x_continuous(n.breaks = 4, expand = expansion(mult = .05)) +
+    scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .1)), n.breaks = 3) +
+    scale_color_manual(values = c("goldenrod3", "dodgerblue3")) +
+    scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+    # THEMES
+    labs(x = "Fit Duration (Mins)", y = "Frequency",
+         caption = paste0("RL Duration: Total = ", summarized_durations$total_RL, " hours, Mean/Simulation = ",
+                          summarized_durations$avg_RL, " mins \n",
+                          "HLCM Duration: Total = ", summarized_durations$total_HLCM, " hours, Mean/Simulation = ",
+                          summarized_durations$avg_HLCM, " mins")) +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black", size = 12),
+          axis.ticks = element_line(color = "black", linewidth = .75),
+          axis.line = element_line(linewidth = .75),
+          axis.title = element_text(size = 14),
+          legend.title = element_blank(),
+          plot.caption = element_text(hjust = 0),
+          plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+          panel.spacing = unit(.5, "cm"),
+          strip.text = element_text(size = 14),
+          strip.background = element_rect(fill = "transparent", colour = "transparent"),
+          panel.background = element_rect(fill = "transparent", colour = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = "transparent")) +
+    facet_rep_grid(condition_lab~hypermodel, scales = "free",
+                   labeller = label_parsed)
 ```
 
 
