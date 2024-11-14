@@ -421,13 +421,13 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
     RL_growth_diagnostics = data.frame(parameter = names(rhats), rhat = rhats) %>% 
       left_join(ESS) %>% 
       filter(!(parameter %in% c("lprior", "lp__")))
-    # RL_Diagnostics = 
+    RL_Diagnostics =
       RL_growth_diagnostics %>% 
       mutate(parameter = case_when(parameter == "b_Intercept" ~ "gamma00",
                                    parameter == "b_session" ~ "gamma10",
                                    parameter == "sd_ID__Intercept" ~ "sigma_U[1]",
                                    parameter == "sd_ID__session" ~ "sigma_U[2]",
-                                   parameter == "sigma" ~ "residual_SD",
+                                   parameter == "sigma" ~ "sigma_resid",
                                    parameter == "cor_ID__Intercept__session" ~ "R_theta[2,1]",
                                    T ~ parameter),
              person_parameter = case_when(stringr::str_detect(parameter, ",Intercept") ~ "beta0",
