@@ -107,7 +107,7 @@ par_from_draws <- function(fit, par) {
 # SPECIFY CONDITIONS FOR SIMULATION
 n_iter      = 1000
 n_warmup    = 500
-n_chains    = 1
+n_chains    = 4
 N           = 50
 S           = 3
 clusters    = makeCluster(1)
@@ -329,7 +329,9 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
                  posterior_SD = apply(cur_posterior, 2, sd),
                  lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
                  true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
-                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+                 percentile = calculate_percentile(as.matrix(cur_true_parameter),
+                                                   array(cur_posterior, dim = c(nrow(cur_posterior), 1, N)),
+                                                   1)) %>% 
       bind_rows(RL_Simulations)
     ## Slopes
     cur_parameter = "slope"
@@ -345,7 +347,9 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
                  posterior_SD = apply(cur_posterior, 2, sd),
                  lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
                  true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
-                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+                 percentile = calculate_percentile(as.matrix(cur_true_parameter),
+                                                   array(cur_posterior, dim = c(nrow(cur_posterior), 1, N)),
+                                                   1)) %>% 
       bind_rows(RL_Simulations)
     
     
@@ -597,7 +601,9 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
                  posterior_SD = apply(cur_posterior, 2, sd),
                  lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
                  true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
-                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+                 percentile = calculate_percentile(as.matrix(cur_true_parameter),
+                                                   array(cur_posterior, dim = c(nrow(cur_posterior), 1, N)),
+                                                   1)) %>% 
       bind_rows(HLCM_Simulations)
     ## Slopes
     cur_parameter = "slope"
@@ -613,7 +619,9 @@ foreach(condition = conditions) %:% # LOOP THROUGH CONDITIONS
                  posterior_SD = apply(cur_posterior, 2, sd),
                  lower_HDI95 = cur_hdi[,1], upper_HDI95 = cur_hdi[,2],
                  true_in_HDI95 = cur_true_parameter > cur_hdi[,1] & cur_true_parameter < cur_hdi[,2],
-                 percentile = mean(cur_posterior < cur_true_parameter)) %>% 
+                 percentile = calculate_percentile(as.matrix(cur_true_parameter),
+                                                   array(cur_posterior, dim = c(nrow(cur_posterior), 1, N)),
+                                                   1)) %>% 
       bind_rows(HLCM_Simulations)
     
     
