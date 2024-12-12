@@ -25,8 +25,11 @@
 1_SIGT_PP/z.Notes/ 
 
 # Ignore some of Jerem'ys folders
+1_HLCM/Manuscript Drafts/
 dead_end_models/
 Manuscript/
+1_IGT_PP/Code/R/2_Plotting/Victoria_Interview_Plots.Rmd
+1_IGT_PP/Figs_Tables/Victoria_Interview/
 1_HLCM/Data/1_Simulations/Check/
 1_TADS_Parents_PP/Data/0_Raw/
 1_TADS_Parents_PP/Old/

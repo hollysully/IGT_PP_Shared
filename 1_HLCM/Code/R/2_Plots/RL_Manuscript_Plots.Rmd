@@ -90,8 +90,8 @@ characteristics %>%
 
 
 # -------------------------------------------
-# Group-Level Growth Parameters
-## Posterior Means
+# Posterior Means
+## Group-Level Growth Parameters
 ### Define Aspects of Plot
 ```{r}
 # EXPANSION
@@ -196,62 +196,7 @@ dev.off()
 ```
 
 
-## True in HDI
-```{r}
-tiff(here("1_HLCM", "Figs_Tables", "2 - Percent Group-Level Growth Parameters in HDIs.tiff"),
-     width = 7, height = 10, units = "cm", res = 300)
-
-  simulations %>% 
-    filter(parameter_type == "group") %>%
-    group_by(condition, parameter, hypermodel) %>% 
-    summarise(true_in_HDI95 = mean(true_in_HDI95)*100) %>% 
-    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
-                               labels = c("Two-Stage", "HLCM"), ordered = T),
-           parameter = factor(parameter, ordered = T,
-                              levels = c("intercept", "slope", "int_slope_R", 
-                                         "intercept_SD", "slope_SD", "residual_SD"),
-                              labels = c(expression("Intercept"), expression("Slope"), expression("\u03c1"),
-                                         expression("Intercept SD"), expression("Slope SD"), expression("Residual SD"))),
-           condition = factor(condition, ordered = T,
-                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
-                              labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
-                                         "Low Slope\nMod Cor", "Mod Slope\nMod Cor"))) %>% 
-    ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
-      # GEOMS
-      geom_bar(color = "black", linewidth = .75, stat = "identity") +
-      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
-                vjust = .5, hjust = -.125, size = 2, angle = 90) +
-      # SCALES
-      scale_y_continuous(limits = c(0,100), expand = c(0,0), 
-                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
-      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
-      # THEMES
-      labs(y = "Percent of HDIs Encompassing True Parameter") +
-      coord_cartesian(clip = "off") +
-      theme_classic() +
-      theme(axis.text.x = element_text(color = "black", size = 8, angle = 90, vjust = .5, hjust = 1),
-            axis.text.y = element_text(color = "black", size = 8),
-            axis.ticks = element_line(color = "black", linewidth = .75),
-            axis.line = element_line(linewidth = .75),
-            axis.title.y = element_text(size = 9),
-            axis.title.x = element_blank(),
-            legend.position = "none",
-            plot.margin = unit(c(.5, .05, .1, .2), "cm"),
-            panel.spacing.x = unit(.25, "cm"),
-            panel.spacing.y = unit(.75, "cm"),
-            strip.text = element_blank(),
-            strip.background = element_rect(fill = "transparent", colour = "transparent"),
-            panel.background = element_rect(fill = "transparent", colour = "transparent"),
-            plot.background = element_rect(fill = "transparent", color = "transparent")) +
-      facet_rep_grid(condition~hypermodel, scales = "free")
-
-dev.off()
-```
-
-
-# -------------------------------------------
-# Person-Level Parameters
-## True vs. Estimated Correlations
+## Person-Level Parameters
 ### Define Aspects of Plot
 ```{r}
 # EXPANSION
@@ -346,7 +291,62 @@ dev.off()
 ```
 
 
-## True in HDI
+# -------------------------------------------
+# True in HDI
+## Group-Level Growth Parameters
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "3 - Percent Group-Level Growth Parameters in HDIs.tiff"),
+     width = 7, height = 10, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type == "group") %>%
+    group_by(condition, parameter, hypermodel) %>% 
+    summarise(true_in_HDI95 = mean(true_in_HDI95)*100) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "int_slope_R", 
+                                         "intercept_SD", "slope_SD", "residual_SD"),
+                              labels = c(expression("Intercept"), expression("Slope"), expression("\u03c1"),
+                                         expression("Intercept SD"), expression("Slope SD"), expression("Residual SD"))),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                              labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
+                                         "Low Slope\nMod Cor", "Mod Slope\nMod Cor"))) %>% 
+    ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
+      # GEOMS
+      geom_bar(color = "black", linewidth = .75, stat = "identity") +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 2, angle = 90) +
+      # SCALES
+      scale_y_continuous(limits = c(0,100), expand = c(0,0), 
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(y = "Percent of HDIs Encompassing True Parameter") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 8, angle = 90, vjust = .5, hjust = 1),
+            axis.text.y = element_text(color = "black", size = 8),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title.y = element_text(size = 9),
+            axis.title.x = element_blank(),
+            legend.position = "none",
+            plot.margin = unit(c(.5, .05, .1, .2), "cm"),
+            panel.spacing.x = unit(.25, "cm"),
+            panel.spacing.y = unit(.75, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(condition~hypermodel, scales = "free")
+
+dev.off()
+```
+
+
+## Person-Level Parameters
 ```{r}
 tiff(here("1_HLCM", "Figs_Tables", "4 - Percent Person-Level Parameters in HDIs.tiff"),
      width = 7, height = 10, units = "cm", res = 300)
@@ -392,6 +392,196 @@ tiff(here("1_HLCM", "Figs_Tables", "4 - Percent Person-Level Parameters in HDIs.
             panel.background = element_rect(fill = "transparent", colour = "transparent"),
             plot.background = element_rect(fill = "transparent", color = "transparent")) +
       facet_rep_grid(condition~hypermodel, scales = "free")
+
+dev.off()
+```
+
+
+# -------------------------------------------
+# Percentiles
+## Two-Stage Group-Level Growth Parameters
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "S1 - Two-Stage Group-Level Growth Parameter Percentiles.tiff"),
+     width = 14.6, height = 15, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type == "group" & hypermodel == "RL") %>%
+    group_by(hypermodel, condition, parameter) %>% 
+    mutate(mean_percentile = mean(percentile)) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "int_slope_R", 
+                                         "intercept_SD", "slope_SD", "residual_SD"),
+                              labels = c("Intercept", "Slope", expression("rho[0,1]"),
+                                         "Intercept SD", "Slope SD", "Residual SD")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"))) %>% 
+    ggplot(aes(x = percentile, fill = hypermodel)) +
+      # GEOMS
+      geom_histogram(color = "black", linewidth = .75, bins = 25) +
+      geom_hline(yintercept = 0) +
+      # SCALES
+      scale_x_continuous(limits = c(-.05, 1.05), expand = c(0, 0),
+                         breaks = c(0, .5, 1), labels = c("0", ".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .1)), n.breaks = 3) +
+      scale_fill_manual(values = c("goldenrod3")) +
+      # THEMES
+      labs(x = "Percentile", y = "Frequency") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 12),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title = element_text(size = 14),
+            legend.position = "none",
+            plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+            panel.spacing = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(parameter~condition, scales = "free")
+
+dev.off()
+```
+
+
+## HLCM Group-Level Growth Parameters
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "S2 - HLCM Group-Level Growth Parameter Percentiles.tiff"),
+     width = 14.6, height = 15, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type == "group" & hypermodel == "HLCM") %>%
+    group_by(hypermodel, condition, parameter) %>% 
+    mutate(mean_percentile = mean(percentile)) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "int_slope_R", 
+                                         "intercept_SD", "slope_SD", "residual_SD"),
+                              labels = c("Intercept", "Slope", expression("rho[0,1]"),
+                                         "Intercept SD", "Slope SD", "Residual SD")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"))) %>% 
+    ggplot(aes(x = percentile, fill = hypermodel)) +
+      # GEOMS
+      geom_histogram(color = "black", linewidth = .75, bins = 25) +
+      geom_hline(yintercept = 0) +
+      # SCALES
+      scale_x_continuous(limits = c(-.05, 1.05), expand = c(0, 0),
+                         breaks = c(0, .5, 1), labels = c("0", ".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .1)), n.breaks = 3) +
+      scale_fill_manual(values = c("dodgerblue3")) +
+      # THEMES
+      labs(x = "Percentile", y = "Frequency") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 12),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title = element_text(size = 14),
+            legend.position = "none",
+            plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+            panel.spacing = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(parameter~condition, scales = "free")
+
+dev.off()
+```
+
+
+## Two-Stage Person-Level Parameters
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "S3 - Two-Stage Person-Level Parameter Percentiles.tiff"),
+     width = 14.6, height = 11, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type != "group" & hypermodel == "RL") %>%
+    group_by(hypermodel, condition, parameter) %>% 
+    mutate(mean_percentile = mean(percentile)) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "unbounded_A", "A"),
+                              labels = c("Intercept", "Slope", "'A", "A")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"))) %>% 
+    ggplot(aes(x = percentile, fill = hypermodel)) +
+      # GEOMS
+      geom_histogram(color = "black", linewidth = .75, bins = 25) +
+      geom_hline(yintercept = 0) +
+      # SCALES
+      scale_x_continuous(limits = c(-.05, 1.05), expand = c(0, 0),
+                         breaks = c(0, .5, 1), labels = c("0", ".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .1)), n.breaks = 3) +
+      scale_fill_manual(values = c("goldenrod3")) +
+      # THEMES
+      labs(x = "Percentile", y = "Frequency") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 12),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title = element_text(size = 14),
+            legend.position = "none",
+            plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+            panel.spacing = unit(.5, "cm"),
+            strip.text.x = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(parameter~condition, scales = "free")
+
+dev.off()
+```
+
+
+## HLCM Person-Level Parameters
+```{r}
+tiff(here("1_HLCM", "Figs_Tables", "S4 - HLCM Person-Level Parameter Percentiles.tiff"),
+     width = 14.6, height = 11, units = "cm", res = 300)
+
+  simulations %>% 
+    filter(parameter_type != "group" & hypermodel == "HLCM") %>%
+    group_by(hypermodel, condition, parameter) %>% 
+    mutate(mean_percentile = mean(percentile)) %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "unbounded_A", "A"),
+                              labels = c("Intercept", "Slope", "'A", "A")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"))) %>% 
+    ggplot(aes(x = percentile, fill = hypermodel)) +
+      # GEOMS
+      geom_histogram(color = "black", linewidth = .75, bins = 25) +
+      geom_hline(yintercept = 0) +
+      # SCALES
+      scale_x_continuous(limits = c(-.05, 1.05), expand = c(0, 0),
+                         breaks = c(0, .5, 1), labels = c("0", ".5", "1")) +
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .1)), n.breaks = 3) +
+      scale_fill_manual(values = c("dodgerblue3")) +
+      # THEMES
+      labs(x = "Percentile", y = "Frequency") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 12),
+            axis.ticks = element_line(color = "black", linewidth = .75),
+            axis.line = element_line(linewidth = .75),
+            axis.title = element_text(size = 14),
+            legend.position = "none",
+            plot.margin = unit(c(.1, .3, .1, .3), "cm"),
+            panel.spacing = unit(.5, "cm"),
+            strip.text.x = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_grid(parameter~condition, scales = "free")
 
 dev.off()
 ```
