@@ -1,0 +1,206 @@
+---
+title: "Running SBC and Testing Conditional Growth ORL"
+output: html_document
+date: "2024-09-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(foreach)
+source(here("1_TADS_long", "Code", "R", "3_Other", "helpful_functions.R"))
+source(here("1_IGT_PP", "Code", "R", "utils.R"))
+source(here("1_IGT_PP", "Code", "R", "1_Analyses","simulate.R"))
+```
+
+
+# Load Data
+```{r}
+all_task_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_task_data.rds"))
+all_survey_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_survey_data.rds"))
+```
+
+
+# Run SBC
+```{r}
+set.seed(43210)
+
+n_sbc <- 100
+
+orl_model_sim <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_conditional_growth_sbc.stan"))
+
+orl_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_conditional_growth.stan"))
+
+
+for (iter in 1:n_sbc) {
+  model_text <- "
+    Arew_int ~ 1;
+    Apun_int ~ 1;
+    betaF_int ~ 1;
+    betaP_int ~ 1;
+    Arew_slope ~ 1 + scale(bis);
+    Apun_slope ~ 1 + scale(bis);
+    betaF_slope ~ 1 + scale(bis);
+    betaP_slope ~ 1 + scale(bis);
+  "
+  
+  stan_data <- make_stan_data_growth(
+    all_task_data, 
+    all_survey_data,
+    model_text,
+    "session"
+  )
+  
+  stan_data$card <- card_order
+  stan_data$outcome <- outcomes
+  
+  # Fit model
+  orl_prior_sim <- orl_model_sim$sample(
+    stan_data, 
+    chains = 1,
+    iter_sampling = 1,
+    fixed_param = T,
+  ) 
+  
+  
+  true_pars <- list(
+    Arew = par_from_draws(orl_prior_sim, "Arew")$Arew[1,,],
+    Apun = par_from_draws(orl_prior_sim, "Apun")$Apun[1,,],
+    betaF = par_from_draws(orl_prior_sim, "betaF")$betaF[1,,],
+    betaP = par_from_draws(orl_prior_sim, "betaP")$betaP[1,,], 
+    beta = par_from_draws(orl_prior_sim, "beta")$beta[1,,,], 
+    gamma0 = par_from_draws(orl_prior_sim, "gamma0")$gamma0[1,],
+    gamma1 = par_from_draws(orl_prior_sim, "gamma1")$gamma1[1,],
+    sigma_beta = par_from_draws(orl_prior_sim, "sigma_beta")$sigma_beta[1,,],
+    sigma_theta = par_from_draws(orl_prior_sim, "sigma_theta")$sigma_theta[1,],
+    R_Arew = par_from_draws(orl_prior_sim, "R_Arew")$R_Arew[1,1,2],
+    R_Apun = par_from_draws(orl_prior_sim, "R_Apun")$R_Apun[1,1,2],
+    R_betaF = par_from_draws(orl_prior_sim, "R_betaF")$R_betaF[1,1,2],
+    R_betaP = par_from_draws(orl_prior_sim, "R_betaP")$R_betaP[1,1,2]
+  )
+  
+  stan_data$card <- par_from_draws(orl_prior_sim, "card_sim")$card_sim[1,,]
+  stan_data$outcome <- par_from_draws(orl_prior_sim, "outcome_sim")$outcome_sim[1,,]
+  stan_data$sign <- sign(stan_data$outcome)
+  stan_data$choice <- par_from_draws(orl_prior_sim, "choice")$choice[1,,]
+  stan_data$prior_only <- 0
+  
+  orl_prior_fit <- orl_model$sample(
+    stan_data, 
+    chains = 8,
+    parallel_chains = 8,
+    iter_sampling = 500,
+    iter_warmup = 200,
+  ) 
+  
+  est_pars <- list(
+    Arew = par_from_draws(orl_prior_fit, "Arew")$Arew,
+    Apun = par_from_draws(orl_prior_fit, "Apun")$Apun,
+    betaF = par_from_draws(orl_prior_fit, "betaF")$betaF,
+    betaP = par_from_draws(orl_prior_fit, "betaP")$betaP,
+    beta = par_from_draws(orl_prior_fit, "beta")$beta, 
+    gamma0 = par_from_draws(orl_prior_fit, "gamma0")$gamma0,
+    gamma1 = par_from_draws(orl_prior_fit, "gamma1")$gamma1,
+    sigma_beta = par_from_draws(orl_prior_fit, "sigma_beta")$sigma_beta,
+    sigma_theta = par_from_draws(orl_prior_fit, "sigma_theta")$sigma_theta,
+    R_Arew = par_from_draws(orl_prior_fit, "R_Arew")$R_Arew[,1,2],
+    R_Apun = par_from_draws(orl_prior_fit, "R_Apun")$R_Apun[,1,2],
+    R_betaF = par_from_draws(orl_prior_fit, "R_betaF")$R_betaF[,1,2],
+    R_betaP = par_from_draws(orl_prior_fit, "R_betaP")$R_betaP[,1,2]
+  )
+  
+  percentile <- function(true, est) {
+    if (length(dim(est)) != 0) {
+      true <- array(rep(true, each = dim(est)[1]), dim = dim(est))
+      return(apply(est <= true, seq_along(dim(est))[-1], mean))  
+    } else {
+      return(mean(est <= true))
+    }
+  }
+  
+  par_perc <- mapply(
+    percentile, 
+    true_pars, 
+    est_pars, 
+    SIMPLIFY = FALSE
+  )
+  
+  saveRDS(par_perc, here("1_IGT_PP", "Data", "2_Fitted", "SBC", paste0("sbc_", iter, ".rds"))) 
+}
+```
+
+## Plot SBC Results
+```{r, eval = T}
+n_sbc <- 100
+
+results <- foreach(i=1:n_sbc) %do% {
+  readRDS(here("1_IGT_PP", "Data", "2_Fitted", "SBC", paste0("sbc_", i, ".rds")))
+}
+flat_results <- lapply(
+  results, 
+  function(x) x <- lapply(x, function(y) y <- c(y))
+)
+
+df_results <- foreach(i=1:n_sbc, .combine = "rbind") %do% {
+  sbc_iter <- flat_results[[i]]
+  foreach(par=names(sbc_iter), .combine = "rbind") %do% {
+    data.frame(
+      iter = i,
+      par = par,
+      unit = seq_along(sbc_iter[[par]]),
+      perc = sbc_iter[[par]]
+    )
+  }
+}
+
+df_results %>%
+  filter(par=="Arew" & unit==1) %>%
+  ggplot(aes(x=perc)) +
+  geom_histogram()
+
+df_results %>%
+  ggplot(aes(x=perc, group=unit)) +
+  geom_histogram(position="stack") +
+  facet_wrap("par", scales = "free_y")
+```
+
+# Fit to Real Data
+```{r}
+orl_model <- cmdstan_model(here("1_IGT_PP", "Code", "Stan", "igt_orl_playpass_conditional_growth.stan"))
+
+
+model_text <- "
+  Arew_int ~ 1;
+  Apun_int ~ 1;
+  betaF_int ~ 1;
+  betaP_int ~ 1;
+  Arew_slope ~ 1 + scale(bis);
+  Apun_slope ~ 1 + scale(bis);
+  betaF_slope ~ 1 + scale(bis);
+  betaP_slope ~ 1 + scale(bis);
+"
+  
+stan_data <- make_stan_data_growth(
+  all_task_data, 
+  all_survey_data,
+  model_text,
+  "session"
+)
+stan_data$prior_only <- 0
+
+orl_fit <- orl_model$sample(
+  stan_data, 
+  chains = 8,
+  parallel_chains = 8,
+  iter_sampling = 500,
+  iter_warmup = 200,
+) 
+```
