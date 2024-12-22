@@ -112,11 +112,11 @@ N           = 50
 S           = 3
 clusters    = makeCluster(1)
 sim_numbers = 1:100
-conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
-
-n_iter      = 500
-n_warmup    = 200
-sim_numbers = 1:4
+conditions  = list.files(here("1_HLCM", "Data", "1_Simulations"))
+# BELOW IS JUST FOR TESTING
+# n_iter      = 500
+# n_warmup    = 200
+# sim_numbers = 1:4
 
 
 # -----------------------------------------------------------------------------------
