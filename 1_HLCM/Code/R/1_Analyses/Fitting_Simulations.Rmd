@@ -115,7 +115,7 @@ sim_numbers = 1:100
 conditions  = list.files(here("1_HLCM", "Data", "1_Simulations"))
 
 for(f in conditions){
-  dir.create(here("1_HLCM", "Data", "1_Simulations", f))
+  dir.create(here("1_HLCM", "Data", "2_Fitted", f))
 }
 # BELOW IS JUST FOR TESTING
 # n_iter      = 500
