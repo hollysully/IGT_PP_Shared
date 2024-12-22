@@ -113,6 +113,10 @@ S           = 3
 clusters    = makeCluster(1)
 sim_numbers = 1:100
 conditions  = list.files(here("1_HLCM", "Data", "1_Simulations"))
+
+for(f in conditions){
+  dir.create(here("1_HLCM", "Data", "1_Simulations", f))
+}
 # BELOW IS JUST FOR TESTING
 # n_iter      = 500
 # n_warmup    = 200
