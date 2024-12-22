@@ -104,29 +104,41 @@ par_from_draws <- function(fit, par) {
 ## Setup
 ```{r}
 # -----------------------------------------------------------------------------------
+# SET VARYING PARAMETERS
+HLM_parameters = list(# negative beta combined with negative, 0, & positive r
+                      neg.beta_neg.cor = c(mu_beta_UT  = -.3,
+                                           int_slope_R = -.3),
+                      neg.beta_neu.cor = c(mu_beta_UT  = -.3,
+                                           int_slope_R =  .0),
+                      neg.beta_pos.cor = c(mu_beta_UT  = -.3,
+                                           int_slope_R = +.3),
+                      # 0 beta combined with negative, 0, & positive r
+                      nue.beta_neg.cor = c(mu_beta_UT  =  .0,
+                                           int_slope_R = -.3),
+                      neu.beta_neu.cor = c(mu_beta_UT  =  .0,
+                                           int_slope_R =  .0),
+                      neu.beta_pos.cor = c(mu_beta_UT  =  .0,
+                                           int_slope_R = +.3),
+                      # positive beta combined with negative, 0, & positive r
+                      pos.beta_neg.cor = c(mu_beta_UT  = +.3,
+                                           int_slope_R = -.3),
+                      pos.beta_neu.cor = c(mu_beta_UT  = +.3,
+                                           int_slope_R =  .0),
+                      pos.beta_pos.cor = c(mu_beta_UT  = +.3,
+                                           int_slope_R = +.3))
+
+
+for(f in names(HLM_parameters)){
+  dir.create(here("1_HLCM", "Data", "1_Simulations", f))
+}
+# -----------------------------------------------------------------------------------
 # SPECIFY CONDITIONS FOR SIMULATION
 clusters = makeCluster(4)
 S             = 3
 N             = 50
 n_simulations = 100
-conditions    = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+conditions    = names(HLM_parameters)
 numbers = c(1000:9999)
-
-
-# -----------------------------------------------------------------------------------
-# SET VARYING PARAMETERS
-HLM_parameters = list(# small slope effect & weak correlation
-                      LoB_LoR = c(mu_beta_UT  = 0,
-                                  int_slope_R = 0),
-                      # large slope effect & weak correlation
-                      HiB_LoR = c(mu_beta_UT  = .3,
-                                  int_slope_R = 0),
-                      # small slope effect & strong correlation
-                      LoB_HiR = c(mu_beta_UT  = 0,
-                                  int_slope_R = .3),
-                      # large slope effect & strong correlation
-                      HiB_HiR = c(mu_beta_UT  = .3,
-                                  int_slope_R = .3))
 ```
 
 

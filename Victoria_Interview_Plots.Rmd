@@ -1,0 +1,692 @@
+---
+title: "Manuscript Plots"
+output: html_document
+date: "2023-03-09"
+---
+
+
+
+# ---------------------------------------
+# Setup
+## Loading Packages
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(foreach)
+library(tidybayes)
+library(patchwork)
+library(abind)
+library(zoo)
+library(here)
+library(ggpubr)
+library(egg)
+library(grid)
+library(tidyverse)
+library(lemon)
+library(ggpp)
+library(stringi)
+library(ggh4x)
+library(hBayesDM)
+```
+
+
+## Path
+```{r}
+victoria_path = "C:/Users/jmh31/OneDrive/Application & Professional Materials/Jobs/(interview) - 2024 - Victoria/Interview/"
+```
+
+
+# -------------------------------------------
+# Teaching Evals
+```{r}
+eval_data = read.csv(paste0(victoria_path, "Eval_Data.csv"))
+
+tiff(paste0(victoria_path, "Plots/Evals.tiff"),
+     width = 6.25, height = 5.25, units = "in", res = 300)
+
+eval_data %>% 
+  mutate(label = paste0(Semester, "\\n", Year),
+         Course = paste("PSY", Course),
+         score = Ratings) %>%  
+  ggplot(aes(x = Consecutive_Courses, y = score,
+             color = Course)) +
+  geom_line(size = 2) +
+  geom_vline(xintercept = c(2.5, 5.5, 8.5), linewidth = 2) +
+  geom_text(data = data.frame(Consecutive_Courses = c(1.25, 4, 7, 9.75),
+                              Average = 5,
+                              lab = c("2020", "2021", "2022", "2023")),
+            aes(x = Consecutive_Courses, y = Average, label = lab),
+            inherit.aes = F, size = 8, vjust = 0) +
+  geom_point(stroke = 2, size = 3) +
+  scale_x_continuous(limits = c(0, 10.5), breaks = c(1:10), expand = c(0, 0),
+                     labels = c("Summer", "Fall", "Spring",
+                                "Summer", "Fall", "Spring",
+                                "Summer", "Fall", "Spring",
+                                "Summer")) +
+  scale_y_continuous(limits = c(0, 5), expand = c(0, 0), breaks = seq(0, 5, 1)) +
+  scale_color_manual(values = c("goldenrod3", "dodgerblue3")) +
+  labs(y = "\nTeaching Excellence") +
+  theme_classic() +
+  coord_cartesian(clip = "off") +
+  theme(axis.line = element_line(size = 1.5),
+        axis.ticks = element_line(size = 1.5, color = "black"),
+        axis.text.x = element_text(size = 22, color = "transparent"),
+        # axis.text.x = element_text(size = 22, color = "black", angle = 45, hjust = 1, vjust = .5),
+        axis.text.y = element_text(size = 22, color = "black"),
+        # axis.text.y = element_text(size = 22, color = "transparent", angle = 45, hjust = 1, vjust = .5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 24),
+        plot.margin = unit(c(1, .5, 1, .25), "in"),
+        legend.direction = "horizontal",
+        legend.position = c(.5, 1.2),
+        legend.title = element_blank(),
+        legend.key.spacing.y = unit(.25, "cm"),
+        legend.text = element_text(size = 24))
+
+dev.off()
+```
+
+
+# -------------------------------------------
+# Bandit Example
+## Load & Process Data
+```{r}
+# LOAD DATA
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         "design_T1_parent_Anx_Dep_SUD_Female_IGT.RDS"))
+
+# OBSERVED DATA
+deck_B = stan_data$choice[stan_data$X[,5,] == 0, stan_data$card[1,,1] == 2, 1]
+deck_B = ifelse(deck_B == 1, 1, 0)
+deck_D = stan_data$choice[stan_data$X[,5,] == 0, stan_data$card[1,,1] == 4, 1]
+deck_D = ifelse(deck_D == 1, 1, 0)
+observed_data = data.frame(ID = 1:77,
+                           prob_B = apply(deck_B, 1, mean),
+                           prob_D = apply(deck_D, 1, mean)) %>% 
+  reframe(M.prob_B = mean(prob_B),
+          M.prob_D = mean(prob_D),
+          SD.prob_B = sd(prob_B),
+          SD.prob_D = sd(prob_D)) %>% 
+  pivot_longer(everything(), names_to = c("metric", "deck"), names_sep = "\\.",
+               values_to = "value") %>% 
+  pivot_wider(names_from = "metric", values_from = "value")
+
+# -------------------------------------------
+# PREP DATA
+victoria_PPCs = 
+  readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               "Covariate_Joint_ORL_Bias",
+               paste("T1_parent_Anx_Dep_SUD_Female", "Covariate_Joint_ORL_Bias", "Male_PPCs.rds", sep = "_"))) %>%
+  filter(deck == "B" | deck == "D") %>% 
+  mutate(deck = case_when(deck == "B" ~ "Option 1", T ~ "Option 2")) %>% 
+  group_by(deck) %>% 
+  mutate(overall_mu = mean(observed)) %>% 
+  group_by(trial, deck, overall_mu) %>% 
+  
+  # FULL DATA
+  reframe(observed = mean(observed), mu = mean(mu),
+          lower50 = mean(lower50), upper50 = mean(upper50),
+          lower95 = mean(lower95), upper95 = mean(upper95))
+  
+  # SUBSET CHOICE DATA
+  # reframe(observed = mean(observed), mu = NA_real_,
+  #         lower50 = NA_real_, upper50 = NA_real_,
+  #         lower95 = NA_real_, upper95 = NA_real_)
+
+  # SUBSET everything DATA
+  # reframe(observed = NA_real_, mu = NA_real_,
+  #         lower50 = NA_real_, upper50 = NA_real_,
+  #         lower95 = NA_real_, upper95 = NA_real_)
+```
+
+
+## Bar Plot
+```{r}
+tiff(paste0(victoria_path, "Plots/Bar_Plot.tiff"),
+     width = 8, height = 5.75, units = "in", res = 300)
+  # PPC PLOTS
+  observed_data %>% 
+    ggplot(aes(x = deck, fill = deck, color = deck)) +
+      # geoms
+      geom_bar(aes(y = M), stat = "identity", color = "black", linewidth = 1.5) +
+      # geom_errorbar(aes(ymin = M-SD, ymax = M+SD), color = "black", linewidth = 1.5, width = .75) +
+      # geom_linerange(aes(ymin = M-SD, ymax = M+SD), color = "black", linewidth = 1.5) +
+      # scales
+      scale_x_discrete(labels = c("Option 1", "Option 2")) +
+      scale_y_continuous(limits = c(0,1), expand = c(0, 0),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("#E69F00", "#0070C0"), labels = c("Option 1", "Option 2")) +
+      scale_fill_manual(values = c("#E69F00", "#0070C0"), labels = c("Option 1", "Option 2")) +
+      # theme
+      labs(y = "Proportion Play") +
+      theme_classic() +
+      theme(#axis elements
+            axis.line = element_line(size = 1.5),
+            axis.ticks.length = unit(.1, "in"),
+            axis.ticks = element_line(size = 1.5, color = "black", length),
+            axis.text = element_text(size = 24, color = "black"),
+            axis.title.y = element_text(size = 28),
+            axis.title.x = element_blank(),
+            # legend elements
+            legend.background = element_rect(fill = "transparent", colour = "transparent",
+                                             color = "transparent"),
+            legend.position = "none",
+            # plot elements
+            plot.margin = margin(t = .25, r = .3, unit = 'in'))
+dev.off()
+```
+
+
+## Trial-Level Plot
+```{r}
+tiff(paste0(victoria_path, "Plots/Trial_Level_Plot.tiff"),
+     width = 8, height = 5.75, units = "in", res = 300)
+  # PPC PLOTS
+  victoria_PPCs %>% 
+    ggplot(aes(x = trial)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = deck),
+                 # show.legend = F,
+                  color = "transparent", alpha = .25) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = deck),
+                 # show.legend = F,
+                  color = "transparent", alpha = .5) +
+      geom_line(aes(y = mu, color = deck), linewidth = 1.5) +
+      geom_point(aes(y = observed, fill = deck), color = "black",
+                 show.legend = F,
+                 shape = 21, stroke = 1.75, size = 3) +
+      # geom_hline(aes(yintercept = overall_mu, color = deck), linewidth = 1.5) +
+      # scales
+      scale_y_continuous(limits = c(.48,1.02),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("#E69F00", "#0070C0")) +
+      scale_fill_manual(values = c("#E69F00", "#0070C0")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(#axis elements
+            axis.line = element_line(size = 1.5),
+            axis.ticks.length = unit(.1, "in"),
+            axis.ticks = element_line(size = 1.5, color = "black", length),
+            axis.text = element_text(size = 24, color = "black"),
+            axis.title = element_text(size = 28),
+            # legend elements
+            legend.background = element_rect(fill = "transparent", colour = "transparent",
+                                             color = "transparent"),
+            legend.direction = "horizontal",
+            legend.position = c(.35, .95),
+            legend.title = element_blank(),
+            legend.key.size = unit(.5, "in"),
+            legend.key.spacing.y = unit(.25, "in"),
+            legend.text = element_text(size = 24),
+            # plot elements
+            plot.margin = margin(t = .25, r = .3, unit = 'in'))
+dev.off()
+```
+
+
+# -------------------------------------------
+# Study 1
+## Load Data
+```{r include=FALSE}
+orl_posteriors = readRDS(here("1_IGT_PP", "Data", "2_Fitted", "Joint_ORL_Bias",
+                              "Joint_ORL_Bias_posteriors.rds"))
+```
+
+
+## Functions
+```{r}
+# MAKE A FANCY LABEL FOR PLOTS
+estimate_CI_label = function(estimate, lower, upper){
+  
+  estimate = round(estimate,2)
+  estimate_lab = paste(ifelse(sign(estimate)==1," ","-"), stri_pad_right(str_remove(abs(estimate), "^0+"),
+                                                           width = 3, pad = "0"),sep="")
+  lower = round(as.numeric(str_remove(lower, "\\(")),2)
+  upper = round(as.numeric(str_remove(upper, "\\)")),2)
+  
+  lower_lab = paste(ifelse(sign(lower)==1,"","-"), stri_pad_right(str_remove(abs(lower), "^0+"),
+                                                                  width = 3, pad = "0"),sep="")
+  
+  upper_lab = paste(ifelse(sign(upper)==1,"","-"), stri_pad_right(str_remove(abs(upper), "^0+"),
+                                                                  width = 3, pad = "0"),sep="")
+  estimate_CI = paste("=",estimate_lab," [",lower_lab,",",upper_lab,"]",sep="")
+  
+  return(estimate_CI)
+}
+```
+
+
+## Absolute Reliability
+```{r}
+group_data =
+  data.frame(session = c(1, 2),
+             Arew_mu = apply(orl_posteriors$mu_Arew, 2, mean),
+             Apun_mu = apply(orl_posteriors$mu_Apun, 2, mean),
+             betaF_mu = apply(orl_posteriors$mu_betaF, 2, mean),
+             betaB_mu = apply(orl_posteriors$mu_betaB, 2, mean),
+             CI_Arew = t(apply(orl_posteriors$mu_Arew, 2, HDIofMCMC)),
+             CI_Apun = t(apply(orl_posteriors$mu_Apun, 2, HDIofMCMC)),
+             CI_betaF = t(apply(orl_posteriors$mu_betaF, 2, HDIofMCMC)),
+             CI_betaB = t(apply(orl_posteriors$mu_betaB, 2, HDIofMCMC))) %>% 
+  pivot_longer(ends_with(c(".1", ".2")), names_to = "limit", values_to = "CI") %>% 
+  mutate(limit = str_remove(limit, "CI_"),
+         limit = str_replace(limit, ".1", "_lower"),
+         limit = str_replace(limit, ".2", "_upper")) %>% 
+  pivot_wider(names_from = "limit", values_from = "CI") %>% 
+  pivot_longer(ends_with(c("mu", "lower", "upper")), 
+               names_to = "parameter", values_to = "estimate") %>% 
+  separate(col = "parameter", into = c("parameter", "type")) %>% 
+  pivot_wider(names_from = "type", values_from = "estimate") %>% 
+  mutate(session = factor(session),
+         parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaB")))
+
+
+tiff(paste0(victoria_path, "Plots/Study 1 - ORL Absolute Reliability.tiff"),
+     width = 8.5, height = 7.5, units = "in", res = 300)
+
+  data.frame(participant = 1:49,
+             Arew  = apply(orl_posteriors$Arew, c(2,3), mean),
+             Apun  = apply(orl_posteriors$Apun, c(2,3), mean),
+             betaF = apply(orl_posteriors$betaF, c(2,3), mean),
+             betaB = apply(orl_posteriors$betaB, c(2,3), mean)) %>% 
+    pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")), values_to = "estimate", 
+                 names_to = c("parameter", "session"), names_sep = "\\.") %>% 
+    mutate(session = factor(session),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("Arew", "Apun", "betaF", "betaB"))) %>% 
+  # plot
+  ggplot(aes(x = session, y = estimate, fill = session)) +
+    # geoms
+    # geom_crossbar(data = group_data, aes(y = mu, ymin = mu, ymax = mu), linewidth = .5, fatten = 0) +
+    geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 1.25, stroke = 2,
+                 position = position_dodge(width = .8)) +
+    geom_pointrange(data = group_data, aes(y = mu, ymin = lower, ymax = upper),
+                    color = "red", size = 1, linewidth = 1.5,
+                    position = position_dodge(width = .8)) +
+    # scales
+    # scale_y_continuous(limits = c(0, 1), expand = c(.01, .01), breaks = seq(0, 1, .25)) +
+    scale_fill_manual(values = c("gray25", "gray75"),
+                      labels = c("Session 1", "Session 2")) +
+    # themes
+    labs(x = "Session", y = "Estimate") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black", size = 24),
+          axis.ticks = element_line(linewidth = 1.25, color = "black"),
+          axis.line = element_line(linewidth = 1.25),
+          axis.ticks.length = unit(.1, "in"),
+          axis.title = element_text(size = 36),
+          strip.text = element_blank(),
+          panel.spacing.x = unit(.25, "in"),
+          panel.spacing.y = unit(.25, "in"),
+          plot.margin = unit(c(.25,.25,.25,.25), "in"),
+          legend.position = "none") +
+    facet_rep_wrap(.~parameter, scales = "free")
+
+dev.off()
+```
+
+
+
+## Relative Reliability
+```{r}
+tiff(paste0(victoria_path, "Plots/Study 1 - ORL Relative Reliability.tiff"),
+     width = 7.5, height = 7.5, units = "in", res = 300)
+
+  data.frame(participant = 1:49,
+             Arew  = apply(orl_posteriors$Arew, c(2,3), mean),
+             Apun  = apply(orl_posteriors$Apun, c(2,3), mean),
+             betaF = apply(orl_posteriors$betaF, c(2,3), mean),
+             betaB = apply(orl_posteriors$betaB, c(2,3), mean)) %>% 
+    pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")), values_to = "estimate", 
+                 names_to = c("parameter", "session"), names_sep = "\\.") %>% 
+    pivot_wider(values_from = "estimate", 
+                names_from = "session", names_prefix = "session_") %>% 
+  group_by(parameter) %>% 
+  mutate(session_1 = (session_1 - mean(session_1)) / sd(session_1),
+         session_2 = (session_2 - mean(session_2)) / sd(session_2),
+         parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaB"))) %>% 
+    ggplot(aes(x = session_1, y = session_2)) +
+      # geoms
+      geom_point(size = 3, shape = 21, color = "black", fill = "gray50") +
+      geom_smooth(method = "lm", formula = "y ~ x", color = "black", se = F, linewidth = 1.5,
+                  fullrange = T) +
+      # scales
+      scale_x_continuous(n.breaks = 3) +
+      scale_y_continuous(n.breaks = 3) +
+      # themes
+      labs(x = "Session 1", y = "Session 2") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text = element_text(color = "black", size = 24),
+            axis.title = element_text(size = 36),
+            axis.ticks = element_line(linewidth = 1.25, color = "black"),
+            axis.line = element_line(linewidth = 1.25),
+            axis.ticks.length = unit(.1, "in"),
+            # strip.text = element_blank(),
+            panel.spacing = unit(.35, units = "in"),
+            plot.margin = unit(c(-2, .25, -2, .1), "in"),
+            aspect.ratio = 1) +
+      facet_rep_wrap(.~parameter, scales = "free")
+
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Study 2
+## Load Data
+```{r}
+groups = c("Female", "Anx", "Dep", "SUD")
+model_name = "Covariate_Joint_ORL_Bias"
+sample = "T1_parent_Anx_Dep_SUD_Female"
+
+# read in posteriors
+orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                              model_name,
+                              paste(sample, model_name, "posteriors.rds", sep = "_")))
+
+```
+
+
+## Calculate Diag Differences
+```{r}
+orl_diag_parameters = data.frame(
+  iteration = 1:16000,
+  # get non-diag posteriors by averaging across men/women posteriors
+  Arew_mu.0 = (orl_posteriors$mu_Arew[,,1] + orl_posteriors$mu_Arew[,,5])/2,
+  Apun_mu.0 = (orl_posteriors$mu_Apun[,,1] + orl_posteriors$mu_Apun[,,5])/2,
+  betaF_mu.0 = (orl_posteriors$mu_betaF[,,1] + orl_posteriors$mu_betaF[,,5])/2,
+  betaB_mu.0 = (orl_posteriors$mu_betaB[,,1] + orl_posteriors$mu_betaB[,,5])/2,
+  Arew_mu = orl_posteriors$mu_Arew[,,2:4],
+  Apun_mu = orl_posteriors$mu_Apun[,,2:4],
+  betaF_mu = orl_posteriors$mu_betaF[,,2:4],
+  betaB_mu = orl_posteriors$mu_betaB[,,2:4],
+  # get betas for diagnostic variables
+  Arew_beta = orl_posteriors$beta_Arew[,2:4],
+  Apun_beta = orl_posteriors$beta_Apun[,2:4],
+  betaF_beta = orl_posteriors$beta_betaF[,2:4],
+  betaB_beta = orl_posteriors$beta_betaB[,2:4]) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("orl_par", "group"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  mutate(grp_parameter = case_when(str_detect(orl_par, "mu") ~ "mu",
+                                   str_detect(orl_par, "_beta") ~ "beta"),
+         orl_parameter = str_remove(orl_par, "_mu|_beta")) %>% 
+  select(-orl_par) %>% 
+  mutate(group = case_when(group == 0 & grp_parameter == "mu" ~ "Con",
+                           group == 1 & grp_parameter == "mu" ~ "Anx",
+                           group == 2 & grp_parameter == "mu" ~ "Dep",
+                           group == 3 & grp_parameter == "mu" ~ "SUD",
+                           group == 1 & grp_parameter == "beta" ~ "Anx",
+                           group == 2 & grp_parameter == "beta" ~ "Dep",
+                           group == 3 & grp_parameter == "beta" ~ "SUD"),
+         orl_parameter = factor(orl_parameter, ordered = T,
+                                levels = c("Arew", "Apun", "betaF", "betaB")),
+         grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
+                         labels = c("Mu", "Beta")),
+         group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"),
+                        ordered = T)) %>% 
+  group_by(group, grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2]) %>% 
+  filter(grp_parameter != "Beta")
+```
+
+
+
+## Plot Diag Differences
+```{r}
+tiff(paste0(victoria_path, "Plots/Study 2 - Diag Differences.tiff"),
+     width = 11, height = 7.5, units = "in", res = 300)
+
+  orl_diag_parameters %>% 
+    mutate(group = factor(group, ordered = T,
+                          levels = c("Con", "Anx", "Dep", "SUD"),
+                          labels = c("HC", "Anx", "Dep", "SUD"))) %>% 
+  # plot
+  ggplot(aes(x = group, y = mu, fill = group)) +
+    # geoms
+    geom_bar(stat = "identity", color = "black", linewidth = 1.25) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), linewidth = 1.25, width = .75) +
+    # scales
+    scale_y_continuous(limits = c(0, NA), n.breaks = 4,
+                       expand = expansion(mult = c(0, 0.1))) +
+    scale_fill_manual(values = c("gray75", "#1E88E5", "#FFC107", "#D81B60")) +
+    # themes
+    labs(y = "Estimate") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black", size = 24),
+          axis.ticks = element_line(linewidth = 1.25, color = "black"),
+          axis.line = element_line(linewidth = 1.25),
+          axis.ticks.length = unit(.1, "in"),
+          axis.title.x = element_blank(),
+          axis.title.y = element_text(size = 36),
+          strip.text = element_blank(),
+          panel.spacing.x = unit(.25, "in"),
+          panel.spacing.y = unit(.75, "in"),
+          plot.margin = unit(c(.25,.25,.25,.25), "in"),
+          legend.position = "none") +
+    facet_rep_wrap(.~orl_parameter, scales = "free")
+
+dev.off()
+```
+
+
+
+## Calculate Sex Differences
+```{r}
+orl_sex_parameters = data.frame(
+  iteration = 1:16000,
+  Arew_mu_male = orl_posteriors$mu_Arew[,,1],
+  Apun_mu_male = orl_posteriors$mu_Apun[,,1],
+  betaF_mu_male = orl_posteriors$mu_betaF[,,1],
+  betaB_mu_male = orl_posteriors$mu_betaB[,,1],
+  Arew_mu_female = orl_posteriors$mu_Arew[,,5],
+  Apun_mu_female = orl_posteriors$mu_Apun[,,5],
+  betaF_mu_female = orl_posteriors$mu_betaF[,,5],
+  betaB_mu_female = orl_posteriors$mu_betaB[,,5],
+  # get betas for diagnostic variables
+  Arew_beta_female = orl_posteriors$beta_Arew[,5],
+  Apun_beta_female = orl_posteriors$beta_Apun[,5],
+  betaF_beta_female = orl_posteriors$beta_betaF[,5],
+  betaB_beta_female = orl_posteriors$beta_betaB[,5]) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("orl_parameter", "grp_parameter", "sex"),
+               values_to = "estimate", names_sep = "_") %>% 
+  mutate(orl_parameter = factor(orl_parameter, ordered = T,
+                                levels = c("Arew", "Apun", "betaF", "betaB")),
+         grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
+                                labels = c("Mu", "Beta")),
+         sex = factor(sex, levels = c("male", "female"), labels = c("Men", "Women"),
+                      ordered = T)) %>% 
+  group_by(sex, grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2]) %>% 
+  filter(grp_parameter != "Beta")
+```
+
+
+
+## Plot Sex Differences
+```{r}
+tiff(paste0(victoria_path, "Plots/Study 2 - Sex Differences.tiff"),
+     width = 8, height = 7.5, units = "in", res = 300)
+
+  orl_sex_parameters %>% 
+  # plot
+  ggplot(aes(x = sex, y = mu, fill = sex)) +
+    # geoms
+    geom_bar(stat = "identity", color = "black", linewidth = 1.25) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), linewidth = 1.25, width = .75) +
+    # scales
+    scale_y_continuous(limits = c(0, NA), n.breaks = 4,
+                       expand = expansion(mult = c(0, 0.1))) +
+    scale_fill_manual(values = c("gray75", "gray25")) +
+    # themes
+    labs(y = "Estimate") +
+    coord_cartesian(clip = "off") +
+    theme_classic() +
+    theme(axis.text = element_text(color = "black", size = 24),
+          axis.ticks = element_line(linewidth = 1.25, color = "black"),
+          axis.line = element_line(linewidth = 1.25),
+          axis.ticks.length = unit(.1, "in"),
+          axis.title.x = element_blank(),
+          axis.title.y = element_text(size = 36),
+          strip.text = element_blank(),
+          panel.spacing.x = unit(.25, "in"),
+          panel.spacing.y = unit(.75, "in"),
+          plot.margin = unit(c(.25,.25,.25,.25), "in"),
+          legend.position = "none") +
+    facet_rep_wrap(.~orl_parameter, scales = "free")
+
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Study 3
+## Import Models
+```{r}
+conditions  = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR")
+sim_numbers = 1:100
+
+characteristics = data.frame()
+diagnostics     = data.frame()
+simulations     = data.frame()
+
+for(condition in conditions){
+  for(sim in sim_numbers){
+    characteristics = bind_rows(characteristics,
+                                readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                             paste0("RL_Characteristics_", sim, ".RDS"))),
+                                readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                             paste0("HLCM_Characteristics_", sim, ".RDS"))))
+    diagnostics = bind_rows(diagnostics,
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("RL_Diagnostics_", sim, ".RDS"))),
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("HLCM_Diagnostics_", sim, ".RDS"))))
+    simulations = bind_rows(simulations,
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("RL_Simulation_", sim, ".RDS"))),
+                            readRDS(here("1_HLCM", "Data", "2_Fitted", condition,
+                                         paste0("HLCM_Simulation_", sim, ".RDS"))))
+  }
+}
+```
+
+
+
+## Proportion in HDI
+```{r}
+tiff(paste0(victoria_path, "Plots/Study 3 - Growth Percent in HDIs.tiff"),
+     width = 7, height = 5.25, units = "in", res = 300)
+
+  simulations %>% 
+    filter(parameter_type != "group") %>%
+    group_by(condition, parameter, hypermodel) %>% 
+    summarise(true_in_HDI95 = mean(true_in_HDI95)*100) %>% 
+    filter(parameter != "A" & condition == "HiB_HiR") %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "unbounded_A", "A"),
+                              labels = c("Intercept", "Slope", "Learning Rate", "A")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                              labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
+                                         "Low Slope\nMod Cor", "Mod Slope\nMod Cor"))) %>% 
+    ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
+      # GEOMS
+      geom_bar(color = "black", linewidth = .75, stat = "identity") +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 8, angle = 90) +
+      # SCALES
+      scale_y_continuous(limits = c(0,100), expand = c(0,0), 
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(y = "Parameters\nRecovered") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 24, angle = 45, vjust = .5, hjust = 1),
+            axis.text.y = element_text(color = "black", size = 24),
+            axis.ticks = element_line(linewidth = 1.25, color = "black"),
+            axis.line = element_line(linewidth = 1.25),
+            axis.ticks.length = unit(.1, "in"),
+            axis.title.x = element_blank(),
+            axis.title.y = element_text(size = 30),
+            strip.text = element_blank(),
+            panel.spacing.x = unit(.25, "in"),
+            panel.spacing.y = unit(.75, "in"),
+            plot.margin = unit(c(.75,.25,.25,.25), "in"),
+            legend.position = "none") +
+      facet_rep_grid(condition~hypermodel, scales = "free")
+
+dev.off()
+```
+
+
+
+## Longitudinal RL
+```{r}
+tiff(paste0(victoria_path, "Plots/Study 3 - Growth Percent in HDIs.tiff"),
+     width = 7, height = 5.25, units = "in", res = 300)
+
+  simulations %>% 
+    filter(parameter_type != "group") %>%
+    group_by(condition, parameter, hypermodel) %>% 
+    summarise(true_in_HDI95 = mean(true_in_HDI95)*100) %>% 
+    filter(parameter != "A" & condition == "HiB_HiR") %>% 
+    mutate(hypermodel = factor(hypermodel, levels = c("RL", "HLCM"),
+                               labels = c("Two-Stage", "HLCM"), ordered = T),
+           parameter = factor(parameter, ordered = T,
+                              levels = c("intercept", "slope", "unbounded_A", "A"),
+                              labels = c("Intercept", "Slope", "Learning Rate", "A")),
+           condition = factor(condition, ordered = T,
+                              levels = c("LoB_LoR", "HiB_LoR", "LoB_HiR", "HiB_HiR"),
+                              labels = c("Low Slope\nLow Cor", "Mod Slope\nLow Cor",
+                                         "Low Slope\nMod Cor", "Mod Slope\nMod Cor"))) %>% 
+    ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
+      # GEOMS
+      geom_bar(color = "black", linewidth = .75, stat = "identity") +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 8, angle = 90) +
+      # SCALES
+      scale_y_continuous(limits = c(0,100), expand = c(0,0), 
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
+      scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
+      # THEMES
+      labs(y = "Parameters\nRecovered") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(axis.text.x = element_text(color = "black", size = 24, angle = 45, vjust = .5, hjust = 1),
+            axis.text.y = element_text(color = "black", size = 24),
+            axis.ticks = element_line(linewidth = 1.25, color = "black"),
+            axis.line = element_line(linewidth = 1.25),
+            axis.ticks.length = unit(.1, "in"),
+            axis.title.x = element_blank(),
+            axis.title.y = element_text(size = 30),
+            strip.text = element_blank(),
+            panel.spacing.x = unit(.25, "in"),
+            panel.spacing.y = unit(.75, "in"),
+            plot.margin = unit(c(.75,.25,.25,.25), "in"),
+            legend.position = "none") +
+      facet_rep_grid(condition~hypermodel, scales = "free")
+
+dev.off()
+```
+
+
+

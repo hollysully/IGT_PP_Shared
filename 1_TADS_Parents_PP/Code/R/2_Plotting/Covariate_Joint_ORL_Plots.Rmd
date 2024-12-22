@@ -1073,3 +1073,20 @@ included %>%
 
 
 # -------------------------------------------
+# Comorbidities
+```{r}
+data.frame(stan_data$X[,2:4,1]) %>% 
+  select(Anx = X1, Dep = X2, SUD = X3) %>% 
+  mutate(Nothing     = case_when(Anx == 0 & Dep == 0 & SUD == 0 ~ 1, T ~ 0),
+         Anx_Dep     = case_when(Anx == 1 & Dep == 1 ~ 1, T ~ 0),
+         Anx_SUD     = case_when(Anx == 1 & SUD == 1 ~ 1, T ~ 0),
+         Dep_SUD     = case_when(Dep == 1 & SUD == 1 ~ 1, T ~ 0),
+         Anx_Dep_SUD = case_when(Anx == 1 & Dep == 1 & SUD == 1 ~ 1, T ~ 0),
+         Anx_Only    = case_when(Anx == 1 & Dep == 0 & SUD == 0 ~ 1, T ~ 0),
+         Dep_Only    = case_when(Anx == 0 & Dep == 1 & SUD == 0 ~ 1, T ~ 0),
+         SUD_Only    = case_when(Anx == 0 & Dep == 0 & SUD == 1 ~ 1, T ~ 0)) %>% 
+  colSums()
+```
+
+
+# -------------------------------------------
