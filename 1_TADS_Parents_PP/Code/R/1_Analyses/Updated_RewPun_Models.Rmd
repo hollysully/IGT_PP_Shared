@@ -1,0 +1,337 @@
+---
+title: "Fitting ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(cmdstanr)
+library(posterior)
+
+#------------------------------------------------------------------------------
+# FUNCTION FOR GRABBING POSTERIOR
+par_from_draws <- function(fit, par) {
+  rvars_pars <- as_draws_rvars(
+    fit$draws(
+      c(par)
+    )
+  )
+  return(lapply(rvars_pars, draws_of))
+}
+```
+
+
+## Import Data
+```{r}
+# FULL COVARIATE MODEL
+Focal_Anx_Covariate_Dep_SUD_Female = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                                                  "Focal_Anx_Covariate_Dep_SUD_Female.RDS"))
+# ANXIETY ONLY
+Focal_Anx = Focal_Anx_Covariate_Dep_SUD_Female
+Focal_Anx$Cp = 0 # no covariates
+Focal_Anx$X = Focal_Anx_Covariate_Dep_SUD_Female$X[,1:2] # subset variables
+# ANXIETY W/OTHERS
+Focal_Anx_Covariate_Dep_SUD = Focal_Anx_Covariate_Dep_SUD_Female
+Focal_Anx_Covariate_Dep_SUD$Cp = 2 # 2 covariates
+Focal_Anx_Covariate_Dep_SUD$X = Focal_Anx_Covariate_Dep_SUD_Female$X[,1:4] # subset variables
+```
+
+
+## Stan Model
+```{r}
+# IMPORT MODEL
+RewPun_ORL = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", "Updated_RewPun_ORL.stan"))
+
+RewPun_ORL$check_syntax(quiet = F)
+
+
+# SPECIFY FOCAL PARAMETERS
+focal_parameters = c("mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+                     "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+                     "Arew", "Apun", "betaF", "betaB", 
+                     "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB")
+
+# DIFFERENTIATE GROUP- & PERSON-LEVEL PARAMETERS
+group_parameters  = grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters = grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+# ---------------------------------------------------------------------------------------------
+# Modeling
+## Fit Model
+```{r, eval = T}
+# ANXIETY ONLY
+RewPun_Anx_Fit = RewPun_ORL$sample(data = Focal_Anx,
+                                   chains = 4,
+                                   parallel_chains = 4,
+                                   iter_warmup = 1000,
+                                   iter_sampling = 1000,
+                                   seed = 43210)
+saveRDS(RewPun_Anx_Fit, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                             "RewPun_Anx_Fit.RDS"))
+
+
+# ANXIETY W/OTHER DISORDERS
+RewPun_Anx_Dep_SUD_Fit = RewPun_ORL$sample(data = Focal_Anx_Covariate_Dep_SUD,
+                                           chains = 4,
+                                           parallel_chains = 4,
+                                           iter_warmup = 1000,
+                                           iter_sampling = 1000,
+                                           seed = 43210)
+saveRDS(RewPun_Anx_Dep_SUD_Fit, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                     "RewPun_Anx_Dep_SUD_Fit.RDS"))
+
+# FULL MODEL
+RewPun_Anx_Dep_SUD_Female_Fit = RewPun_ORL$sample(data = Focal_Anx_Covariate_Dep_SUD_Female,
+                                                  chains = 4,
+                                                  parallel_chains = 4,
+                                                  iter_warmup = 1000,
+                                                  iter_sampling = 1000,
+                                                  seed = 43210)
+saveRDS(RewPun_Anx_Dep_SUD_Female_Fit, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                            "RewPun_Anx_Dep_SUD_Female_Fit.RDS"))
+```
+
+
+## Load Fits
+```{r}
+RewPun_Anx_Fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                              "RewPun_Anx_Fit.RDS"))
+RewPun_Anx_Dep_SUD_Fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                      "RewPun_Anx_Dep_SUD_Fit.RDS"))
+RewPun_Anx_Dep_SUD_Female_Fit = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                             "RewPun_Anx_Dep_SUD_Female_Fit.RDS"))
+```
+
+
+
+## Get Posteriors
+```{r}
+# ANXIETY ONLY
+RewPun_Anx_Posteriors = list()
+for(p in focal_parameters){
+  RewPun_Anx_Posteriors[p] = par_from_draws(RewPun_Anx_Fit, p)[p]
+}
+
+saveRDS(RewPun_Anx_Posteriors, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                    "RewPun_Anx_Posteriors.RDS"))
+
+
+# ANXIETY W/OTHER DISORDERS
+RewPun_Anx_Dep_SUD_Posteriors = list()
+for(p in focal_parameters){
+  RewPun_Anx_Dep_SUD_Posteriors[p] = par_from_draws(RewPun_Anx_Dep_SUD_Fit, p)[p]
+}
+
+saveRDS(RewPun_Anx_Dep_SUD_Posteriors, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                            "RewPun_Anx_Dep_SUD_Posteriors.RDS"))
+
+# FULL MODEL
+RewPun_Anx_Dep_SUD_Female_Posteriors = list()
+for(p in focal_parameters){
+  RewPun_Anx_Dep_SUD_Female_Posteriors[p] = par_from_draws(RewPun_Anx_Dep_SUD_Female_Fit, p)[p]
+}
+
+saveRDS(RewPun_Anx_Dep_SUD_Female_Posteriors, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                "RewPun_Anx_Dep_SUD_Female_Posteriors.RDS"))
+```
+
+
+## Explore Anx Only
+```{r}
+group_anx = data.frame(iteration = 1:16000,
+                       mu_Apun  = RewPun_Anx_Posteriors$mu_Apun) %>%
+  pivot_longer(starts_with("mu"), names_to = c("parameter", "group"),
+               values_to = "estimate", names_prefix = "mu_", names_sep = "\\.") %>% 
+  mutate(group = case_when(group == "1" ~ "HC",
+                           group == "2" ~ "Anx")) %>%
+  group_by(parameter, group) %>%
+  reframe(mu    = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2])
+
+
+data.frame(ID       = 1:sum(RewPun_Lifetime_Anx_Dep_SUD_Female$X[,1,]),
+           sex      = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,5,],
+           current  = RewPun_Current_Anx_Dep_SUD_Female$X[,2,], 
+           lifetime = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2,], 
+           estimate = apply(RewPun_Lifetime_Posteriors$Apun, 2, mean)) %>% 
+  mutate(sex = case_when(sex == 1 ~ "Female", T ~ "Male"),
+         past = case_when(lifetime == 1 & current == 0 ~ 1, T ~ 0),
+         x_group = case_when(lifetime == 0 ~ .5,
+                             past == 1 ~ .925,
+                             current == 1 ~ 1.075),
+         # x_group = case_when(sex == "Female" ~ x_group - .01, T ~ x_group + .01),
+         group = factor(x_group, levels = c(.5, .925, 1.075),
+                        labels = c("No Anx", "Past Anx", "Current Anx"),
+                        ordered = T),
+         lifetime = case_when(lifetime == 1 ~ "Anx", T ~ "HC")) %>% 
+  group_by(group) %>% 
+  mutate(mu = mean(estimate)) %>% 
+  ggplot(aes(x = x_group, y = estimate, fill = group, shape = sex)) +
+  geom_point(position = position_jitter(width = .05)) +
+  geom_crossbar(data = group_anx, aes(x = x_group, y = mu, ymin = lower, ymax = upper),
+                inherit.aes = F, linewidth = .75, width = .35) +
+  stat_summary(aes(x_group, y = estimate), 
+               inherit.aes = F, fun.y = mean, color = "red") +
+  scale_x_continuous(limits = c(.25, 1.25), expand = c(0, 0),
+                     breaks = c(.5, 1), labels = c("No Anxiety", "Anxiety")) +
+  scale_y_continuous(limits = c(0, .3), expand = c(0, 0), breaks = seq(0, .3, .1)) +
+  scale_fill_manual(name = "Group", values = c("gray85", "gray85", "gray40")) +
+  scale_shape_manual(name = "Sex", values = c(21, 22)) +
+  coord_cartesian(clip = "off") +
+  labs(y = "Estimate") +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.text = element_text(color = "black", size = 10),
+        axis.title.y = element_text(size = 12)) + 
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+```
+
+
+
+## Explore Initial Results
+```{r, fig.height=3, fig.width=4.5}
+group_anx = data.frame(iteration = 1:16000,
+           mu_Apun  = RewPun_Lifetime_Posteriors$mu_Apun[,1,]) %>%
+  mutate(mu_Apun.6 = (mu_Apun.1+mu_Apun.5)/2) %>% 
+  pivot_longer(starts_with("mu"), names_to = c("parameter", "group"),
+               values_to = "estimate", names_prefix = "mu_", names_sep = "\\.") %>% 
+  mutate(group = case_when(group == "1" ~ "Male",
+                           group == "2" ~ "Anx",
+                           group == "3" ~ "Dep",
+                           group == "4" ~ "SUD",
+                           group == "5" ~ "Female",
+                           group == "6" ~ "HC")) %>% 
+  # SET 1
+  filter(!(group %in% c("Male", "Female", "Dep", "SUD"))) %>%
+  group_by(parameter, group) %>%
+  reframe(mu    = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2]) %>%
+  mutate(parameter = factor(parameter, ordered = T,
+                            levels = c("Arew", "Apun", "betaF", "betaB")),
+         group = factor(group, levels = c("HC", "Anx", "Dep", "SUD"),
+                        ordered = T),
+         x_group = case_when(group == "HC" ~ .5, T ~ 1))
+  
+  # SET 2
+  # filter(!(group %in% c("Female", "Dep", "SUD", "HC"))) %>%
+  
+  # SET 3
+  # filter(!(group %in% c("Dep", "SUD", "HC"))) %>%
+  # group_by(parameter, group) %>% 
+  # reframe(mu    = mean(estimate),
+  #         lower = HDIofMCMC(estimate)[1],
+  #         upper = HDIofMCMC(estimate)[2]) %>% 
+  # mutate(parameter = factor(parameter, ordered = T,
+  #                           levels = c("Arew", "Apun", "betaF", "betaB")),
+  #        group = factor(group, levels = c("Male", "Female", "Anx", "Dep", "SUD"),
+  #                       ordered = T),
+  #        x_group = case_when(group %in% c("Male", "Female") ~ .5, T ~ 1))
+
+data.frame(ID       = 1:sum(RewPun_Lifetime_Anx_Dep_SUD_Female$X[,1,]),
+           sex      = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,5,],
+           current  = RewPun_Current_Anx_Dep_SUD_Female$X[,2,], 
+           lifetime = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2,], 
+           estimate = apply(RewPun_Lifetime_Posteriors$Apun, 2, mean)) %>% 
+  mutate(sex = case_when(sex == 1 ~ "Female", T ~ "Male"),
+         past = case_when(lifetime == 1 & current == 0 ~ 1, T ~ 0),
+         x_group = case_when(lifetime == 0 ~ .5,
+                             past == 1 ~ .925,
+                             current == 1 ~ 1.075),
+         # x_group = case_when(sex == "Female" ~ x_group - .01, T ~ x_group + .01),
+         group = factor(x_group, levels = c(.5, .925, 1.075),
+                        labels = c("No Anx", "Past Anx", "Current Anx"),
+                        ordered = T),
+         lifetime = case_when(lifetime == 1 ~ "Anx", T ~ "HC")) %>% 
+  group_by(group) %>% 
+  mutate(mu = mean(estimate)) %>% 
+  ggplot(aes(x = x_group, y = estimate, fill = group, shape = sex)) +
+  geom_point(position = position_jitter(width = .05)) +
+  geom_crossbar(data = group_anx, aes(x = x_group, y = mu, ymin = lower, ymax = upper),
+                inherit.aes = F, linewidth = .75, width = .35) +
+  stat_summary(aes(x_group, y = estimate), 
+               inherit.aes = F, fun.y = mean, color = "red") +
+  scale_x_continuous(limits = c(.25, 1.25), expand = c(0, 0),
+                     breaks = c(.5, 1), labels = c("No Anxiety", "Anxiety")) +
+  scale_y_continuous(limits = c(0, .3), expand = c(0, 0), breaks = seq(0, .3, .1)) +
+  scale_fill_manual(name = "Group", values = c("gray85", "gray85", "gray40")) +
+  scale_shape_manual(name = "Sex", values = c(21, 22)) +
+  coord_cartesian(clip = "off") +
+  labs(y = "Estimate") +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.text = element_text(color = "black", size = 10),
+        axis.title.y = element_text(size = 12)) + 
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+```
+
+```{r}
+apply(RewPun_Posteriors$sigma_betaB, 2, mean)
+apply(RewPun_Posteriors$apply(RewPun_Posteriors$apply(RewPun_Posteriors$beta_Apun, 2, HDIofMCMC)
+```
+
+
+```{r}
+group_anx = data.frame(iteration = 1:4000,
+                       mu_Apun  = RewPun_Posteriors$mu_Apun) %>%
+  pivot_longer(starts_with("mu"), names_to = c("parameter", "group"),
+               values_to = "estimate", names_prefix = "mu_", names_sep = "\\.") %>% 
+  mutate(group = case_when(group == "1" ~ "HC",
+                           group == "2" ~ "Anx")) %>% 
+  group_by(parameter, group) %>%
+  reframe(mu    = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2])
+  
+
+data.frame(ID       = 1:sum(RewPun_Lifetime_Anx_Dep_SUD_Female$X[,1,]),
+           sex      = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,5,],
+           current  = RewPun_Current_Anx_Dep_SUD_Female$X[,2,], 
+           lifetime = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2,], 
+           estimate = apply(RewPun_Posteriors$Apun, 2, mean)) %>% 
+  mutate(group = case_when(lifetime == 1 ~ "Anx", T ~ "HC")) %>% 
+  group_by(group) %>% 
+  mutate(mu = mean(estimate)) %>% 
+  ggplot(aes(x = group, y = estimate, fill = group)) +
+  geom_point() +
+  geom_crossbar(data = group_anx, aes(x = group, y = mu, ymin = lower, ymax = upper),
+                inherit.aes = F, linewidth = .75, width = .1) +
+  stat_summary(fun.y = mean, color = "red") +
+  # scale_x_continuous(limits = c(.25, 1.25), expand = c(0, 0),
+  #                    breaks = c(.5, 1), labels = c("HC", "Anx")) +
+  scale_y_continuous(limits = c(0, .3), expand = c(0, 0), breaks = seq(0, .3, .1)) +
+  scale_fill_manual(values = c("gray85", "gray85", "gray40")) +
+  coord_cartesian(clip = "off") +
+  labs(y = "Estimate") +
+  theme_classic()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

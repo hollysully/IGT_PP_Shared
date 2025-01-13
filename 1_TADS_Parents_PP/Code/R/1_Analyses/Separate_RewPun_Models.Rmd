@@ -1,0 +1,265 @@
+---
+title: "Fitting ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(cmdstanr)
+library(posterior)
+```
+
+
+## Import Data
+```{r}
+RewPun_Lifetime_Anx_Dep_SUD_Female = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                                                  "RewPun_Lifetime_Anx_Dep_SUD_Female.RDS"))
+names(RewPun_Lifetime_Anx_Dep_SUD_Female)
+```
+
+
+```{r}
+# NO ANXIETY
+no_anx = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2,1] == 0
+RewPun_NoAnx   = list(ID_participant     = RewPun_Lifetime_Anx_Dep_SUD_Female$ID_participant[no_anx],
+                      ID_OG              = RewPun_Lifetime_Anx_Dep_SUD_Female$ID_OG[no_anx],
+                      ID_number          = RewPun_Lifetime_Anx_Dep_SUD_Female$ID_number[no_anx],
+                      participant_number = RewPun_Lifetime_Anx_Dep_SUD_Female$participant_number[no_anx],
+                      N                  = sum(no_anx),
+                      T                  = RewPun_Lifetime_Anx_Dep_SUD_Female$T,
+                      card               = RewPun_Lifetime_Anx_Dep_SUD_Female$card[no_anx,,1],
+                      Tsubj              = RewPun_Lifetime_Anx_Dep_SUD_Female$Tsubj[no_anx,1],
+                      choice             = RewPun_Lifetime_Anx_Dep_SUD_Female$choice[no_anx,,1],
+                      outcome            = RewPun_Lifetime_Anx_Dep_SUD_Female$outcome[no_anx,,1],
+                      sign               = RewPun_Lifetime_Anx_Dep_SUD_Female$sign[no_anx,,1])
+
+
+# ANXIETY
+anx = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2,1] == 1
+RewPun_Anx   = list(ID_participant     = RewPun_Lifetime_Anx_Dep_SUD_Female$ID_participant[anx],
+                    ID_OG              = RewPun_Lifetime_Anx_Dep_SUD_Female$ID_OG[anx],
+                    ID_number          = RewPun_Lifetime_Anx_Dep_SUD_Female$ID_number[anx],
+                    participant_number = RewPun_Lifetime_Anx_Dep_SUD_Female$participant_number[anx],
+                    N                  = sum(anx),
+                    T                  = RewPun_Lifetime_Anx_Dep_SUD_Female$T,
+                    card               = RewPun_Lifetime_Anx_Dep_SUD_Female$card[anx,,1],
+                    Tsubj              = RewPun_Lifetime_Anx_Dep_SUD_Female$Tsubj[anx,1],
+                    choice             = RewPun_Lifetime_Anx_Dep_SUD_Female$choice[anx,,1],
+                    outcome            = RewPun_Lifetime_Anx_Dep_SUD_Female$outcome[anx,,1],
+                    sign               = RewPun_Lifetime_Anx_Dep_SUD_Female$sign[anx,,1])
+```
+
+
+## Custom Function
+```{r}
+#------------------------------------------------------------------------------
+# FUNCTION FOR GRABBING POSTERIORS
+par_from_draws <- function(fit, par) {
+  rvars_pars <- as_draws_rvars(
+    fit$draws(
+      c(par)
+    )
+  )
+  return(lapply(rvars_pars, draws_of))
+}
+```
+
+
+## Stan Model
+```{r}
+# IMPORT MODEL
+orl_model = cmdstan_model(here("1_TADS_Parents_PP", "Code", "Stan", "PPORL.stan"))
+
+# SPECIFY FOCAL PARAMETERS
+focal_parameters = c("mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+                     "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+                     "Arew", "Apun", "betaF", "betaB")
+
+# DIFFERENTIATE GROUP- & PERSON-LEVEL PARAMETERS
+group_parameters  = grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters = grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+# ---------------------------------------------------------------------------------------------
+# Fit ORL to Diag Data
+```{r, eval = T}
+# -----------------------------------------------------------------------------------
+# Fit model
+NoAnx_Fit = orl_model$sample(data = RewPun_NoAnx,
+                             chains = 4,
+                             parallel_chains = 4,
+                             iter_warmup = 1000,
+                             iter_sampling = 1000,
+                             seed = 43210)
+saveRDS(NoAnx_Fit, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun", "NoAnx_Fit.RDS"))
+
+
+Anx_Fit = orl_model$sample(data = RewPun_Anx,
+                           chains = 4,
+                           parallel_chains = 4,
+                           iter_warmup = 1000,
+                           iter_sampling = 1000,
+                           seed = 43210)
+saveRDS(Anx_Fit, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun", "Anx_Fit.RDS"))
+```
+
+
+```{r}
+# SPECIFY FOCAL PARAMETERS
+focal_parameters = c("mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+                     "mu_p",
+                     "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+                     "Arew", "Apun", "betaF", "betaB", 
+                     "Arew_tilde", "Apun_tilde", "betaF_tilde", "betaB_tilde")
+
+
+# EMPTY LISTS
+Anx_Posteriors = list()
+NoAnx_Posteriors = list()
+
+
+# FILL LISTS WITH POSTERIORS
+for(p in focal_parameters){
+  Anx_Posteriors[[p]] = par_from_draws(Anx_Fit, p)[[p]]
+  NoAnx_Posteriors[[p]] = par_from_draws(NoAnx_Fit, p)[[p]]
+}
+```
+
+
+
+```{r}
+mu_analyses = data.frame(iteration = 1:4000,
+                         mu_anx_ut = Anx_Posteriors$mu_p[,2],
+                         mu_anx = Anx_Posteriors$mu_Apun,
+                         mu_noanx_ut = NoAnx_Posteriors$mu_p[,2],
+                         mu_noanx = NoAnx_Posteriors$mu_Apun) %>% 
+  mutate(diff = mu_anx - mu_noanx)
+
+mean(mu_analyses$diff)
+HDIofMCMC(mu_analyses$diff)
+
+anx = data.frame(iteration = 1:4000,
+                 mu_anx_ut = Anx_Posteriors$mu_p[,2],
+                 mu_anx = Anx_Posteriors$mu_Apun,
+                 tilde_anx = Anx_Posteriors$Apun_tilde) %>% 
+  pivot_longer(starts_with("tilde"), names_to = c("group", "id"), names_sep = "\\.",
+               values_to = "estimate", names_prefix = "tilde_") %>% 
+  mutate(estimate = mu_anx_ut + estimate) %>% 
+  group_by(group, id) %>% 
+  summarise(estimate = mean(estimate))
+
+anx = data.frame(iteration = 1:4000,
+                 group = "Anx",
+                 mu_Apun_UT = Anx_Posteriors$mu_p[,2],
+                 mu_Apun = Anx_Posteriors$mu_Apun,
+                 tilde = Anx_Posteriors$Apun_tilde,
+                 Apun = Anx_Posteriors$Apun) %>% 
+  pivot_longer(c(starts_with("tilde"), starts_with("Apun")), names_to = c("parameter", "ID"), names_sep = "\\.",
+               values_to = "estimate") %>%
+  pivot_wider(names_from = "parameter", values_from = "estimate") %>% 
+  mutate(Apun_UT = mu_Apun_UT + tilde) %>%
+  group_by(group, ID) %>% 
+  summarise(#MEAN 
+            mu_Apun_UT = mean(mu_Apun_UT),
+            mu_Apun = mean(mu_Apun),
+            Apun_UT = mean(Apun_UT),
+            Apun = mean(Apun),
+            # LOWER
+            lower_Apun_UT = HDIofMCMC(mu_Apun_UT)[1],
+            lower_Apun = HDIofMCMC(mu_Apun)[1],
+            # UPPER
+            upper_Apun_UT = HDIofMCMC(mu_Apun_UT)[2],
+            upper_Apun = HDIofMCMC(mu_Apun)[2])
+
+noanx = data.frame(iteration = 1:4000,
+                   group = "NoAnx",
+                   mu_Apun_UT = NoAnx_Posteriors$mu_p[,2],
+                   mu_Apun = NoAnx_Posteriors$mu_Apun,
+                   tilde = NoAnx_Posteriors$Apun_tilde,
+                   Apun = NoAnx_Posteriors$Apun) %>% 
+  pivot_longer(c(starts_with("tilde"), starts_with("Apun")), names_to = c("parameter", "ID"), names_sep = "\\.",
+               values_to = "estimate") %>%
+  pivot_wider(names_from = "parameter", values_from = "estimate") %>% 
+  mutate(Apun_UT = mu_Apun_UT + tilde) %>%
+  group_by(group, ID) %>% 
+  summarise(#MEAN 
+            mu_Apun_UT = mean(mu_Apun_UT),
+            mu_Apun = mean(mu_Apun),
+            Apun_UT = mean(Apun_UT),
+            Apun = mean(Apun),
+            # LOWER
+            lower_Apun_UT = HDIofMCMC(mu_Apun_UT)[1],
+            lower_Apun = HDIofMCMC(mu_Apun)[1],
+            # UPPER
+            upper_Apun_UT = HDIofMCMC(mu_Apun_UT)[2],
+            upper_Apun = HDIofMCMC(mu_Apun)[2])
+```
+
+
+```{r}
+bind_rows(anx, noanx) %>% 
+  ggplot(aes(x = group, y = Apun, fill = group, group = ID)) +
+  geom_point(position = position_jitter(width = .05)) +
+  geom_crossbar(aes(x = group, y = mu_Apun, ymin = lower_Apun, ymax = upper_Apun),
+                inherit.aes = F, linewidth = .75, width = .35) +
+  stat_summary(aes(x = group, y = Apun), 
+               inherit.aes = F, fun.y = mean, color = "red") +
+  # scale_x_continuous(limits = c(.25, 1.25), expand = c(0, 0),
+  #                    breaks = c(.5, 1), labels = c("No Anxiety", "Anxiety")) +
+  # scale_y_continuous(limits = c(0, .3), expand = c(0, 0), breaks = seq(0, .3, .1)) +
+  scale_fill_manual(name = "Group", values = c("gray85", "gray85", "gray40")) +
+  scale_shape_manual(name = "Sex", values = c(21, 22)) +
+  coord_cartesian(clip = "off") +
+  labs(y = "Estimate") +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.text = element_text(color = "black", size = 10),
+        axis.title.y = element_text(size = 12)) + 
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+```
+
+
+
+
+```{r}
+bind_rows(anx, noanx) %>% 
+  ggplot(aes(x = Apun_UT, fill = group)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = mu_Apun_UT, color = group), size = 1) +
+  geom_vline(aes(xintercept = lower_Apun_UT, color = group), linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = upper_Apun_UT, color = group), linetype = "dashed", size = 1) +
+  scale_fill_manual(name = "Group", values = c("dodgerblue2", "gray85", "gray40")) +
+  scale_color_manual(name = "Group", values = c("dodgerblue4", "gray55", "black")) +
+  scale_y_continuous(limits = c(0, NA), expand = c(0, 0)) +
+  coord_cartesian(clip = "off") +
+  labs(y = "Estimate") +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.text = element_text(color = "black", size = 10),
+        axis.title.y = element_text(size = 12)) + 
+  guides(fill = guide_legend(override.aes = list(shape = 21))) +
+  lemon::facet_rep_wrap(.~group)
+```
+
+
+
+
+
+
+
+
+
+
+

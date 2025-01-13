@@ -22,8 +22,7 @@ library(here)
 ## Load Data
 ```{r}
 T1_IGT_parents = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "Processed_Raw_T1_Parents.RDS"))
-
-SCID = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "SCID_Anx_Dep_SUD.RDS"))
+SCID = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "Full_SCID_Anx_Dep_SUD.RDS")) # includes current diagnosis
 ```
 
 
@@ -31,8 +30,8 @@ SCID = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", "SCID_Anx_Dep_SUD.RDS"
 # --------------------------------------
 # Initialize Variables
 ```{r}
-sample = "T1_parent_Anx_Dep_SUD_Female"
-# covariates = c("days_pc")
+# sample = "T1_parent_Anx_Dep_SUD_Female" # lifetime history of these disorders
+sample = "T1_parent_current_Anx_Dep_SUD_Female"
 covariates = c("anxiety", "depression", "SUD", "female")
 
 IGT_prepped = T1_IGT_parents %>% 
@@ -48,7 +47,11 @@ IGT_prepped = T1_IGT_parents %>%
 ```{r}
 SCID_prepped = SCID %>%
   mutate(participant = tolower(participant)) %>% 
-  select(-date)
+  select(-date) %>% 
+  # current diagnostics
+  mutate(anxiety = canx, 
+         depression = cdep,
+         SUD = case_when((csub + cpot + calc) > 0 ~ 1, T ~ 0))
 
 combined_data = inner_join(IGT_prepped, SCID_prepped) %>% # Note that Mom 5005 does not have SCID data
   # Subset specific diagnostic groups

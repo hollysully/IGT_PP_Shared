@@ -1,0 +1,106 @@
+---
+title: "Fitting ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(cmdstanr)
+```
+
+
+## Import Data
+```{r}
+RewPun_Lifetime_Anx_Dep_SUD_Female = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                                                  "RewPun_Lifetime_Anx_Dep_SUD_Female.RDS"))
+```
+
+
+## Stan Model
+```{r}
+# IMPORT MODEL
+orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                            "Covariate_Joint_ORL_Bias.stan"))
+
+
+# SPECIFY FOCAL PARAMETERS
+focal_parameters = c("mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+                     "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+                     "Arew", "Apun", "betaF", "betaB", 
+                     "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB")
+
+# DIFFERENTIATE GROUP- & PERSON-LEVEL PARAMETERS
+group_parameters  = grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters = grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+# ---------------------------------------------------------------------------------------------
+# Fit ORL to Diag Data
+```{r, eval = T}
+# -----------------------------------------------------------------------------------
+# Fit model
+RewPun_Lifetime_Fit = sampling(orl_model, 
+                               data   = RewPun_Lifetime_Anx_Dep_SUD_Female, 
+                               iter   = 5000, 
+                               warmup = 1000, 
+                               chains = 4, 
+                               cores  = 4,
+                               seed   = 43210,
+                               save_warmup = F)
+saveRDS(RewPun_Lifetime_Fit, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                  "Lifetime_Anx_Dep_SUD_Female_Fit.RDS"))
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+RewPun_Lifetime_Posteriors = extract(RewPun_Lifetime_Fit)
+saveRDS(RewPun_Lifetime_Posteriors, here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+                                         "Lifetime_Anx_Dep_SUD_Female_Posteriors.RDS"))
+
+# -----------------------------------------------------------------------------------
+# save rhats
+RewPun_Lifetime_Rhats = 
+  rhat(RewPun_Lifetime_Fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.))
+saveRDS(RewPun_Lifetime_Rhats,
+        here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+             "Lifetime_Anx_Dep_SUD_Female_Rhats.RDS"))
+```
+
+
+# -------------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

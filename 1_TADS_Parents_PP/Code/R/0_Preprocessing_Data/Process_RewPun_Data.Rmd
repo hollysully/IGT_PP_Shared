@@ -1,0 +1,421 @@
+---
+title: "IGT Preprocessing"
+output: html_document
+author: "Jeremy Haynes"
+---
+
+
+
+# ---------------------------------------------------------------------------------------------
+# Setup
+## Load Packages
+```{r}
+library(tidyverse)
+library(rprime)
+library(car)
+library(stringr)
+library(here)
+```
+
+
+
+# ---------------------------------------------------------------------------------------------
+# Process Raw IGT Data
+## IGT Version Check Function
+```{r, eval = T}
+check_version = function(data, eprime = T){
+  
+  if(eprime){
+    outcome_list = read.csv(here::here("1_TADS_Parents_PP", "Data", "3_Helper",
+                                       "eprime_AB_outcome_list.csv")) %>% 
+      mutate(trial_seq = as.numeric(row.names(.)))
+    
+    versions = data %>%
+      select(id, card, outcome) %>% 
+      mutate(outcome = as.numeric(outcome)) %>% 
+      filter(!is.na(outcome)) %>% 
+      group_by(id, card) %>% 
+      mutate(trial_seq = 1:n()) %>% 
+      left_join(outcome_list) %>% 
+      mutate(equal_A = outcome == Deck_A, equal_B = outcome == Deck_B,
+             equal_C = outcome == Deck_C, equal_D = outcome == Deck_D) %>% 
+      group_by(id, card) %>% 
+      reframe(A_prop = mean(equal_A), B_prop = mean(equal_B),
+              C_prop = mean(equal_C), D_prop = mean(equal_D)) %>% 
+      mutate(AB_card = case_when(A_prop == 1 ~ "AB_A",
+                                 B_prop == 1 ~ "AB_B",
+                                 C_prop == 1 ~ "AB_C",
+                                 D_prop == 1 ~ "AB_D"),
+             checked_version = case_when(str_ends(AB_card, card) ~ "AB",
+                                         str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
+      select(-ends_with("prop"))
+  } else {
+    outcome_list = read.csv(here("1_TADS_Parents_PP", "Data", "3_Helper", "pavlovia_AB_outcome_list.csv"))
+    
+    versions = data %>%
+      select(id, block, card, outcome) %>% 
+      mutate(outcome = as.numeric(outcome)) %>% 
+      filter(!is.na(outcome)) %>% 
+      group_by(id, block, card) %>% 
+      mutate(trial_seq = 1:n()) %>% 
+      left_join(outcome_list) %>% 
+      mutate(equal_A = outcome == Deck_A, equal_B = outcome == Deck_B,
+             equal_C = outcome == Deck_C, equal_D = outcome == Deck_D) %>% 
+      group_by(id, card) %>% 
+      reframe(A_prop = mean(equal_A), B_prop = mean(equal_B),
+              C_prop = mean(equal_C), D_prop = mean(equal_D)) %>% 
+      mutate(AB_card = case_when(A_prop == 1 ~ "AB_A",
+                                 B_prop == 1 ~ "AB_B",
+                                 C_prop == 1 ~ "AB_C",
+                                 D_prop == 1 ~ "AB_D"),
+             checked_version = case_when(str_ends(AB_card, card) ~ "AB",
+                                         str_ends(AB_card, card, negate = T) ~ "BD")) %>% 
+      select(-ends_with("prop"))
+  }
+  
+  return(left_join(data, versions))
+}
+```
+
+
+## Process T1 Dad Data
+```{r, eval = T}
+# Identify the directory for the files and get the list of those files
+setwd(here::here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T1_Dad"))
+T1_dad_filenames <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T),
+                                        list.files(pattern = "5", recursive = T)),
+                              list.files(pattern = "*-1.txt", recursive = T))
+
+T1_dad_raw <- do.call(plyr::rbind.fill, lapply(lapply(lapply(T1_dad_filenames, read_eprime),
+                                                      FrameList),
+                                               to_data_frame))
+T1_dad_dates = T1_dad_raw %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T1_dad_subclean = T1_dad_raw %>% 
+  mutate(id = as.numeric(substr(Eprime.Basename, 24, 27)),
+         time = "T1",
+         participant = "dad",
+         platform = "in-person",
+         version = substr(Eprime.Basename, 22, 22),
+         version = case_when(version == "1" ~ "AB", version == "2" ~ "BD"),
+         card = cardname,
+         Sample = as.numeric(Sample),
+         block = case_when(Sample > 0 & Sample < 41 ~ 1,
+                           Sample > 41 & Sample < 82 ~ 2,
+                           Sample > 82 & Sample < 123 ~ 3),
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 1,
+                               version == "AB" & card %in% c("C", "D") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 0),
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         card_play = case_when(card.RESP == 1 ~ 1, T ~ 0),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>% 
+  filter(!is.na(block)) %>%
+  select(id, time, participant, platform, version, card, block, 
+         trial, card_good, card_RT, card_play, outcome) %>% 
+  left_join(T1_dad_dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+```
+
+
+## Process T1 Mom Data
+```{r, eval = T}
+# Identify the directory for the files and get the list of those files
+setwd(here::here("1_TADS_Parents_PP", "Data", "0_Raw", "Raw_T1_Mom"))
+T1_mom_filenames <- intersect(intersect(list.files(pattern = "playorpass - Version", recursive = T), 
+                                        list.files(pattern = "5", recursive = T)),
+                              list.files(pattern = "*-1.txt", recursive = T))
+
+T1_mom_raw <- do.call(plyr::rbind.fill, lapply(lapply(lapply(T1_mom_filenames, read_eprime),
+                                                      FrameList),
+                                               to_data_frame))
+T1_mom_dates = T1_mom_raw %>% 
+  mutate(id = substr(Eprime.Basename, 24, 27)) %>% 
+  filter(!is.na(SessionDate) & !is.na(Procedure)) %>% 
+  select(id, date = SessionDate) %>% 
+  mutate(id = as.numeric(id))
+
+T1_mom_subclean = T1_mom_raw %>% 
+  mutate(id = as.numeric(substr(Eprime.Basename, 24, 27)),
+         time = "T1",
+         participant = "mom",
+         platform = "in-person",
+         version = substr(Eprime.Basename, 22, 22),
+         version = case_when(version == "1" ~ "AB", version == "2" ~ "BD"),
+         card = cardname,
+         Sample = as.numeric(Sample),
+         block = case_when(Sample > 0 & Sample < 41 ~ 1,
+                           Sample > 41 & Sample < 82 ~ 2,
+                           Sample > 82 & Sample < 123 ~ 3),
+         trial = case_when(Sample < 41 ~ Sample, Sample < 82 ~ Sample - 1, T ~ Sample - 2),
+         card_good = case_when(version == "AB" & card %in% c("A", "B") ~ 1,
+                               version == "AB" & card %in% c("C", "D") ~ 0,
+                               version == "BD" & card %in% c("B", "D") ~ 1,
+                               version == "BD" & card %in% c("A", "C") ~ 0),
+         card_RT = as.numeric(card.FinishTime) - as.numeric(card.OnsetTime),
+         card_play = case_when(card.RESP == 1 ~ 1, T ~ 0),
+         outcome = as.numeric(str_remove(absmoney1, "\\$"))) %>% 
+  filter(!is.na(block)) %>% 
+  select(id, time, participant, platform, version, card, block, 
+         trial, card_good, card_RT, card_play, outcome) %>% 
+  left_join(T1_mom_dates) %>% 
+  mutate(date = case_when(substr(date, 5,5) == "-" ~ paste(substr(date,6,7),
+                                                           substr(date,9,10),
+                                                           substr(date,1,4), sep = "-"),
+                          T ~ date)) %>% 
+  check_version()
+```
+
+
+## Combine & Save Data
+```{r, eval = T}
+RewPun_IGT_Data = 
+  # combined data
+  bind_rows(T1_dad_subclean, T1_mom_subclean) %>%
+  # exclude participant that responded on < 50% trials
+  filter(!(id == 5183 & participant == "dad" & time == "T1")) %>%
+  # exclude participant that didn't finish the task - only 40 trials worth of data
+  filter(!(id == 5020 & participant == "mom" & time == "T1")) %>%
+  # fix participant's data because they didn't respond on a specific deck
+  mutate(AB_card = case_when(id == 5139 & participant == "mom" & time == "T1" & card == "A" ~ "AB_A",
+                             id == 5222 & participant == "mom" & time == "T1" & card == "B" ~ "AB_B",
+                             id == 5198 & participant == "mom" & time == "T1" & card == "D" ~ "AB_D",
+                             T ~ AB_card),
+         checked_version = case_when(id == 5139 & participant == "mom" & time == "T1" & card == "A" ~ "AB",
+                                     id == 5222 & participant == "mom" & time == "T1" & card == "B" ~ "AB",
+                                     id == 5198 & participant == "mom" & time == "T1" & card == "D" ~ "AB",
+                                     T ~ checked_version)) %>% 
+  # capitalize id variable name
+  select(ID = id, -date, everything())
+
+# save data
+saveRDS(RewPun_IGT_Data, here("1_TADS_Parents_PP", "Data", "5_Processed", "RewPun_IGT_Data.RDS"))
+```
+
+
+## Load Data
+```{r}
+RewPun_IGT_Data = readRDS(here("1_TADS_Parents_PP", "Data", "5_Processed", "RewPun_IGT_Data.RDS"))
+```
+
+
+# ---------------------------------------------------------------------------------------------
+# Make Stan Data
+## Import SCID Data
+```{r}
+SCID = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
+                    "SCID_Anx_Dep_SUD.RDS"))
+```
+
+
+## Function
+```{r}
+# This creates Stan data list for fitting the ORL model with ORL parameters represented by a multiple regression equation.
+make_ORL_stan_data = function(data, covariate_names){
+  library(dplyr)
+  library(stringr)
+  
+  ##################################################################
+  # setup stan variables
+  ID_participant = sort(unique(data$ID_part)) # vector of unique ID 
+  N = length(ID_participant)            # number of unique IDs
+  sessions = unique(data$time)          # vector of unique sessions
+  S = length(sessions)                  # number of unique sessions
+  C = length(covariate_names)           # number of covariates
+  D = S + C                             # number of covariates (including sessions)
+  Tr = max(data$trial)                  # max number of trials across participants
+  
+  
+  ID_OG = rep(-1, N)                            # original ID
+  ID_number = rep(-1, N)                        # ID number - this links parents of the same 
+  # child together in the same way as ID_OG
+  participant_number = rep(-1, N)               # child (1), dad (2), or mom (3)
+  Tsubj = array(data = 0, dim = c(N,S))         # number of trials by participant
+  card = array(data = -1, dim = c(N,Tr,S))      # cards
+  choice = array(data = -1, dim = c(N,Tr,S))    # choices made by participant
+  outcome = array(data = -999, dim = c(N,Tr,S)) # outcome of choice
+  sign = array(data = -999, dim = c(N,Tr,S))    # sign of choice outcome
+  X = array(data = 0, dim = c(N,D,S))           # covariates for participants
+  pbx = "good to go"                            # indicator for problem in loop
+  
+  
+  ##################################################################
+  # fill vectors and arrays with data
+  for(i in 1:N){ # loop through persons
+    cur_i = filter(data, ID_part == i) # subset individual
+    
+    # assign original ID & double-check it gives whole number (it should)
+    ID_OG[i] = mean(cur_i$ID)
+    pbx = ifelse(ID_OG[i]%%1>0, "problem in OG ID", pbx)
+    
+    # assign ID number that ties parents together & double-check it gives whole number (it should)
+    ID_number[i] = mean(cur_i$ID_num)
+    pbx = ifelse(ID_OG[i]%%1>0, "problem in OG ID", pbx)
+    
+    # assign participant type & double-check it gives whole number (it should)
+    participant_number[i] = mean(cur_i$participant_num)
+    pbx = ifelse(participant_number[i]%%1>0, "problem in participant number", pbx)
+    
+    for(s in 1:S){ # loop through sessions
+      cur_is = filter(cur_i, time == sessions[s]) # subset session within individual
+      
+      if(nrow(cur_is) > 0 & max(cur_is$trial) == 120){ # check if participant has a full session's
+        # worth of data - if not, skip next loop
+        
+        # assign covariate variables
+        X[i,s,s] = 1 # assign a 1 for current session
+        if(C>0){
+          for(c in 1:C){
+            X[i,S+c,s] = mean(cur_is[[covariate_names[c]]])
+            pbx = ifelse(X[i,s+c,s]%%1>0, "problem in covariate", pbx)
+          }
+        }
+        
+        Tsubj[i,s] = max(cur_is$trial)
+        
+        for(t in 1:Tsubj[i,s]){ # loop through trials
+          cur_ist = filter(cur_is, trial == t) # subset trial within session within individual
+          
+          # assign card number
+          card[i,t,s] = cur_ist$card_num
+          
+          # assign choice
+          choice[i,t,s] = ifelse(cur_ist$card_play == 0, 2, cur_ist$card_play)
+          
+          # assign outcome
+          outcome[i,t,s] = ifelse(is.na(cur_ist$outcome), 0, cur_ist$outcome / 100)
+          
+          # assign sign of outcome
+          sign[i,t,s] = sign(outcome[i,t,s])
+        }
+      }
+    }
+  }
+  
+  stan_data = list(ID_participant = ID_participant,
+                   ID_OG = ID_OG,
+                   ID_number = ID_number,
+                   participant_number = participant_number,
+                   N = N,
+                   S = S,
+                   T = Tr,
+                   card = card,
+                   Tsubj = Tsubj,
+                   choice = choice,
+                   outcome = outcome,
+                   sign = sign,
+                   D = D,
+                   X = X)
+  
+  return(stan_data)
+}
+```
+
+
+## Current Diag Data
+```{r}
+RewPun_Current_Anx_Dep_SUD_Female = 
+  
+  #------------------------------------------------------------------------
+  # PREP SCID DATA
+  SCID %>%
+  mutate(participant = tolower(participant),
+         anxiety = canx, 
+         depression = cdep,
+         SUD = case_when((csub + cpot + calc) > 0 ~ 1, T ~ 0)) %>% 
+  select(ID, participant, anxiety, depression, SUD) %>% 
+  
+  #------------------------------------------------------------------------
+  # COMBINE SCID DATA WITH IGT DATA
+  inner_join(RewPun_IGT_Data, .) %>% # Note that Mom 5005 does not have SCID data
+  # This ensures that we exclude all non-participant data (e.g., test data)
+  filter(ID >= 5000 & ID < 6000) %>%
+  
+  #------------------------------------------------------------------------
+  # PREP COMBINED DATA
+  mutate(# fix session variable
+         session = as.numeric(str_remove(time, "T")),
+         # create variable that assigns numbers to participant types (1 = child, 2 = dad, 3 = mom)
+         participant_num = match(participant, c("child", "dad", "mom")[1:3]),
+         # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
+         card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4]),
+         # create variable indicating gender (0 = male, 1 = female)
+         female = case_when(participant == "mom" ~ 1, T ~ 0)) %>% 
+  # create new ID variable for triads (child, dad, mom)
+  group_by(ID) %>% mutate(ID_num = cur_group_id()) %>% 
+  # create unique ID for each individual participant
+  group_by(ID, participant) %>% mutate(ID_part = cur_group_id()) %>% 
+  
+  #------------------------------------------------------------------------
+  # CREATE STAN DATA
+  make_ORL_stan_data(data = .,
+                     covariate_names = c("anxiety", "depression", "SUD", "female"))
+
+saveRDS(RewPun_Current_Anx_Dep_SUD_Female,
+        here("1_TADS_Parents_PP", "Data", "1_Stan", "RewPun_Current_Anx_Dep_SUD_Female.RDS"))
+```
+
+
+## Lifetime Diag Data
+```{r}
+RewPun_Lifetime_Anx_Dep_SUD_Female = 
+  
+  #------------------------------------------------------------------------
+  # PREP SCID DATA
+  SCID %>%
+  mutate(participant = tolower(participant),
+         anxiety = lanx, 
+         depression = ldep,
+         SUD = case_when((lsub + lpot + lalc) > 0 ~ 1, T ~ 0)) %>% 
+  select(ID, participant, anxiety, depression, SUD) %>% 
+  
+  #------------------------------------------------------------------------
+  # COMBINE SCID DATA WITH IGT DATA
+  inner_join(RewPun_IGT_Data, .) %>% # Note that Mom 5005 does not have SCID data
+  # This ensures that we exclude all non-participant data (e.g., test data)
+  filter(ID >= 5000 & ID < 6000) %>%
+  
+  #------------------------------------------------------------------------
+  # PREP COMBINED DATA
+  mutate(# fix session variable
+         session = as.numeric(str_remove(time, "T")),
+         # create variable that assigns numbers to participant types (1 = child, 2 = dad, 3 = mom)
+         participant_num = match(participant, c("child", "dad", "mom")[1:3]),
+         # create variable that assigns numbers to card types (1 = A, 2 = B, 3 = C, 4 = D)
+         card_num = match(str_remove(AB_card, "AB_"), LETTERS[1:4]),
+         # create variable indicating gender (0 = male, 1 = female)
+         female = case_when(participant == "mom" ~ 1, T ~ 0)) %>% 
+  # create new ID variable for triads (child, dad, mom)
+  group_by(ID) %>% mutate(ID_num = cur_group_id()) %>% 
+  # create unique ID for each individual participant
+  group_by(ID, participant) %>% mutate(ID_part = cur_group_id()) %>% 
+  
+  #------------------------------------------------------------------------
+  # CREATE STAN DATA
+  make_ORL_stan_data(data = .,
+                     covariate_names = c("anxiety", "depression", "SUD", "female"))
+
+saveRDS(RewPun_Lifetime_Anx_Dep_SUD_Female,
+        here("1_TADS_Parents_PP", "Data", "1_Stan", "RewPun_Lifetime_Anx_Dep_SUD_Female.RDS"))
+```
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+

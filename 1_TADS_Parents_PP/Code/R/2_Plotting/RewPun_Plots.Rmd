@@ -1,0 +1,1149 @@
+---
+title: "Evaluating Group-Based Covariate Model"
+output: html_document
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+library(zoo)
+library(ggh4x)
+```
+
+
+## Focal Parameters
+```{r}
+# SPECIFY FOCAL PARAMETERS
+focal_parameters = c("mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+                     "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+                     "Arew", "Apun", "betaF", "betaB", 
+                     "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB")
+
+# DIFFERENTIATE GROUP- & PERSON-LEVEL PARAMETERS
+group_parameters  = grep("mu|sigma", focal_parameters, value=TRUE)
+person_parameters = grep("mu|sigma", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+## Horizontal Lab
+```{r}
+horizontal_lab = data.frame(
+  grp_parameter = factor(c("mu", "beta"), levels = c("mu", "beta"), ordered = T,
+                         labels = c("Mu", "Beta")),
+  lab_ = factor(c("Mu", "Beta"), ordered = T,
+                labels = c(expression("\u03B2"), expression("\u03BC"))),
+  orl_parameter = factor("Arew", ordered = T,
+                         levels = c("Arew", "Apun", "betaF", "betaB")))
+```
+
+
+## X-Axis
+```{r}
+x_scaling = list(grp_parameter == "Mu" & orl_parameter == "Arew" ~
+                   scale_x_continuous(limits = c(.05, .25), breaks = seq(.05, .25, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 grp_parameter == "Mu" & orl_parameter == "Apun" ~
+                   scale_x_continuous(limits = c(.05, .25), breaks = seq(.05, .25, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 grp_parameter == "Mu" & orl_parameter == "betaF" ~
+                   scale_x_continuous(limits = c(1, 6), breaks = seq(1, 6, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 grp_parameter == "Mu" & orl_parameter == "betaB" ~
+                   scale_x_continuous(limits = c(.5, 2), breaks = seq(.5, 2, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 
+                 grp_parameter == "Beta" & orl_parameter == "Arew" ~
+                   scale_x_continuous(limits = c(-.4, .4), breaks = seq(-.4, .4, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 grp_parameter == "Beta" & orl_parameter == "Apun" ~
+                   scale_x_continuous(limits = c(-.4, .4), breaks = seq(-.4, .4, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 grp_parameter == "Beta" & orl_parameter == "betaF" ~
+                   scale_x_continuous(limits = c(-2.5, 2.5), breaks = seq(-2.5, 2.5, length.out = 3),
+                                      expand = expansion(mult = .05)),
+                 grp_parameter == "Beta" & orl_parameter == "betaB" ~
+                   scale_x_continuous(limits = c(-.75, .75), breaks = seq(-.8, .8, length.out = 3),
+                                      expand = expansion(mult = .05))
+                 )
+```
+
+
+## Load Data & Posteriorss
+```{r}
+# -----------------------------------------------------------------------------------
+# read in raw data
+RewPun_Current_Anx_Dep_SUD_Female = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                                                 "RewPun_Current_Anx_Dep_SUD_Female.RDS"))
+RewPun_Lifetime_Anx_Dep_SUD_Female = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                                                  "RewPun_Lifetime_Anx_Dep_SUD_Female.RDS"))
+
+
+# -----------------------------------------------------------------------------------
+# check if any participants had missing data
+ifelse(mean(RewPun_Lifetime_Anx_Dep_SUD_Female$X[,1,])==1, "All complete", "Missingness present")
+
+
+# -----------------------------------------------------------------------------------
+# read in model fit
+RewPun_Lifetime_Fit =
+  readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+               "Lifetime_Anx_Dep_SUD_Female_Fit.RDS"))
+  # readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "Covariate_Joint_ORL_Bias",
+  #              "T1_parent_Anx_Dep_SUD_Female_Covariate_Joint_ORL_Bias_fit.RDS"))
+
+
+# -----------------------------------------------------------------------------------
+# read in posteriors
+RewPun_Lifetime_Posteriors =
+  readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+               "Lifetime_Anx_Dep_SUD_Female_Posteriors.RDS"))
+  # readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "Covariate_Joint_ORL_Bias",
+  #              "T1_parent_Anx_Dep_SUD_Female_Covariate_Joint_ORL_Bias_posteriors.RDS"))
+
+
+# -----------------------------------------------------------------------------------
+# read in rhats
+RewPun_Lifetime_Rhats =
+  readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "RewPun",
+               "Lifetime_Anx_Dep_SUD_Female_Rhats.RDS"))
+  # readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", "Covariate_Joint_ORL_Bias",
+  #              "T1_parent_Anx_Dep_SUD_Female_Covariate_Joint_ORL_Bias_rhats.RDS"))
+
+
+# -----------------------------------------------------------------------------------
+# read in BIS/BAS
+bis_bas = bind_rows(select(readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
+                       "T1_dad_BIS_BAS.rds")), -c(sex, session)),
+                    select(readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw",
+                       "T1_mom_BIS_BAS.rds")), -c(sex, session)))
+```
+
+
+# -------------------------------------------
+# Misc Statistics
+## Model Diagnostics
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables", "RewPun",
+          "Traceplots - Group-Level Parameters.tiff"),
+     width = 35, height = 25, units = "cm", res = 300)
+  traceplot(RewPun_Lifetime_Fit, pars = group_parameters)
+dev.off()
+```
+
+
+```{r}
+ifelse(max(RewPun_Lifetime_Rhats)>1.1, "High Rhat", "Rhats fine")
+```
+
+
+# -------------------------------------------
+# Calculate Posterior Predictions
+## Group-Level PPCs
+```{r, eval = F}
+source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
+
+
+# get indices for each group-membership
+g_indices = list()
+g_indices[["Anx"]] = stan_data$X[,2,1] == 1
+g_indices[["Dep"]] = stan_data$X[,3,1] == 1
+g_indices[["SUD"]] = stan_data$X[,4,1] == 1
+g_indices[["Anx_Only"]] = stan_data$X[,2,1] == 1 & stan_data$X[,3,1] == 0 & stan_data$X[,4,1] == 0
+g_indices[["Dep_Only"]] = stan_data$X[,2,1] == 0 & stan_data$X[,3,1] == 1 & stan_data$X[,4,1] == 0
+g_indices[["SUD_Only"]] = stan_data$X[,2,1] == 0 & stan_data$X[,3,1] == 0 & stan_data$X[,4,1] == 1
+g_indices[["Anx_Con"]] = stan_data$X[,2,1] == 0
+g_indices[["Dep_Con"]] = stan_data$X[,3,1] == 0
+g_indices[["SUD_Con"]] = stan_data$X[,4,1] == 0
+g_indices[["Con"]] = stan_data$X[,2,1] == 0 & stan_data$X[,3,1] == 0 & stan_data$X[,4,1] == 0
+# FOR MODEL WITH SEX AS COVARIATE
+g_indices[["Male"]] = stan_data$X[,5,1] == 0
+g_indices[["Female"]] = stan_data$X[,5,1] == 1
+
+# calculate posterior predictions and choice proportions
+for(g in names(g_indices)){
+  calculate_PPCs(cards = stan_data$card[g_indices[[g]],,],
+                 trials = stan_data$Tsubj[g_indices[[g]]],
+                 predicted_choices = orl_posteriors$choice_pred[,g_indices[[g]],,], 
+                 observed_choices = stan_data$choice[g_indices[[g]],,]) %>% 
+    mutate(group = g) %>% 
+    saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                 model_name,
+                 paste(sample, model_name, g, "PPCs.rds", sep = "_")))
+}
+```
+
+
+## Person-Level PPCs
+```{r, eval = F}
+ind_PPCs = data.frame(ID = stan_data$ID_participant,
+                      deck = stan_data$card,
+                      choice = ifelse(stan_data$choice == 1, 1, 0),
+                      pred = apply(ifelse(orl_posteriors$choice_pred == 1, 1, 0), c(2, 3), mean)) %>% 
+  pivot_longer(c(starts_with("deck"), starts_with("choice"), starts_with("pred")),
+               names_to = c("dv", "trial"), names_sep = "\\.", values_to = "value",
+               names_transform = list(trial = as.numeric)) %>% 
+  pivot_wider(names_from = "dv", values_from = "value")
+
+
+# save data
+saveRDS(ind_PPCs,
+        here("1_TADS_Parents_PP", "Data", "2_Fitted",
+             model_name,
+             paste(sample, model_name, "ind_PPCs.rds", sep = "_")))
+```
+
+
+
+```{r}
+ind_PPCs = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                        model_name,
+                        paste(sample, model_name, "ind_PPCs.rds", sep = "_")))
+```
+
+
+```{r, fig.height=3, fig.width=6}
+data.frame(ID       = 1:sum(RewPun_Lifetime_Anx_Dep_SUD_Female$X[,1,]),
+           sex      = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,5,],
+           current  = RewPun_Current_Anx_Dep_SUD_Female$X[,2,], 
+           lifetime = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2,], 
+           estimate = apply(RewPun_Lifetime_Posteriors$Apun, 2, mean)) %>% 
+  mutate(sex = case_when(sex == 1 ~ "Female", T ~ "Male"),
+         past = case_when(lifetime == 1 & current == 0 ~ 1, T ~ 0),
+         x_group = case_when(lifetime == 0 ~ .5,
+                             past == 1 ~ .925,
+                             current == 1 ~ 1.075),
+         group = factor(x_group, levels = c(.5, .925, 1.075),
+                        labels = c("No Anx", "Past Anx", "Current Anx"),
+                        ordered = T),
+         group = factor(x_group, levels = c(.5, .925, 1.075),
+                        labels = c("No Anx", "Past Anx", "Current Anx"),
+                        ordered = T),
+         # x_group = case_when(sex == "Female" ~ x_group - .01, T ~ x_group + .01),
+         lifetime = case_when(lifetime == 1 ~ "Anx", T ~ "HC")) %>% 
+  group_by(group) %>% 
+  mutate(mu = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2]) %>% 
+  ggplot(aes(x = estimate, fill = group)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = mu, color = group), size = 1) +
+  geom_vline(aes(xintercept = lower, color = group), linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = upper, color = group), linetype = "dashed", size = 1) +
+  scale_fill_manual(name = "Group", values = c("dodgerblue2", "gray85", "gray40")) +
+  scale_color_manual(name = "Group", values = c("dodgerblue4", "gray55", "black")) +
+  scale_y_continuous(limits = c(0, NA), expand = c(0, 0)) +
+  coord_cartesian(clip = "off") +
+  labs(y = "Estimate") +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.text = element_text(color = "black", size = 10),
+        axis.title.y = element_text(size = 12)) + 
+  guides(fill = guide_legend(override.aes = list(shape = 21))) +
+  facet_rep_wrap(.~group)
+```
+# -------------------------------------------
+# Diagnosis Counts
+```{r}
+data.frame(diag = RewPun_Lifetime_Anx_Dep_SUD_Female$X[,2:4,]) %>% 
+  select(anx = diag.1, dep = diag.2, sud = diag.3) %>% 
+  mutate(con = case_when(anx + dep + sud == 0 ~ 1, T ~ 0),
+         anx_dep = case_when(anx + dep == 2 ~ 1, T ~ 0),
+         anx_sud = case_when(anx + sud == 2 ~ 1, T ~ 0),
+         dep_sud = case_when(dep + sud == 2 ~ 1, T ~ 0),
+         anx_dep_sud = case_when(anx + dep + sud == 3 ~ 1, T ~ 0)) %>% 
+  colSums()#/286*100
+```
+
+
+
+# -------------------------------------------
+# Table 2: ORL Summary Stats
+```{r}
+# PROCESS POSTERIORS
+processed_posteriors = data.frame(iteration = 1:((RewPun_Lifetime_Fit@sim$iter - RewPun_Lifetime_Fit@sim$warmup) *
+                                                   RewPun_Lifetime_Fit@sim$chains),
+           Arew = RewPun_Lifetime_Posteriors$beta_Arew,
+           Apun = RewPun_Lifetime_Posteriors$beta_Apun,
+           betaF = RewPun_Lifetime_Posteriors$beta_betaF,
+           betaB = RewPun_Lifetime_Posteriors$beta_betaB) %>%
+  pivot_longer(c(everything(), -iteration),
+               names_to = c("orl_parameter", "grp_parameter"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  mutate(grp_parameter = factor(grp_parameter, levels = as.character(1:5),
+                                labels = c("B0", "B_Anx", "B_Dep", "B_SUD", "B_FEM"),
+                                ordered = T))
+
+
+# SUMMARY STATISTICS TABLE
+processed_posteriors %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2],
+            sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% ungroup() %>% 
+  mutate(sig = case_when(grp_parameter == "B0" ~ "", T ~ sig),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper, 2),
+         combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>%
+  select(-c(mu, lower, upper, sig)) %>% 
+  pivot_wider(names_from = "grp_parameter", values_from = "combined") %>% 
+  mutate(order_orl = match(orl_parameter, c("Arew", "Apun", "betaF", "betaB")[1:4])) %>% 
+  arrange(order_orl) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
+               model_name, sample,
+               "Posterior Distribution Summaries.csv"))
+
+
+# LOOK % ABOVE/BELOW 0
+processed_posteriors %>% 
+  filter(grp_parameter != "B0") %>% 
+  group_by(orl_parameter, grp_parameter) %>% 
+  summarise(above_0 = mean(estimate>0),
+            below_0 = mean(estimate<0)) %>% 
+  View()
+```
+
+
+# -------------------------------------------
+# Figure 1: Diag PPC Plots
+```{r, eval = F}
+# -------------------------------------------
+# PREP DATA
+diag_PPCs = 
+  bind_rows(readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Con_PPCs.rds", sep = "_"))),
+            readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Anx_PPCs.rds", sep = "_"))),
+            readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Dep_PPCs.rds", sep = "_"))),
+            readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "SUD_PPCs.rds", sep = "_")))) %>% 
+    group_by(trial, deck, group) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    ungroup() %>% 
+    mutate(group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"), 
+                          labels = c("HC", "Anx", "Dep", "SUD"), ordered = T))
+
+
+# -------------------------------------------
+# BUILD PLOT
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure 1 - Diag PPC Plots.tiff"),
+     width = 14.6, height = 8, units = "cm", res = 300)
+  # PPC PLOTS
+  diag_PPCs %>% 
+    ggplot(aes(x = trial, color = deck)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = deck), color = "transparent",
+                  alpha = .25) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = deck), color = "transparent",
+                  alpha = .5) +
+      geom_line(aes(y = mu), linewidth = 1) +
+      geom_point(aes(y = observed, fill = deck), color = "black",
+                 shape = 21, size = 1.5) +
+      geom_vline(xintercept = c(10.5, 20.5), linewidth = .75, linetype = "dashed") +
+      geom_text_npc(aes(npcx = "left", npcy = "top", label = group), size = 5,
+                    hjust = .1, vjust = .675, check_overlap = T) +
+      # scales
+      scale_y_continuous(limits = c(.48,1.02),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73")) +
+      scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play",
+           color = "Deck:", fill = "Deck:") +
+      theme_classic() +
+      theme(#axis elements
+            axis.text = element_text(color = "black", size = 12),
+            axis.title = element_text(size = 16),
+            # legend elements
+            legend.title = element_text(size = 12),
+            legend.background = element_rect(fill = "white", colour = "white"),
+            legend.position = c(.5, 1.05), 
+            legend.spacing.x = unit(.025, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 12),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.65, "cm"),
+            # plot elements
+            plot.margin = margin(t = .75, r = .3, unit = 'cm'),
+            strip.text = element_blank(),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(.25,"cm"),
+            panel.spacing.y = unit(.25,"cm")
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 2.25), nrow = 1)) +
+      facet_rep_wrap(.~group, nrow = 2)
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Figure 2: Diag Posterior Plots
+```{r, eval = F}
+# -------------------------------------------
+# ORGANIZE DATA
+orl_diag_parameters = data.frame(
+  iteration = 1:((orl_fit@sim$iter -
+                    orl_fit@sim$warmup) *
+                   orl_fit@sim$chains),
+  # get non-diag posteriors by averaging across men/women posteriors
+  Arew_mu.0 = (orl_posteriors$mu_Arew[,,1] + orl_posteriors$mu_Arew[,,5])/2,
+  Apun_mu.0 = (orl_posteriors$mu_Apun[,,1] + orl_posteriors$mu_Apun[,,5])/2,
+  betaF_mu.0 = (orl_posteriors$mu_betaF[,,1] + orl_posteriors$mu_betaF[,,5])/2,
+  betaB_mu.0 = (orl_posteriors$mu_betaB[,,1] + orl_posteriors$mu_betaB[,,5])/2,
+  Arew_mu = orl_posteriors$mu_Arew[,,2:4],
+  Apun_mu = orl_posteriors$mu_Apun[,,2:4],
+  betaF_mu = orl_posteriors$mu_betaF[,,2:4],
+  betaB_mu = orl_posteriors$mu_betaB[,,2:4],
+  # get betas for diagnostic variables
+  Arew_beta = orl_posteriors$beta_Arew[,2:4],
+  Apun_beta = orl_posteriors$beta_Apun[,2:4],
+  betaF_beta = orl_posteriors$beta_betaF[,2:4],
+  betaB_beta = orl_posteriors$beta_betaB[,2:4]) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("orl_par", "group"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  mutate(grp_parameter = case_when(str_detect(orl_par, "mu") ~ "mu",
+                                   str_detect(orl_par, "_beta") ~ "beta"),
+         orl_parameter = str_remove(orl_par, "_mu|_beta")) %>% 
+  select(-orl_par) %>% 
+  mutate(group = case_when(group == 0 & grp_parameter == "mu" ~ "HC",
+                           group == 1 & grp_parameter == "mu" ~ "Anx",
+                           group == 2 & grp_parameter == "mu" ~ "Dep",
+                           group == 3 & grp_parameter == "mu" ~ "SUD",
+                           group == 1 & grp_parameter == "beta" ~ "Anx",
+                           group == 2 & grp_parameter == "beta" ~ "Dep",
+                           group == 3 & grp_parameter == "beta" ~ "SUD"),
+         orl_parameter = factor(orl_parameter, ordered = T,
+                                levels = c("Arew", "Apun", "betaF", "betaB")),
+         grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
+                         labels = c("Mu", "Beta")),
+         group = factor(group, levels = c("HC", "Anx", "Dep", "SUD"),
+                        ordered = T))
+
+
+# -------------------------------------------
+# SAVE DATA
+orl_diag_parameters %>% 
+  group_by(group, grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2],
+            sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% ungroup() %>% 
+  mutate(sig = case_when(grp_parameter == "Mu" ~ "", T ~ sig),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper, 2),
+         combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>% 
+  select(-c(mu, lower, upper, sig)) %>% 
+  pivot_wider(names_from = "group", values_from = "combined") %>% 
+  mutate(order_grp = case_when(grp_parameter == "Mu" ~ 1, T ~ 2),
+         order_orl = match(orl_parameter, c("Arew", "Apun", "betaF", "betaB")[1:4])) %>% 
+  arrange(order_orl, order_grp) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
+               model_name, sample,
+               "Diag_Descriptives.csv"))
+
+
+# -------------------------------------------
+# BUILD PLOT
+summary_data = orl_diag_parameters %>% 
+  group_by(group, grp_parameter, orl_parameter) %>% 
+  reframe(mu    = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2],
+         height_ci = max(density(estimate)$y)) %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  mutate(height_ci = max(height_ci),
+         height_ci = case_when(group == "HC"  ~ height_ci*1.225,
+                               group == "Anx" ~ height_ci*1.175,
+                               group == "Dep" ~ height_ci*1.125,
+                               group == "SUD" ~ height_ci*1.075),
+         xint  = case_when(grp_parameter == "Beta" ~ 0))
+
+
+orl_lab = data.frame(
+  grp_parameter = factor(c("mu"), levels = c("mu", "beta"), ordered = T,
+                         labels = c("Mu", "Beta")),
+  orl_parameter = factor(c("Arew", "Apun", "betaF", "betaB"), ordered = T),
+  lab_ = factor(c("Arew", "Apun", "betaF", "betaB"), ordered = T,
+                levels = c("Arew", "Apun", "betaF", "betaB"),
+                labels = c(expression("A+"),
+                           expression("A-"),
+                           expression("\u03B2f"),
+                           expression("\u03B2b"))))
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure 2 - Diag Posterior Distributions.tiff"),
+     width = 7, height = 9, units = "cm", res = 300)
+  # PLOT
+  orl_diag_parameters %>% 
+    ggplot(aes(x = estimate, fill = group)) +
+      # geoms
+      geom_text_npc(data = orl_lab, aes(label = lab_), fontface = "italic",
+                    npcx = "left", npcy = .75, size = 4, vjust = 1, hjust = 0) +
+      geom_density(alpha = .5, linewidth = .25) +
+      geom_hline(yintercept = 0) +
+      geom_vline(data = summary_data, aes(xintercept = xint), linetype = "dashed") +
+      geom_pointrange(data = summary_data, aes(x = mu, y = height_ci, xmin = lower, xmax = upper,
+                          color = group), show.legend = F, fatten = 1.5) +
+      # scales
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+      scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                         limits = c("HC", "Anx", "Dep", "SUD")) +
+      scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                        limits = c("HC", "Anx", "Dep", "SUD")) +
+      # themes
+      labs(x = "Estimate") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(#axis elements
+            axis.text.x = element_text(color = "black", size = 11),
+            axis.ticks.x = element_line(color = "black"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.title.x = element_text(size = 13),
+            axis.title.y = element_blank(),
+            # legend elements
+            legend.title = element_text(size = 10),
+            legend.background = element_rect(fill = "white", colour = "white"),
+            # legend.position = "none", 
+            legend.position = "top", 
+            legend.spacing.x = unit(.05, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 12),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.5, "cm"),
+            # plot elements
+            plot.margin = unit(c(t = .25, r = .25, b = 0, l = .25), "cm"),
+            panel.spacing.x = unit(.75, "cm"),
+            panel.spacing.y = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(orl_parameter~grp_parameter, nrow = 4, ncol = 2,
+                     scales = "free") +
+      facetted_pos_scales(x = x_scaling) +
+      guides(fill = guide_legend(title = "Group: ", nrow = 2))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Figure 3: Sex PPC Plots
+```{r, eval = F}
+# -------------------------------------------
+# PREP DATA
+sex_PPCs = 
+  bind_rows(readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Male_PPCs.rds", sep = "_"))),
+            readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Female_PPCs.rds", sep = "_")))) %>% 
+    group_by(trial, deck, group) %>% 
+    summarise(observed = mean(observed), mu = mean(mu),
+              lower50 = mean(lower50), upper50 = mean(upper50),
+              lower95 = mean(lower95), upper95 = mean(upper95)) %>%
+    ungroup() %>% 
+    mutate(group = factor(group, levels = c("Male", "Female"),
+                          labels = c("Male", "Female"), ordered = T))
+
+
+# -------------------------------------------
+# BUILD PLOT
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure 3 - Sex PPC Plots.tiff"),
+     width = 6, height = 8, units = "cm", res = 300)
+  # PPC PLOTS
+  sex_PPCs %>% 
+    ggplot(aes(x = trial, color = deck)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = deck), color = "transparent",
+                  alpha = .25) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = deck), color = "transparent",
+                  alpha = .5) +
+      geom_line(aes(y = mu), linewidth = 1) +
+      geom_point(aes(y = observed, fill = deck), color = "black",
+                 shape = 21, size = 1.5) +
+      geom_vline(xintercept = c(10.5, 20.5), linewidth = .75, linetype = "dashed") +
+      geom_text_npc(aes(npcx = "left", npcy = "top", label = group), size = 3.75,
+                    hjust = .13, vjust = .675, check_overlap = T) +
+      # scales
+      scale_y_continuous(limits = c(.48,1.02),
+                         breaks = seq(0,1,.25)) +
+      scale_color_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73")) +
+      scale_fill_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play",
+           color = "Deck:", fill = "Deck:") +
+      theme_classic() +
+      theme(#axis elements
+            axis.text = element_text(color = "black", size = 12),
+            axis.title = element_text(size = 16),
+            # legend elements
+            legend.title = element_text(size = 12),
+            legend.background = element_rect(fill = "white", colour = "white"),
+            legend.position = c(.425, 1.05), 
+            legend.spacing.x = unit(.025, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 12),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.65, "cm"),
+            # plot elements
+            plot.margin = margin(t = .75, r = .3, unit = 'cm'),
+            strip.text = element_blank(),
+            strip.background = element_blank(),
+            panel.spacing.x = unit(.25,"cm"),
+            panel.spacing.y = unit(.25,"cm")
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 2.25), nrow = 1)) +
+      facet_rep_wrap(.~group, nrow = 2)
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Figure 4: Sex Posterior Plots
+```{r, eval = F}
+# ORGANIZE DATA
+orl_sex_parameters = data.frame(
+  iteration = 1:((RewPun_Lifetime_Fit@sim$iter -
+                    RewPun_Lifetime_Fit@sim$warmup) *
+                   RewPun_Lifetime_Fit@sim$chains),
+  # get non-diag posteriors by averaging across men/women posteriors
+  Arew_mu_male = RewPun_Lifetime_Posteriors$mu_Arew[,,1],
+  Apun_mu_male = RewPun_Lifetime_Posteriors$mu_Apun[,,1],
+  betaF_mu_male = RewPun_Lifetime_Posteriors$mu_betaF[,,1],
+  betaB_mu_male = RewPun_Lifetime_Posteriors$mu_betaB[,,1],
+  Arew_mu_female = RewPun_Lifetime_Posteriors$mu_Arew[,,5],
+  Apun_mu_female = RewPun_Lifetime_Posteriors$mu_Apun[,,5],
+  betaF_mu_female = RewPun_Lifetime_Posteriors$mu_betaF[,,5],
+  betaB_mu_female = RewPun_Lifetime_Posteriors$mu_betaB[,,5],
+  # get betas for diagnostic variables
+  Arew_beta_female = RewPun_Lifetime_Posteriors$beta_Arew[,5],
+  Apun_beta_female = RewPun_Lifetime_Posteriors$beta_Apun[,5],
+  betaF_beta_female = RewPun_Lifetime_Posteriors$beta_betaF[,5],
+  betaB_beta_female = RewPun_Lifetime_Posteriors$beta_betaB[,5]) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("orl_parameter", "grp_parameter", "sex"),
+               values_to = "estimate", names_sep = "_") %>% 
+  mutate(orl_parameter = factor(orl_parameter, ordered = T,
+                                levels = c("Arew", "Apun", "betaF", "betaB")),
+         grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
+                                labels = c("Mu", "Beta")),
+         sex = factor(sex, levels = c("male", "female"), labels = c("Male", "Female"),
+                      ordered = T))
+
+
+# -------------------------------------------
+# SAVE DATA
+orl_sex_parameters %>% 
+  group_by(sex, grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2],
+            sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% ungroup() %>% 
+  mutate(sig = case_when(grp_parameter == "Mu" ~ "", T ~ sig),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper, 2),
+         combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>% 
+  select(-c(mu, lower, upper, sig)) %>% 
+  pivot_wider(names_from = "sex", values_from = "combined") %>% 
+  mutate(order_grp = case_when(grp_parameter == "Mu" ~ 1, T ~ 2),
+         order_orl = match(orl_parameter, c("Arew", "Apun", "betaF", "betaB")[1:4])) %>% 
+  arrange(order_orl, order_grp) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
+               model_name, sample,
+               "Sex_Descriptives.csv"))
+
+
+# -------------------------------------------
+# BUILD PLOT
+summary_data = orl_sex_parameters %>% 
+  group_by(sex, grp_parameter, orl_parameter) %>% 
+  reframe(mu    = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2],
+          height_ci = max(density(estimate)$y)) %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  mutate(height_ci = max(height_ci),
+         height_ci = case_when(sex == "Male"  ~ height_ci*1.225,
+                               sex == "Female" ~ height_ci*1.175),
+         xint  = case_when(grp_parameter == "Beta" ~ 0))
+
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure 4 - Sex Posterior Distributions.tiff"),
+     width = 7, height = 10, units = "cm", res = 300)
+  # PLOT
+  orl_sex_parameters %>% 
+    ggplot(aes(x = estimate, fill = sex)) +
+      # geoms
+      geom_text_npc(data = horizontal_lab, aes(label = lab_),
+                    npcx = "left", npcy = "top", size = 4, vjust = 1) +
+      geom_density(alpha = .5, linewidth = .25) +
+      geom_hline(yintercept = 0) +
+      geom_vline(data = summary_data, aes(xintercept = xint), linetype = "dashed") +
+      geom_pointrange(data = summary_data, aes(x = mu, y = height_ci, xmin = lower, xmax = upper,
+                                               color = sex), show.legend = F, fatten = 1.5) +
+      # scales
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+      scale_color_manual(values = c("black", "gray75"),
+                         limits = c("Male", "Female")) +
+      scale_fill_manual(values = c("black", "gray75"),
+                        limits = c("Male", "Female")) +
+      # themes
+      labs(x = "Estimate", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(#axis elements
+            axis.text.x = element_text(color = "black", size = 11),
+            axis.ticks.x = element_line(color = "black"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.title = element_text(size = 14),
+            # legend elements
+            legend.title = element_text(size = 11),
+            legend.background = element_rect(fill = "white", colour = "white"),
+            legend.position = c(.5, 1.05), 
+            legend.spacing.x = unit(.05, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 11),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.5, "cm"),
+            # plot elements
+            plot.margin = unit(c(t = .75, r = .2, b = 0, l = .1), "cm"),
+            panel.spacing.x = unit(.6, "cm"),
+            panel.spacing.y = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(orl_parameter~grp_parameter, nrow = 4, ncol = 2,
+                     scales = "free") +
+      facetted_pos_scales(x = x_scaling) +
+      guides(fill = guide_legend(title = "Sex: ", nrow = 1))
+  # TEXT
+  grid.text(c(expression(paste(italic(A),"+",sep="")),
+              expression(paste(italic(A),"-",sep="")),
+              expression(paste("\u03B2",italic(f),sep="")),
+              expression(paste("\u03B2",italic(b),sep=""))),
+            x = rep(.95, 4), y = c(.895, .68, .455, .24),
+            gp = gpar(fontsize = 14))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Figure S1: Differences w/Anxiety
+```{r, eval = F}
+# -------------------------------------------
+# CALCULATE PARAMETER DIFFERENCES
+ind_parameters = data.frame(
+  ID = stan_data$ID_participant,
+  anx = stan_data$X[,2,],
+  dep = stan_data$X[,3,],
+  sud = stan_data$X[,4,],
+  # group-level parameter means
+  con_Arew = mean((orl_posteriors$mu_Arew[,,1] + orl_posteriors$mu_Arew[,,5])/2),
+  con_Apun = mean((orl_posteriors$mu_Apun[,,1] + orl_posteriors$mu_Apun[,,5])/2),
+  con_betaF = mean((orl_posteriors$mu_betaF[,,1] + orl_posteriors$mu_betaF[,,5])/2),
+  con_betaB = mean((orl_posteriors$mu_betaB[,,1] + orl_posteriors$mu_betaB[,,5])/2),
+  anx_Arew = mean(orl_posteriors$mu_Arew[,,2]),
+  anx_Apun = mean(orl_posteriors$mu_Apun[,,2]),
+  anx_betaF = mean(orl_posteriors$mu_betaF[,,2]),
+  anx_betaB = mean(orl_posteriors$mu_betaB[,,2]),
+  # group-level parameter SD
+  SD_Arew = mean(orl_posteriors$sigma_Arew),
+  SD_Apun = mean(orl_posteriors$sigma_Apun),
+  SD_betaF = mean(orl_posteriors$sigma_betaF),
+  SD_betaB = mean(orl_posteriors$sigma_betaB),
+  # ind-level parameter means
+  ind_Arew = apply(orl_posteriors$Arew, 2, mean),
+  ind_Apun = apply(orl_posteriors$Apun, 2, mean),
+  ind_betaF = apply(orl_posteriors$betaF, 2, mean),
+  ind_betaB = apply(orl_posteriors$betaB, 2, mean)) %>% 
+  pivot_longer(c(starts_with("con_"), starts_with("anx_"), starts_with("dep_"),
+                 starts_with("sud_"), starts_with("SD"), starts_with("ind")),
+               names_to = c("diag", "parameter"), names_sep = "_", values_to = "estimate") %>% 
+  pivot_wider(names_from = "diag", values_from = "estimate", names_prefix = "estimate_") %>% 
+  pivot_longer(c(ends_with("_con"), ends_with("_anx"), ends_with("_dep"), ends_with("_sud")),
+               values_to = "estimate_group", names_to = "group", names_prefix = "estimate_") %>% 
+  mutate(con = case_when(anx + dep + sud == 0 ~ 1, T ~ 0),
+         z = (estimate_group - estimate_ind) / estimate_SD)
+
+
+# -------------------------------------------
+# SUBSET DATA
+con_index = ind_parameters %>% 
+  filter(con == 0) %>%
+  filter(parameter == "Apun") %>%
+  group_by(ID) %>% 
+  summarise(abx_z = abs(z)) %>% 
+  arrange(abx_z) %>% head(1) %>% .$ID
+
+anx_index = ind_parameters %>% 
+  filter(anx == 1) %>%
+  filter(parameter == "Apun") %>%
+  group_by(ID) %>% 
+  summarise(abx_z = abs(z)) %>% 
+  arrange(abx_z) %>% head(1) %>% .$ID
+
+anx_comparison1 = 
+  bind_rows(readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Anx_PPCs.rds", sep = "_"))),
+            readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                         model_name,
+                         paste(sample, model_name, "Anx_Con_PPCs.rds", sep = "_")))) %>%
+  mutate(ID = "group", comparison = 1,
+         group = case_when(group == "Anx_Con" ~ "Anx-", group == "Anx" ~ "Anx+")) %>% 
+  select(pred = mu, everything()) %>% 
+  group_by(ID, comparison, trial, deck, group) %>% 
+  summarise(observed = mean(observed), pred = mean(pred),
+            lower50 = mean(lower50), upper50 = mean(upper50),
+            lower95 = mean(lower95), upper95 = mean(upper95))
+
+anx_comparison2 = 
+  ind_PPCs %>% 
+    filter(ID %in% c(con_index, anx_index)) %>%
+    mutate(group = case_when(ID %in% con_index ~ "Anx-",
+                             ID %in% anx_index ~ "Anx+"),
+           deck = chartr("1234", "ABCD", as.character(deck))) %>% 
+    group_by(ID, group, deck) %>%
+    arrange(trial) %>% 
+    mutate(trial = 1:30) %>% ungroup() %>% 
+    mutate(ID = "ind", comparison = 2, observed = choice) %>% 
+    # calculate rolling averages
+    group_by(ID, group, deck) %>% 
+    arrange(trial) %>% 
+    mutate(observed = rollapply(observed, width = 6, FUN = mean,
+                                na.rm = TRUE, fill = NA, partial = T),
+           pred = rollapply(pred, width = 6, FUN = mean,
+                            na.rm = TRUE, fill = NA, partial = T))
+
+Anx_PPCs = bind_rows(anx_comparison1, anx_comparison2)
+
+
+# -------------------------------------------
+# BUILD PLOT
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure S1 - Anx Beta Apun PPCs.tiff"),
+     width = 14.6, height = 10, units = "cm", res = 300)
+
+  # prep data
+  Anx_PPCs %>% 
+    filter(group %in% c("Anx-", "Anx+"),
+           deck %in% c("B", "D")) %>% 
+    # plotting
+    ggplot(aes(x = trial, color = group)) +
+      # geoms
+      geom_text_npc(data = data.frame(comparison = 1, deck = "B", lab_ = "Deck B"),
+                    aes(npcx = "left", npcy = "top", label = lab_),
+                    size = 5, hjust = 0, vjust = .75) +
+      geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
+                  alpha = .2) +
+      geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
+                  alpha = .375) +
+      geom_line(aes(y = pred), linewidth = 1) +
+      geom_point(aes(y = observed, fill = group),
+                 size = 1.5, shape = 21, color = "black") +
+      # scales
+      scale_color_manual(values = c("black", "#E01818"), limits = c("Anx-", "Anx+")) +
+      scale_fill_manual(values = c("gray25", "#E01818"), limits = c("Anx-", "Anx+")) +
+      # theme
+      labs(x = "Trial", y = "Proportion Play") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            legend.position = c(.375, .9),
+            legend.spacing.x = unit(0, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 13),
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.75, "cm"),
+            axis.title = element_text(color = "black", size = 17),
+            axis.text = element_text(color = "black", size = 14),
+            plot.margin = margin(t = .25, r = .1, unit = 'cm'),
+            strip.text = element_blank(),
+            panel.spacing.x = unit(1,"lines"),
+            strip.background = element_blank()
+            ) +
+      guides(color = guide_legend(override.aes = list(size = 2.5))) +
+      # facet_rep_grid(deck~comparison, scales = "free_y")
+      facet_rep_wrap(deck~comparison, scales = "free_y") +
+      facetted_pos_scales(y = list(comparison != 2 ~
+                                     scale_y_continuous(limits = c(.5,1),
+                                                        labels = c(".5", ".75", "1"),
+                                                        breaks = seq(.5,1,.25)),
+                                   comparison == 2 ~
+                                     scale_y_continuous(limits = c(0,1),
+                                                        labels = c("0", ".5", "1"),
+                                                        breaks = seq(0,1,.5))))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Figure S2: Sex-Differences
+## Prep Data
+```{r, eval = F}
+# -------------------------------------------
+# SETUP FOR DATA
+card_indices = data.frame(A = stan_data$card[1,,] == 1,
+                          B = stan_data$card[1,,] == 2,
+                          C = stan_data$card[1,,] == 3,
+                          D = stan_data$card[1,,] == 4)
+sex_indices = data.frame(male = stan_data$X[,5,] == 0,
+                         female = stan_data$X[,5,] == 1)
+trials = 1:30
+
+
+# -------------------------------------------
+# BUILD DATA
+session_wide_data = data.frame()
+for(cur_sex in c("male", "female")){
+  for(cur_card in c("A", "B", "C", "D")){
+    # SUBSET CURRENT DATA
+    cur_pred = ifelse(orl_posteriors$choice_pred[, sex_indices[[cur_sex]], card_indices[[cur_card]],][,,trials] == 2, 0, 1)
+    cur_obs = ifelse(stan_data$choice[sex_indices[[cur_sex]],card_indices[[cur_card]],][,trials] == 2, 0, 1)
+    cur_hdi = HDIofMCMC(apply(cur_pred, 1, mean))
+    apply(cur_obs, 1, mean)
+    session_wide_data =
+      data.frame(
+        ID = stan_data$ID_number[sex_indices[[cur_sex]]],
+        sex = cur_sex, 
+        card = cur_card,
+        trials = paste(min(trials), max(trials), sep = "-"),
+        obs = apply(cur_obs, 1, mean),
+        obs_mean = mean(apply(cur_obs, 1, mean)),
+        pred = mean(apply(cur_pred, 1, mean)),
+        lower = cur_hdi[1],
+        upper = cur_hdi[2]) %>% 
+      bind_rows(session_wide_data)
+  }
+}
+
+
+# -------------------------------------------
+# SAVE DATA
+saveRDS(session_wide_data, 
+        here("1_TADS_Parents_PP", "Data", "2_Fitted",
+             model_name,
+             paste(sample, model_name, "Proportion_Play_Sex_PPCs.rds", sep = "_")))
+```
+
+
+## Build Plot
+```{r, eval = F}
+# -------------------------------------------
+# LOAD DATA
+session_wide_data = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                                 model_name,
+                                 paste(sample, model_name, "Proportion_Play_Sex_PPCs.rds", sep = "_")))
+
+
+# -------------------------------------------
+# BUILD PLOT
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure S2 - Sex Proportion Play.tiff"),
+     width = 7, height = 4.5, units = "cm", res = 300)
+
+  session_wide_data %>% 
+    ggplot(aes(x = card, y = obs,
+               group = interaction(sex, card), fill = sex, color = sex)) +
+      geom_violin(position = position_dodge(width = .75), trim = F, alpha = .35) +
+      geom_crossbar(aes(y = obs_mean, ymin = obs_mean, ymax = obs_mean), show.legend = F,
+                    position = position_dodge(width = .75), linewidth = .5, fatten = 0) +
+      geom_point(aes(y = pred), shape = 21, fill = "white",
+                 show.legend = F, stroke = .75,
+                 position = position_dodge(width = .75)) +
+      scale_color_manual(values = c("gray60", "black"),
+                         labels = c("male" = "Men", "female" = "Women")) +
+      scale_fill_manual(values = c("gray60", "black"),
+                        labels = c("male" = "Men", "female" = "Women")) +
+      scale_y_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25)) +
+      labs(x = "Deck", y = "Proportion Play") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.title = element_blank(),
+            legend.position = c(.975, .15),
+            legend.spacing.x = unit(.05, "cm"),
+            legend.text = element_text(size = 9),
+            legend.key.height = unit(.2, "cm"),
+            legend.key.width = unit(.3, "cm"),
+            legend.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.margin = unit(c(.15, .65, .1, .1), "cm"),
+            axis.text = element_text(color = "black"))
+  
+dev.off()
+```
+
+
+
+# -------------------------------------------
+# Correlations with BIS/BAS
+## Calculate Cors
+```{r, eval = F}
+ORL_BIS_BAS = data.frame()
+
+for(p in c("Arew", "Apun", "betaF", "betaB")) {
+  for(i in 1:nrow(orl_posteriors$Arew)){
+    cur_data = data.frame(ID = stan_data$ID_OG,
+                          participant = ifelse(stan_data$participant_number == 2, "dad", "mom"),
+                          estimate = orl_posteriors[[p]][i,,]) %>% 
+      left_join(bis_bas) %>% 
+      filter(!is.na(bas_drive))
+    
+    ORL_BIS_BAS = data.frame(iteration = i,
+                             parameter = p,
+                             bas_drive = cor(cur_data$estimate, cur_data$bas_drive),
+                             bas_fun = cor(cur_data$estimate, cur_data$bas_fun),
+                             bas_rew = cor(cur_data$estimate, cur_data$bas_rew),
+                             bas_tot = cor(cur_data$estimate, cur_data$bas_tot),
+                             bis = cor(cur_data$estimate, cur_data$bis)) %>% 
+      bind_rows(ORL_BIS_BAS)
+  }
+}
+
+saveRDS(ORL_BIS_BAS,
+        here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+             paste(sample, "ORL_BIS_BAS.RDS", sep = "_")))
+```
+
+
+
+```{r}
+ORL_BIS_BAS = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted", model_name,
+                           paste(sample, "ORL_BIS_BAS.RDS", sep = "_")))
+```
+
+
+
+## Results
+```{r}
+BIS_BAS_results = data.frame()
+
+for(scale in c("bas_drive", "bas_fun", "bas_rew", "bas_tot", "bis")){
+  for(p in c("Arew", "Apun", "betaF", "betaB")){
+    cur_cor = filter(ORL_BIS_BAS, parameter == p)
+    
+    BIS_BAS_results = data.frame(
+      parameter = p,
+      scale = scale,
+      mu = mean(cur_cor[[scale]]),
+      lower = HDIofMCMC(cur_cor[[scale]])[1],
+      upper = HDIofMCMC(cur_cor[[scale]])[2]) %>% 
+      bind_rows(BIS_BAS_results)
+  }
+}
+
+BIS_BAS_results = BIS_BAS_results %>% 
+  mutate(sig = case_when(lower < 0 & upper < 0 ~ "*",
+                         lower > 0 & upper > 0 ~ "*",
+                         T ~ ""),
+         label = paste0(round(mu,2), " [", round(lower,2), ",", round(upper,2), "]", sig)) %>% 
+  select(parameter, scale, label) %>% 
+  pivot_wider(names_from = "parameter", values_from = "label") %>% 
+  select(scale, Arew, Apun, betaF, betaB) %>% 
+  mutate(scale_order = case_when(scale == "bas_tot" ~ 1, scale == "bas_drive" ~ 2, 
+                                 scale == "bas_fun" ~ 3, scale == "bas_rew" ~ 4, 
+                                 scale == "bis" ~ 5)) %>% 
+  arrange(scale_order)
+write.csv(BIS_BAS_results, here("1_TADS_Parents_PP", "Figs_Tables",
+                                model_name, sample,
+                                paste(sample, "BIS_BAS_correlations.csv", sep = "_")))
+```
+
+
+
+# -------------------------------------------
+# Demographics
+```{r}
+demographics = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", 
+                            "processed_demographics_data.RDS"))
+```
+
+
+
+```{r}
+included = data.frame(ID = stan_data$ID_OG,
+                      gender = stan_data$participant_number,
+                      Tsubj = stan_data$Tsubj) %>% 
+  filter(Tsubj == 120) %>% 
+  mutate(gender = case_when(gender == 2 ~ "Male", gender == 3 ~ "Female")) %>% 
+  left_join(demographics)
+
+included %>% 
+  summarise(age = paste0(round(mean(age, na.rm = T), 2),
+                         "(", round(sd(age, na.rm = T), 2), ")"))
+
+included %>% 
+  group_by(gender) %>% 
+  summarise(n(),
+            n()/286*100)
+
+included %>% 
+  group_by(race) %>% 
+  summarise(n(),
+            n()/286*100)
+
+included %>% 
+  group_by(ethnicity) %>% 
+  summarise(n(),
+            n()/286*100)
+```
+
+
+
+# -------------------------------------------
+# Comorbidities
+```{r}
+data.frame(stan_data$X[,2:4,1]) %>% 
+  select(Anx = X1, Dep = X2, SUD = X3) %>% 
+  mutate(Nothing     = case_when(Anx == 0 & Dep == 0 & SUD == 0 ~ 1, T ~ 0),
+         Anx_Dep     = case_when(Anx == 1 & Dep == 1 & SUD == 0 ~ 1, T ~ 0),
+         Anx_SUD     = case_when(Anx == 1 & Dep == 0 & SUD == 1 ~ 1, T ~ 0),
+         Dep_SUD     = case_when(Anx == 0 & Dep == 1 & SUD == 1 ~ 1, T ~ 0),
+         Anx_Dep_SUD = case_when(Anx == 1 & Dep == 1 & SUD == 1 ~ 1, T ~ 0),
+         Anx_Only    = case_when(Anx == 1 & Dep == 0 & SUD == 0 ~ 1, T ~ 0),
+         Dep_Only    = case_when(Anx == 0 & Dep == 1 & SUD == 0 ~ 1, T ~ 0),
+         SUD_Only    = case_when(Anx == 0 & Dep == 0 & SUD == 1 ~ 1, T ~ 0)) %>% 
+  colSums()
+```
+
+
+# -------------------------------------------
