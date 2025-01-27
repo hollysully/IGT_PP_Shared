@@ -176,6 +176,7 @@ create_data = function(data){
   list(IDs = IDs,
        N = N,
        T = T,
+       S = S,
        card = card,
        Tsubj = Tsubj,
        choice = choice,
