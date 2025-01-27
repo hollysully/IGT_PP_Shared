@@ -25,6 +25,19 @@ library(here)
 custom_select = function(data){
   new_data = data %>% 
     select(ID, session = VisitN, participant = Participant, date = Date,
+           # CURRENT
+           cdep, # depression
+           canx, # anxiety
+           csub, # substance use (everything except marijuana and alcohol)
+           cpot, # marijuana use
+           calc, # alcohol use
+           # PAST
+           pdep, # depression
+           panx, # anxiety
+           psub, # substance use (everything except marijuana and alcohol)
+           ppot, # marijuana use
+           palc, # alcohol use
+           # LIFETIME
            ldep, # depression
            lanx, # anxiety
            lsub, # substance use (everything except marijuana and alcohol)
@@ -51,9 +64,7 @@ SCID_mom = read.csv("S:/CADEPP/Longitudinal Imaging Project/Finalized Datasets S
 
 ## Process Data
 ```{r}
-SCID = bind_rows(SCID_mom, SCID_dad) %>% 
-  mutate(SUD = case_when(lsub > 0 | lpot > 0 | lalc > 0 ~ 1, T ~ 0)) %>% 
-  select(everything(), depression = ldep, anxiety = lanx, -lsub, -lpot, -lalc)
+SCID = bind_rows(SCID_mom, SCID_dad)
 
 
 saveRDS(SCID, here("1_TADS_Parents_PP", "Data", "0_Raw", "SCID_Anx_Dep_SUD.RDS"))
