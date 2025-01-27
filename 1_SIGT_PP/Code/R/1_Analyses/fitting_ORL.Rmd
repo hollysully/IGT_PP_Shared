@@ -45,6 +45,7 @@ ORL_model = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", "Joint_ORL.stan"))
 ## IGT
 ```{r, eval = F}
 IGT$outcome = IGT$outcome1
+IGT$sign = IGT$sign1
 IGT_fit = ORL_model$sample(data = IGT,
                            chains = 4,
                            parallel_chains = 4,
@@ -59,6 +60,7 @@ IGT_fit$save_object(file = here("Data", "2_Fitted", "IGT_fit.RDS"))
 ### Outcome 1
 ```{r}
 SIGT$outcome = SIGT$outcome1
+SIGT$sign = SIGT$sign1
 SIGT1_fit = ORL_model$sample(data = SIGT,
                              chains = 4,
                              parallel_chains = 4,
@@ -72,6 +74,7 @@ SIGT1_fit$save_object(file = here("Data", "2_Fitted", "SIGT1_fit.RDS"))
 ### Outcome 2
 ```{r}
 SIGT$outcome = SIGT$outcome2
+SIGT$sign = SIGT$sign2
 SIGT2_fit = ORL_model$sample(data = SIGT,
                              chains = 4,
                              parallel_chains = 4,
@@ -85,6 +88,7 @@ SIGT2_fit$save_object(file = here("Data", "2_Fitted", "SIGT2_fit.RDS"))
 ### Outcome 3
 ```{r}
 SIGT$outcome = SIGT$outcome3
+SIGT$sign = SIGT$sign3
 SIGT3_fit = ORL_model$sample(data = SIGT,
                              chains = 4,
                              parallel_chains = 4,
