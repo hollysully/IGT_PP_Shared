@@ -18,61 +18,94 @@ library(hBayesDM)
 library(bayesplot)
 library(here)
 library(miscTools)
-library(wBoot)
 library(cmdstanr)
 library(stringi)
 library(ggpp)
 library(lemon)
-source(here("1_SIGT_PP", "Code", "R", "3_other", "helpful_functions.R"))
 ```
 
 
 
 ## Load Data
 ```{r}
-stan_data = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_SR_stan_data.rds"))
+IGT = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_only.RDS"))
+SIGT = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "SIGT_only.RDS"))
+IGT_SIGT = readRDS(here("1_SIGT_PP", "Data", "1_Preprocessed", "IGT_SIGT.RDS"))
 ```
 
+
+# Compile model
+```{r}
+ORL_model = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", "Joint_ORL.stan"))
+```
 
 
 # -------------------------------------------
-# Check Model
+# Fit Models
+## IGT
 ```{r, eval = F}
-model_code = cmdstan_model(here("1_SIGT_PP", "Code", "Stan", "ORL.stan"), compile = F)
-
-model_code$check_syntax(quiet = T)
+IGT$outcome = IGT$outcome1
+IGT_fit = ORL_model$sample(data = IGT,
+                           chains = 4,
+                           parallel_chains = 4,
+                           iter_warmup = 1000,
+                           iter_sampling = 1000,
+                           seed = 43210)
+IGT_fit$save_object(file = here("Data", "2_Fitted", "IGT_fit.RDS"))
 ```
 
 
-
-# Fit Model
-```{r, eval = F}
-# Compile model
-orl_model = stan_model(here("1_SIGT_PP", "Code", "Stan", "ORL.stan"))
-
-
-# Fit model
-orl_fit = sampling(orl_model, 
-                   data   = stan_data[1:8],
-                   iter   = 5000, 
-                   warmup = 1000, 
-                   chains = 4, 
-                   cores  = 4,
-                   seed   = 43210)
-
-
-#save the fitted model as an .rds file
-saveRDS(orl_fit, here("1_SIGT_PP", "Data", "2_Fitted", "ORL", "ORL_fit.rds"))
-```
-
-
-
+## SIGT
+### Outcome 1
 ```{r}
-orl_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "ORL", "ORL_fit.rds"))
-
-iterations = orl_fit@sim$chains * (orl_fit@sim$iter - orl_fit@sim$warmup)
+SIGT$outcome = SIGT$outcome1
+SIGT1_fit = ORL_model$sample(data = SIGT,
+                             chains = 4,
+                             parallel_chains = 4,
+                             iter_warmup = 1000,
+                             iter_sampling = 1000,
+                             seed = 43210)
+SIGT1_fit$save_object(file = here("Data", "2_Fitted", "SIGT1_fit.RDS"))
 ```
 
+
+### Outcome 2
+```{r}
+SIGT$outcome = SIGT$outcome2
+SIGT2_fit = ORL_model$sample(data = SIGT,
+                             chains = 4,
+                             parallel_chains = 4,
+                             iter_warmup = 1000,
+                             iter_sampling = 1000,
+                             seed = 43210)
+SIGT2_fit$save_object(file = here("Data", "2_Fitted", "SIGT2_fit.RDS"))
+```
+
+
+### Outcome 3
+```{r}
+SIGT$outcome = SIGT$outcome3
+SIGT3_fit = ORL_model$sample(data = SIGT,
+                             chains = 4,
+                             parallel_chains = 4,
+                             iter_warmup = 1000,
+                             iter_sampling = 1000,
+                             seed = 43210)
+SIGT3_fit$save_object(file = here("Data", "2_Fitted", "SIGT3_fit.RDS"))
+```
+
+
+### Model Comparison
+```{r}
+SIGT$outcome = SIGT$outcome3
+SIGT3_fit = ORL_model$sample(data = SIGT,
+                             chains = 4,
+                             parallel_chains = 4,
+                             iter_warmup = 1000,
+                             iter_sampling = 1000,
+                             seed = 43210)
+SIGT3_fit$save_object(file = here("Data", "2_Fitted", "SIGT3_fit.RDS"))
+```
 
 
 # -------------------------------------------
