@@ -60,7 +60,7 @@ questionnaire_data = raw_questionnaire_data %>%
          hall_freq = DUFM14_g,       # Hallucinogens
          pcp_freq = DUFM14_h,        # PCP (e.g. angel dust, Ketamine)
          inh_freq = DUFM14_i,        # Inhalants (e.g., nitrous oxide, whippets)
-         other_freq = DUFM14_j,      # Other drugs (Robitussin AC, steroids, sleep pills)
+         other_freq = DUFM14_j       # Other drugs (Robitussin AC, steroids, sleep pills)
          ) %>% 
   mutate(sex = case_when(sex == 1 ~ "male", sex == 2 ~ "female"),
          binge_drinking = case_when(sex == "male" & beer_amt >= 4 ~ 1,

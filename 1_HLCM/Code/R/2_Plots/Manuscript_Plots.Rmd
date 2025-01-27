@@ -403,7 +403,7 @@ dev.off()
 ## Group-Level Growth Parameters
 ```{r}
 tiff(here("1_HLCM", "Figs_Tables", "4 - Percent Group-Level Growth Parameters in HDIs.tiff"),
-     width = 7, height = 15, units = "cm", res = 300)
+     width = 14.6, height = 12, units = "cm", res = 300)
 
   simulations %>% 
     filter(parameter_type == "group") %>%
@@ -414,34 +414,33 @@ tiff(here("1_HLCM", "Figs_Tables", "4 - Percent Group-Level Growth Parameters in
            parameter = factor(parameter, ordered = T,
                               levels = c("intercept", "slope", "int_slope_R", 
                                          "intercept_SD", "slope_SD", "residual_SD")),
-           condition = factor(condition, ordered = T,
-                              levels = conditions, 
-                              labels = c(expression(atop("\u03B3"["10"]*"=-.3","\n\u03c1=-.3")),
-                                         expression(atop("\u03B3"["10"]*"=-.3","\n\u03c1=0")),
-                                         expression(atop("\u03B3"["10"]*"=-.3","\n\u03c1=+.3")),
-                                         
-                                         expression(atop("\u03B3"["10"]*"=0  ","\n\u03c1=-.3")),
-                                         expression(atop("\u03B3"["10"]*"=0  ","\n\u03c1=0")),
-                                         expression(atop("\u03B3"["10"]*"=0  ","\n\u03c1=+.3")),
-                                         
-                                         expression(atop("\u03B3"["10"]*"=+.3","\n\u03c1=-.3")),
-                                         expression(atop("\u03B3"["10"]*"=+.3","\n\u03c1=0")),
-                                         expression(atop("\u03B3"["10"]*"=+.3","\n\u03c1=+.3"))
-                              ))) %>% 
+           gamma10 = factor(condition, levels = c("neg.beta_neg.cor", "neg.beta_neu.cor", "neg.beta_pos.cor",
+                                                  "neu.beta_neg.cor", "neu.beta_neu.cor", "neu.beta_pos.cor",
+                                                  "pos.beta_neg.cor", "pos.beta_neu.cor", "pos.beta_pos.cor"),
+                            labels = c(expression("\u03B3"["10"]*"=-.3"), expression("\u03B3"["10"]*"=-.3"), expression("\u03B3"["10"]*"=-.3"),
+                                       expression("\u03B3"["10"]*"=0"), expression("\u03B3"["10"]*"=0"), expression("\u03B3"["10"]*"=0"),
+                                       expression("\u03B3"["10"]*"=+.3"), expression("\u03B3"["10"]*"=+.3"), expression("\u03B3"["10"]*"=+.3"))),
+           rho = factor(condition, levels = c("neg.beta_neg.cor", "neg.beta_neu.cor", "neg.beta_pos.cor",
+                                              "neu.beta_neg.cor", "neu.beta_neu.cor", "neu.beta_pos.cor",
+                                              "pos.beta_neg.cor", "pos.beta_neu.cor", "pos.beta_pos.cor"),
+                        labels = c(expression("\u03c1"*"=-.3"), expression("\u03c1"*"=0"), expression("\u03c1"*"=+.3"),
+                                   expression("\u03c1"*"=-.3"), expression("\u03c1"*"=0"), expression("\u03c1"*"=+.3"),
+                                   expression("\u03c1"*"=-.3"), expression("\u03c1"*"=0"), expression("\u03c1"*"=+.3")))) %>% 
     ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
       # GEOMS
-      geom_bar(color = "black", linewidth = .75, stat = "identity") +
-      # geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
-      #           vjust = .5, hjust = -.125, size = 2, angle = 90) +
+      geom_bar(color = "black", linewidth = .75, stat = "identity", position = position_dodge(width = .85),
+               width = .75) +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 2.25, angle = 90, position = position_dodge(width = .85)) +
       # SCALES
       scale_x_discrete(labels = parse(text = c("Intercept~(\u03B3[0][0])", "Slope~(\u03B3[1][0])",
                                                "Int-Slope~Cor~(\u03c1)", "Intercept~SD~(\u03c4[0][0])",
                                                "Slope~SD~(\u03c4[1][0])", "Residual~SD~(\u03c3)"))) +
       scale_y_continuous(limits = c(0,100), expand = c(0,0), 
-                         breaks = seq(0, 100, 50), labels = c("0%", "50%", "100%")) +
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
       scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
       # THEMES
-      labs(y = "Percent of HDIs Encompassing True Parameter") +
+      labs(y = "95% Coverage") +
       coord_cartesian(clip = "off") +
       theme_classic() +
       theme(axis.text.x = element_text(color = "black", size = 8, angle = 90, vjust = .5, hjust = 1),
@@ -451,24 +450,24 @@ tiff(here("1_HLCM", "Figs_Tables", "4 - Percent Group-Level Growth Parameters in
             axis.title.y = element_text(size = 12),
             axis.title.x = element_blank(),
             legend.position = "none",
-            plot.margin = unit(c(.1,0, .1, .2), "cm"),
+            plot.margin = unit(c(.5,.10, .1, .2), "cm"),
             panel.spacing.x = unit(.25, "cm"),
-            panel.spacing.y = unit(.375, "cm"),
+            panel.spacing.y = unit(1, "cm"),
+            strip.text.x = element_text(vjust = 7.25),
             strip.text.y = element_text(angle = 0),
             strip.clip = "off",
             strip.background = element_rect(fill = "transparent", colour = "transparent"),
             panel.background = element_rect(fill = "transparent", colour = "transparent"),
             plot.background = element_rect(fill = "transparent", color = "transparent")) +
-      facet_rep_grid(condition~hypermodel, labeller = label_parsed)
+      facet_rep_grid(rho~gamma10, labeller = label_parsed)
 
 dev.off()
 ```
 
-
 ## Person-Level Parameters
 ```{r}
 tiff(here("1_HLCM", "Figs_Tables", "5 - Percent Person-Level Parameters in HDIs.tiff"),
-     width = 7, height = 15, units = "cm", res = 300)
+     width = 14.6, height = 12, units = "cm", res = 300)
 
   simulations %>% 
     filter(parameter_type != "group") %>%
@@ -478,32 +477,32 @@ tiff(here("1_HLCM", "Figs_Tables", "5 - Percent Person-Level Parameters in HDIs.
                                labels = c("Two-Stage", "HLCM"), ordered = T),
            parameter = factor(parameter, ordered = T,
                               levels = c("intercept", "slope", "unbounded_A", "A")),
-           condition = factor(condition, ordered = T,
-                              levels = conditions, 
-                              labels = c(expression(atop("\u03B3"["10"]*"=-.3","\n\u03c1=-.3")),
-                                         expression(atop("\u03B3"["10"]*"=-.3","\n\u03c1=0")),
-                                         expression(atop("\u03B3"["10"]*"=-.3","\n\u03c1=+.3")),
-                                         
-                                         expression(atop("\u03B3"["10"]*"=0  ","\n\u03c1=-.3")),
-                                         expression(atop("\u03B3"["10"]*"=0  ","\n\u03c1=0")),
-                                         expression(atop("\u03B3"["10"]*"=0  ","\n\u03c1=+.3")),
-                                         
-                                         expression(atop("\u03B3"["10"]*"=+.3","\n\u03c1=-.3")),
-                                         expression(atop("\u03B3"["10"]*"=+.3","\n\u03c1=0")),
-                                         expression(atop("\u03B3"["10"]*"=+.3","\n\u03c1=+.3"))
-                              ))) %>% 
+           gamma10 = factor(condition, levels = c("neg.beta_neg.cor", "neg.beta_neu.cor", "neg.beta_pos.cor",
+                                                  "neu.beta_neg.cor", "neu.beta_neu.cor", "neu.beta_pos.cor",
+                                                  "pos.beta_neg.cor", "pos.beta_neu.cor", "pos.beta_pos.cor"),
+                            labels = c(expression("\u03B3"["10"]*"=-.3"), expression("\u03B3"["10"]*"=-.3"), expression("\u03B3"["10"]*"=-.3"),
+                                       expression("\u03B3"["10"]*"=0"), expression("\u03B3"["10"]*"=0"), expression("\u03B3"["10"]*"=0"),
+                                       expression("\u03B3"["10"]*"=+.3"), expression("\u03B3"["10"]*"=+.3"), expression("\u03B3"["10"]*"=+.3"))),
+           rho = factor(condition, levels = c("neg.beta_neg.cor", "neg.beta_neu.cor", "neg.beta_pos.cor",
+                                              "neu.beta_neg.cor", "neu.beta_neu.cor", "neu.beta_pos.cor",
+                                              "pos.beta_neg.cor", "pos.beta_neu.cor", "pos.beta_pos.cor"),
+                        labels = c(expression("\u03c1"*"=-.3"), expression("\u03c1"*"=0"), expression("\u03c1"*"=+.3"),
+                                   expression("\u03c1"*"=-.3"), expression("\u03c1"*"=0"), expression("\u03c1"*"=+.3"),
+                                   expression("\u03c1"*"=-.3"), expression("\u03c1"*"=0"), expression("\u03c1"*"=+.3")))
+                              ) %>% 
     ggplot(aes(x = parameter, y = true_in_HDI95, fill = hypermodel)) +
       # GEOMS
-      geom_bar(color = "black", linewidth = .75, stat = "identity") +
-      # geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
-      #           vjust = .5, hjust = -.125, size = 2, angle = 90) +
+      geom_bar(color = "black", linewidth = .75, stat = "identity", position = position_dodge(width = .85),
+               width = .75) +
+      geom_text(aes(label = paste0(round(true_in_HDI95), "%")),
+                vjust = .5, hjust = -.125, size = 2.25, angle = 90, position = position_dodge(width = .85)) +
       # SCALES
       scale_x_discrete(labels = parse(text = c("Intercept~(\u03B2[0])", "Slope~(\u03B2[1])", "Unbounded~A", "A"))) +
       scale_y_continuous(limits = c(0,100), expand = c(0,0), 
-                         breaks = seq(0, 100, 50), labels = c("0%", "50%", "100%")) +
+                         breaks = seq(0, 100, 25), labels = c("0%", "25%", "50%", "75%", "100%")) +
       scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
       # THEMES
-      labs(y = "Percent of HDIs Encompassing True Parameter") +
+      labs(y = "95% Coverage") +
       coord_cartesian(clip = "off") +
       theme_classic() +
       theme(axis.text.x = element_text(color = "black", size = 8, angle = 90, vjust = .5, hjust = 1),
@@ -513,17 +512,42 @@ tiff(here("1_HLCM", "Figs_Tables", "5 - Percent Person-Level Parameters in HDIs.
             axis.title.y = element_text(size = 12),
             axis.title.x = element_blank(),
             legend.position = "none",
-            plot.margin = unit(c(.1,0, .1, .2), "cm"),
+            plot.margin = unit(c(.5,.10, .1, .2), "cm"),
             panel.spacing.x = unit(.25, "cm"),
-            panel.spacing.y = unit(.375, "cm"),
+            panel.spacing.y = unit(1, "cm"),
+            strip.text.x = element_text(vjust = 7.25),
             strip.text.y = element_text(angle = 0),
             strip.clip = "off",
             strip.background = element_rect(fill = "transparent", colour = "transparent"),
             panel.background = element_rect(fill = "transparent", colour = "transparent"),
             plot.background = element_rect(fill = "transparent", color = "transparent")) +
-      facet_rep_grid(condition~hypermodel, labeller = label_parsed)
+      facet_rep_grid(rho~gamma10, labeller = label_parsed)
 
 dev.off()
+```
+
+
+## MAD
+```{r}
+simulations %>% 
+  mutate(parameter_type = case_when(str_detect(parameter_type, "person") ~ "person", T ~ "group")) %>% 
+  group_by(hypermodel, model, condition, parameter_type, parameter) %>% 
+  reframe(coverage = mean(true_in_HDI95)*100) %>% 
+  mutate(abs_dev = abs(coverage - 95)) %>% 
+  group_by(hypermodel, model, parameter_type, parameter) %>% 
+  reframe(MAD = round(mean(abs_dev), 2)) %>% 
+  pivot_wider(names_from = "hypermodel", values_from = "MAD") %>% 
+  mutate(model_order = case_when(parameter_type == "group" ~ 1, T ~ 2),
+         parameter_order = case_when(parameter == "intercept" ~ 1,
+                                     parameter == "slope" ~ 2,
+                                     parameter == "intercept_SD" ~ 3,
+                                     parameter == "slope_SD" ~ 4,
+                                     parameter == "int_slope_R" ~ 5,
+                                     parameter == "residual_SD" ~ 6,
+                                     parameter == "unbounded_A" ~ 7,
+                                     T ~ 8)) %>% 
+  arrange(model_order, parameter_order) %>% 
+  write.csv(here("1_HLCM", "Figs_Tables", "Coverage_MADs.csv"))
 ```
 
 
@@ -538,13 +562,13 @@ tiff(here("1_HLCM", "Figs_Tables", "S1 - Distribution of All Group-Level Growth 
     mutate(cond_lab = case_when(parameter == "Residual~SD~(\u03c3)" ~ condition)) %>% 
     ggplot(aes(x = percentile, fill = hypermodel)) +
       # GEOMS
-      geom_histogram(color = "black", linewidth = .25, bins = 25) +
+      geom_histogram(color = "black", linewidth = .25, bins = 25, position = "identity", alpha = .5) +
       geom_hline(yintercept = 0) +
-      geom_text(aes(x = .95, y = 30, label = cond_lab), size = 3.5,
+      geom_text(aes(x = .85, y = 30, label = cond_lab), size = 3.5,
                 parse = T, hjust = .35, check_overlap = T) +
       # SCALES
       scale_x_continuous(limits = c(0, 1), breaks = c(0, .5, 1)) +
-      scale_y_continuous(limits = c(0, 40), expand = c(0, 0)) +
+      scale_y_continuous(limits = c(0, 30), expand = c(0, 0)) +
       scale_color_manual(values = c("goldenrod3", "dodgerblue3")) +
       scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
       # THEMES
@@ -602,13 +626,13 @@ tiff(here("1_HLCM", "Figs_Tables", "S2 - Distribution of All Person-Level Growth
            cond_lab = case_when(parameter == "A" ~ condition)) %>% 
     ggplot(aes(x = percentile, fill = hypermodel)) +
       # GEOMS
-      geom_histogram(color = "black", linewidth = .25, bins = 25) +
+      geom_histogram(color = "black", linewidth = .25, bins = 25, position = "identity", alpha = .5) +
       geom_hline(yintercept = 0) +
       geom_text(aes(x = .95, y = 1000, label = cond_lab), size = 3.5,
-                parse = T, hjust = 0, check_overlap = T) +
+                parse = T, hjust = -.25, vjust = 1, check_overlap = T) +
       # SCALES
       scale_x_continuous(limits = c(0, 1), breaks = c(0, .5, 1)) +
-      scale_y_continuous(limits = c(0, 2000), expand = c(0, 0)) +
+      scale_y_continuous(limits = c(0, 1000), expand = c(0, 0)) +
       scale_color_manual(values = c("goldenrod3", "dodgerblue3")) +
       scale_fill_manual(values = c("goldenrod3", "dodgerblue3")) +
       # THEMES
@@ -622,7 +646,7 @@ tiff(here("1_HLCM", "Figs_Tables", "S2 - Distribution of All Person-Level Growth
             legend.title = element_blank(),
             legend.position = c(.5, 1.065),
             legend.direction = "horizontal",
-            plot.margin = unit(c(1, 1, .1, .15), "cm"),
+            plot.margin = unit(c(1, 1.1, .1, .15), "cm"),
             panel.spacing.x = unit(.25, "cm"),
             panel.spacing.y = unit(.35, "cm"),
             strip.text.x = element_text(size = 10, hjust = .25),
