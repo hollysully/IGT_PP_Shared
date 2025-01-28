@@ -92,7 +92,6 @@ SIGT_data = bind_rows(raw_SIGT_AB, raw_SIGT_BD) %>%
          outcome = case_when(is.na(outcome) ~ 0, T ~ outcome / 100),
          
          # OPTION 1 - neutral face outcome = 25% & neutral face sign = 0
-         #          - pass is the only true 0 (i.e., no outcome)
          outcome1 = outcome,
          sign1 = case_when(is.na(winlose) ~ 0, 
                           winlose == "You lose" ~ -1,
@@ -100,7 +99,6 @@ SIGT_data = bind_rows(raw_SIGT_AB, raw_SIGT_BD) %>%
                           winlose == "No change" ~ 0),
          
          # OPTION 2 - neutral face outcome = 0% & neutral face sign = 0
-         #          - pass is the only true 0 (i.e., no outcome)
          outcome2 = outcome - .25,
          sign2 = case_when(is.na(winlose) ~ 0, 
                           winlose == "You lose" ~ -1,

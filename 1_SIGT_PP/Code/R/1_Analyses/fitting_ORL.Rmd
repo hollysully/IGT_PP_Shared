@@ -22,6 +22,7 @@ library(cmdstanr)
 library(stringi)
 library(ggpp)
 library(lemon)
+library(loo)
 ```
 
 
@@ -52,13 +53,13 @@ IGT_fit = ORL_model$sample(data = IGT,
                            iter_warmup = 1000,
                            iter_sampling = 1000,
                            seed = 43210)
-IGT_fit$save_object(file = here("Data", "2_Fitted", "IGT_fit.RDS"))
+IGT_fit$save_object(file = here("1_SIGT_PP", "Data", "2_Fitted", "IGT_fit.RDS"))
 ```
 
 
 ## SIGT
 ### Outcome 1
-```{r}
+```{r, eval = F}
 SIGT$outcome = SIGT$outcome1
 SIGT$sign = SIGT$sign1
 SIGT1_fit = ORL_model$sample(data = SIGT,
@@ -67,12 +68,12 @@ SIGT1_fit = ORL_model$sample(data = SIGT,
                              iter_warmup = 1000,
                              iter_sampling = 1000,
                              seed = 43210)
-SIGT1_fit$save_object(file = here("Data", "2_Fitted", "SIGT1_fit.RDS"))
+SIGT1_fit$save_object(file = here("1_SIGT_PP", "Data", "2_Fitted", "SIGT1_fit.RDS"))
 ```
 
 
 ### Outcome 2
-```{r}
+```{r, eval = F}
 SIGT$outcome = SIGT$outcome2
 SIGT$sign = SIGT$sign2
 SIGT2_fit = ORL_model$sample(data = SIGT,
@@ -81,12 +82,12 @@ SIGT2_fit = ORL_model$sample(data = SIGT,
                              iter_warmup = 1000,
                              iter_sampling = 1000,
                              seed = 43210)
-SIGT2_fit$save_object(file = here("Data", "2_Fitted", "SIGT2_fit.RDS"))
+SIGT2_fit$save_object(file = here("1_SIGT_PP", "Data", "2_Fitted", "SIGT2_fit.RDS"))
 ```
 
 
 ### Outcome 3
-```{r}
+```{r, eval = F}
 SIGT$outcome = SIGT$outcome3
 SIGT$sign = SIGT$sign3
 SIGT3_fit = ORL_model$sample(data = SIGT,
@@ -95,29 +96,34 @@ SIGT3_fit = ORL_model$sample(data = SIGT,
                              iter_warmup = 1000,
                              iter_sampling = 1000,
                              seed = 43210)
-SIGT3_fit$save_object(file = here("Data", "2_Fitted", "SIGT3_fit.RDS"))
+SIGT3_fit$save_object(file = here("1_SIGT_PP", "Data", "2_Fitted", "SIGT3_fit.RDS"))
+```
+
+
+```{r}
+IGT_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "IGT_fit.RDS"))
+SIGT1_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT1_fit.RDS"))
+SIGT2_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT2_fit.RDS"))
+SIGT3_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT3_fit.RDS"))
 ```
 
 
 ### Model Comparison
 ```{r}
-SIGT$outcome = SIGT$outcome3
-SIGT3_fit = ORL_model$sample(data = SIGT,
-                             chains = 4,
-                             parallel_chains = 4,
-                             iter_warmup = 1000,
-                             iter_sampling = 1000,
-                             seed = 43210)
-SIGT3_fit$save_object(file = here("Data", "2_Fitted", "SIGT3_fit.RDS"))
+SIGT1_loo = SIGT1_fit$loo()
+SIGT2_loo = SIGT2_fit$loo()
+SIGT3_loo = SIGT3_fit$loo()
+
+loo_model_weights(list("SIGT 1" = SIGT1_loo, "SIGT 2" = SIGT2_loo, "SIGT 3" = SIGT3_loo))
+
+loo_compare(list("SIGT 1" = SIGT1_loo, "SIGT 2" = SIGT2_loo, "SIGT 3" = SIGT3_loo))
 ```
 
 
 # -------------------------------------------
 # Model Diagnostics
 ```{r, eval = F}
-orl_posteriors <- extract(orl_fit)
-saveRDS(orl_posteriors, here("1_SIGT_PP", "Data", "2_Fitted", 
-                             "ORL", "ORL_posteriors.rds"))
+
 ```
 
 
