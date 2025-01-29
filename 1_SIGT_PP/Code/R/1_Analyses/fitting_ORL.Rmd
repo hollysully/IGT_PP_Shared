@@ -100,30 +100,50 @@ SIGT3_fit$save_object(file = here("1_SIGT_PP", "Data", "2_Fitted", "SIGT3_fit.RD
 ```
 
 
-```{r}
-IGT_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "IGT_fit.RDS"))
-SIGT1_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT1_fit.RDS"))
-SIGT2_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT2_fit.RDS"))
-SIGT3_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT3_fit.RDS"))
+### Compare SIGT Models
+```{r, eval = F}
+loo_compare(list("SIGT 1" = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT1_fit.RDS"))$loo(), 
+                 "SIGT 2" = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT2_fit.RDS"))$loo(),
+                 "SIGT 3" = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT3_fit.RDS"))$loo()))
 ```
 
 
-### Model Comparison
-```{r}
-SIGT1_loo = SIGT1_fit$loo()
-SIGT2_loo = SIGT2_fit$loo()
-SIGT3_loo = SIGT3_fit$loo()
+## IGT-SIGT
+```{r, eval = F}
+IGT_SIGT$outcome = IGT_SIGT$outcome2
+IGT_SIGT$sign = IGT_SIGT$sign2
+IGT_SIGT_fit = ORL_model$sample(data = IGT_SIGT,
+                                chains = 1,
+                                parallel_chains = 4,
+                                iter_warmup = 200,
+                                iter_sampling = 200,
+                                seed = 43210)
+IGT_SIGT_fit$save_object(file = here("1_SIGT_PP", "Data", "2_Fitted", "IGT_SIGT_fit.RDS"))
+```
 
-loo_model_weights(list("SIGT 1" = SIGT1_loo, "SIGT 2" = SIGT2_loo, "SIGT 3" = SIGT3_loo))
 
-loo_compare(list("SIGT 1" = SIGT1_loo, "SIGT 2" = SIGT2_loo, "SIGT 3" = SIGT3_loo))
+## Import Models
+```{r, eval = F}
+IGT_fit      = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "IGT_fit.RDS"))
+SIGT2_fit    = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "SIGT2_fit.RDS"))
+IGT_SIGT_fit = readRDS(here("1_SIGT_PP", "Data", "2_Fitted", "IGT_SIGT_fit.RDS"))
 ```
 
 
 # -------------------------------------------
 # Model Diagnostics
+## IGT-SIGT
 ```{r, eval = F}
+focal_parameters = c("lp__", "mu_p",
+                     "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB",
+                     "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB",
+                     "R_Arew", "R_Apun", "R_betaF", "R_betaB",
+                     "Arew", "Apun", "betaF", "betaB")
 
+mcmc_trace(IGT_SIGT_fit$draws(grep("lp__|mu|sigma|R", focal_parameters, value=TRUE)))
+mcmc_pairs(IGT_SIGT_fit$draws(grep("lp__|mu|sigma|R", focal_parameters, value=TRUE)),
+           size = 1)
+mcmc_rhat_hist(summarise_draws(IGT_SIGT_fit$draws(focal_parameters), "rhat")$rhat)
 ```
 
 
