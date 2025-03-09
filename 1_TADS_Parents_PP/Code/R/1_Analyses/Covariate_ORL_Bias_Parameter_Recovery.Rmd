@@ -17,7 +17,7 @@ library(hBayesDM)
 library(bayesplot)
 library(here)
 library(miscTools)
-library(wBoot)
+# library(wBoot)
 library(cmdstanr)
 library(stringi)
 library(ggpp)
@@ -126,7 +126,7 @@ simulate_orl = function(parameter_values, N, X, custom_seed = 20230928) {
 # -------------------------------------------
 # Set Parameter Values
 ## Load Data & Posteriors
-```{r, eval = T}
+```{r, eval = F}
 # -----------------------------------------------------------------------------------
 # read in posteriors
 orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
@@ -152,7 +152,7 @@ X = og_data$X[sub_keep,,]
 # -------------------------------------------
 # Simulate Parameters
 ## Set Mus
-```{r, eval = T}
+```{r, eval = F}
 mus = data.frame(Arew_beta = apply(orl_posteriors$beta_Arew, 2, mean),
                  Apun_beta = apply(orl_posteriors$beta_Apun, 2, mean),
                  betaF_beta = apply(orl_posteriors$beta_betaF, 2, mean),
@@ -167,7 +167,7 @@ sigmas = data.frame(Arew_sigma = apply(orl_posteriors$sigma_Arew, 2, mean),
 
 
 ## Simulate Person-Level Parameters
-```{r, eval = T}
+```{r, eval = F}
 set.seed(20240530)
 
 parameters = data.frame(Arew_mu = rowSums(t(t(X) * mus[,"Arew_beta"])),
@@ -206,7 +206,7 @@ simulated_parameters = readRDS(here("1_TADS_Parents_PP", "Data",
 # -------------------------------------------
 # Simulate Data
 ## Simulation
-```{r, eval = T}
+```{r, eval = F}
 sim_data = simulate_orl(parameter_values = simulated_parameters,
                         N = nrow(simulated_parameters),
                         X = X,
@@ -228,7 +228,7 @@ sim_data = readRDS(here("1_TADS_Parents_PP", "Data",
 
 
 ## Prep Stan Data
-```{r, eval = T}
+```{r, eval = F}
 IDs = vector()
 N = length(unique(sim_data$ID))
 Trials = max(sim_data$trial)
@@ -275,7 +275,7 @@ stan_data = list(
 
 # -------------------------------------------
 # Fit Model
-```{r, eval = T}
+```{r, eval = F}
 timestamp = list()
 # Compile model
 orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
@@ -312,7 +312,7 @@ sim_orl_fit = readRDS(here("1_TADS_Parents_PP", "Data",
 
 
 
-```{r, eval = T}
+```{r, eval = F}
 sim_orl_posteriors <- extract(sim_orl_fit)
 saveRDS(sim_orl_posteriors,
         here("1_TADS_Parents_PP", "Data",
@@ -340,7 +340,7 @@ sim_orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data",
 
 
 ## Traceplots
-```{r, eval = T}
+```{r, eval = F}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           "Covariate_Joint_ORL_Bias", "T1_parent_Anx_Dep_SUD_Female",
           "Supplement_0 Group Traceplots.tiff"),
@@ -389,12 +389,9 @@ PR_correlations = data.frame()
 for(p in c("Arew", "Apun", "betaF", "betaB")){
   cur_data = filter(combined_parameters,
                     parameter == p)
-  cur_cor = boot.cor.bca(
-    x = cur_data$actual, y = cur_data$recovered,
-    alternative = c("two.sided", "less", "greater"),
-    null.hyp = NULL, conf.level = 0.95, type = NULL, R = 9999)
+  cur_cor = cor(x = cur_data$actual, y = cur_data$recovered)
   PR_correlations = data.frame(parameter = p,
-                               estimate = cur_cor$Observed) %>% 
+                               estimate = cur_cor) %>% 
     bind_rows(PR_correlations)
 }
 PR_correlations = PR_correlations %>% 
@@ -572,7 +569,7 @@ orl_diag_parameters = data.frame(
                                    str_detect(orl_par, "_beta") ~ "beta"),
          orl_parameter = str_remove(orl_par, "_mu|_beta")) %>% 
   dplyr::select(-orl_par) %>% 
-  mutate(group = case_when(group == 0 & grp_parameter == "mu" ~ "Con",
+  mutate(group = case_when(group == 0 & grp_parameter == "mu" ~ "HC",
                            group == 1 & grp_parameter == "mu" ~ "Anx",
                            group == 2 & grp_parameter == "mu" ~ "Dep",
                            group == 3 & grp_parameter == "mu" ~ "SUD",
@@ -583,70 +580,116 @@ orl_diag_parameters = data.frame(
                                 levels = c("Arew", "Apun", "betaF", "betaB")),
          grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
                          labels = c("Mu", "Beta")),
-         group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"),
+         group = factor(group, levels = c("HC", "Anx", "Dep", "SUD"),
                         ordered = T))
 
+
+# -------------------------------------------
+# SAVE DATA
+orl_diag_parameters %>% 
+  group_by(group, grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2],
+            sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% ungroup() %>% 
+  mutate(sig = case_when(grp_parameter == "Mu" ~ "", T ~ sig),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper, 2),
+         combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>% 
+  dplyr::select(-c(mu, lower, upper, sig)) %>% 
+  pivot_wider(names_from = "group", values_from = "combined") %>% 
+  mutate(order_grp = case_when(grp_parameter == "Mu" ~ 1, T ~ 2),
+         order_orl = match(orl_parameter, c("Arew", "Apun", "betaF", "betaB")[1:4])) %>% 
+  arrange(order_orl, order_grp) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
+               model_name, sample,
+               "Diag_Descriptives.csv"))
+
+
+# -------------------------------------------
+# BUILD PLOT
+summary_data = orl_diag_parameters %>% 
+  group_by(group, grp_parameter, orl_parameter) %>% 
+  reframe(mu    = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2],
+         height_ci = max(density(estimate)$y)) %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  mutate(height_ci = max(height_ci),
+         height_ci = case_when(group == "HC"  ~ height_ci*1.225,
+                               group == "Anx" ~ height_ci*1.175,
+                               group == "Dep" ~ height_ci*1.125,
+                               group == "SUD" ~ height_ci*1.075),
+         xint  = case_when(grp_parameter == "Beta" ~ 0))
+
+
+orl_lab = data.frame(
+  grp_parameter = factor(c("mu"), levels = c("mu", "beta"), ordered = T,
+                         labels = c("Mu", "Beta")),
+  orl_parameter = factor(c("Arew", "Apun", "betaF", "betaB"), ordered = T),
+  lab_ = factor(c("Arew", "Apun", "betaF", "betaB"), ordered = T,
+                levels = c("Arew", "Apun", "betaF", "betaB"),
+                labels = c(expression("A+"),
+                           expression("A-"),
+                           expression("\u03B2f"),
+                           expression("\u03B2b"))))
 
 # -------------------------------------------
 # BUILD PLOT
 tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
           "T1_parent_Anx_Dep_SUD_Female", "Figure S4 - Diag Parameter Recovery.tiff"),
-     width = 7, height = 10, units = "cm", res = 300)
+     width = 7, height = 9, units = "cm", res = 300)
   # PLOT
   orl_diag_parameters %>% 
-      ggplot(aes(x = estimate, fill = group)) +
-        # geoms
-        geom_text_npc(data = horizontal_lab, aes(label = lab_),
-                      npcx = "left", npcy = "top", size = 5, vjust = 1) +
-        geom_density(alpha = .5, linewidth = .25) +
-        geom_hline(yintercept = 0) +
-        # scales
-        scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
-        scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
-                           limits = c("Con", "Anx", "Dep", "SUD")) +
-        scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
-                          limits = c("Con", "Anx", "Dep", "SUD")) +
-        # themes
-        labs(x = "Estimate") +
-        coord_cartesian(clip = "off") +
-        theme_classic() +
-        theme(#axis elements
-              axis.text.x = element_text(color = "black", size = 12),
-              axis.ticks.x = element_line(color = "black"),
-              axis.text.y = element_blank(),
-              axis.ticks.y = element_blank(),
-              axis.line.y = element_blank(),
-              axis.title.x = element_text(size = 16),
-              axis.title.y = element_blank(),
-              # legend elements
-              legend.title = element_text(size = 12),
-              legend.background = element_rect(fill = "white", colour = "white"),
-              legend.position = c(.49, 1.05), 
-              legend.spacing.x = unit(.05, 'cm'),
-              legend.spacing.y = unit(-.25, 'cm'),
-              legend.text = element_text(size = 12),
-              legend.direction = "horizontal",
-              legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
-              legend.key.size = unit(.5, "cm"),
-              # plot elements
-              plot.margin = unit(c(t = .75, r = .25, b = 0, l = .25), "cm"),
-              panel.spacing.x = unit(.75, "cm"),
-              panel.spacing.y = unit(.1, "cm"),
-              strip.text = element_blank(),
-              strip.background = element_rect(fill = "transparent", colour = "transparent"),
-              panel.background = element_rect(fill = "transparent", colour = "transparent"),
-              plot.background = element_rect(fill = "transparent", color = "transparent")) +
-        facet_rep_wrap(orl_parameter~grp_parameter, nrow = 4, ncol = 2,
-                       scales = "free") +
-        facetted_pos_scales(x = x_scaling) +
-        guides(fill = guide_legend(title = "Group: ", nrow = 1))
-  # TEXT
-  grid.text(c(expression(paste(italic(A),"+",sep="")),
-              expression(paste(italic(A),"-",sep="")),
-              expression(paste("\u03B2",italic(f),sep="")),
-              expression(paste("\u03B2",italic(b),sep=""))),
-            x = rep(.95, 4), y = c(.895, .68, .455, .24),
-            gp = gpar(fontsize = 14))
+    ggplot(aes(x = estimate, fill = group)) +
+      # geoms
+      geom_text_npc(data = orl_lab, aes(label = lab_), fontface = "italic",
+                    npcx = "left", npcy = .75, size = 4, vjust = 1, hjust = 0) +
+      geom_density(alpha = .5, linewidth = .25) +
+      geom_hline(yintercept = 0) +
+      geom_vline(data = summary_data, aes(xintercept = xint), linetype = "dashed") +
+      geom_pointrange(data = summary_data, aes(x = mu, y = height_ci, xmin = lower, xmax = upper,
+                          color = group), show.legend = F, fatten = 1.5) +
+      # scales
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+      scale_color_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                         limits = c("HC", "Anx", "Dep", "SUD")) +
+      scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
+                        limits = c("HC", "Anx", "Dep", "SUD")) +
+      # themes
+      labs(x = "Estimate", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(#axis elements
+            axis.text.x = element_text(color = "black", size = 11),
+            axis.ticks.x = element_line(color = "black"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.title = element_text(size = 14),
+            # legend elements
+            legend.title = element_text(size = 11),
+            legend.background = element_rect(fill = "white", colour = "white"),
+            legend.position = "none", 
+            # legend.position = c(.5, 1.05), 
+            legend.spacing.x = unit(.05, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 11),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.5, "cm"),
+            # plot elements
+            plot.margin = unit(c(t = .25, r = .25, b = 0, l = .25), "cm"),
+            panel.spacing.x = unit(.6, "cm"),
+            panel.spacing.y = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(orl_parameter~grp_parameter, nrow = 4, ncol = 2,
+                     scales = "free") +
+      facetted_pos_scales(x = x_scaling) +
+      guides(fill = guide_legend(title = "Group: ", nrow = 2))
 dev.off()
 ```
 
@@ -679,30 +722,65 @@ orl_sex_parameters = data.frame(
                                 levels = c("Arew", "Apun", "betaF", "betaB")),
          grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
                                 labels = c("Mu", "Beta")),
-         sex = factor(sex, levels = c("male", "female"), labels = c("Men", "Women"),
+         sex = factor(sex, levels = c("male", "female"), labels = c("Male", "Female"),
                       ordered = T))
 
 
 # -------------------------------------------
+# SAVE DATA
+orl_sex_parameters %>% 
+  group_by(sex, grp_parameter, orl_parameter) %>% 
+  summarise(mu = mean(estimate),
+            lower = HDIofMCMC(estimate)[1],
+            upper = HDIofMCMC(estimate)[2],
+            sig = case_when(lower < 0 & upper < 0 ~ "*", lower > 0 & upper > 0 ~ "*",
+                            T ~ "")) %>% ungroup() %>% 
+  mutate(sig = case_when(grp_parameter == "Mu" ~ "", T ~ sig),
+         mu = round(mu, 2), lower = round(lower, 2), upper = round(upper, 2),
+         combined = paste0(mu, " [", lower, ",", upper, "]", sig)) %>% 
+  dplyr::select(-c(mu, lower, upper, sig)) %>% 
+  pivot_wider(names_from = "sex", values_from = "combined") %>% 
+  mutate(order_grp = case_when(grp_parameter == "Mu" ~ 1, T ~ 2),
+         order_orl = match(orl_parameter, c("Arew", "Apun", "betaF", "betaB")[1:4])) %>% 
+  arrange(order_orl, order_grp) %>% 
+  write.csv(here("1_TADS_Parents_PP", "Figs_Tables",
+               model_name, sample,
+               "Sex_Descriptives.csv"))
+
+
+# -------------------------------------------
 # BUILD PLOT
+summary_data = orl_sex_parameters %>% 
+  group_by(sex, grp_parameter, orl_parameter) %>% 
+  reframe(mu    = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2],
+          height_ci = max(density(estimate)$y)) %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  mutate(height_ci = max(height_ci),
+         height_ci = case_when(sex == "Male"  ~ height_ci*1.225,
+                               sex == "Female" ~ height_ci*1.175),
+         xint  = case_when(grp_parameter == "Beta" ~ 0))
+
 tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
           "T1_parent_Anx_Dep_SUD_Female", 
           "Figure S5 - Sex-Diff Parameter Recovery.tiff"),
-     width = 7, height = 10, units = "cm", res = 300)
+     width = 7, height = 9, units = "cm", res = 300)
   # PLOT
   orl_sex_parameters %>% 
     ggplot(aes(x = estimate, fill = sex)) +
       # geoms
-      geom_text_npc(data = horizontal_lab, aes(label = lab_),
-                    npcx = "left", npcy = "top", size = 4, vjust = 1) +
       geom_density(alpha = .5, linewidth = .25) +
       geom_hline(yintercept = 0) +
+      geom_vline(data = summary_data, aes(xintercept = xint), linetype = "dashed") +
+      geom_pointrange(data = summary_data, aes(x = mu, y = height_ci, xmin = lower, xmax = upper,
+                                               color = sex), show.legend = F, fatten = 1.5) +
       # scales
       scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
-      scale_color_manual(values = c("black", "gray90"),
-                         limits = c("Men", "Women")) +
-      scale_fill_manual(values = c("black", "gray90"),
-                        limits = c("Men", "Women")) +
+      scale_color_manual(values = c("black", "gray75"),
+                         limits = c("Male", "Female")) +
+      scale_fill_manual(values = c("black", "gray75"),
+                        limits = c("Male", "Female")) +
       # themes
       labs(x = "Estimate", y = "Density") +
       coord_cartesian(clip = "off") +
@@ -717,7 +795,8 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
             # legend elements
             legend.title = element_text(size = 11),
             legend.background = element_rect(fill = "white", colour = "white"),
-            legend.position = c(.5, 1.05), 
+            legend.position = "none", 
+            # legend.position = c(.5, 1.05), 
             legend.spacing.x = unit(.05, 'cm'),
             legend.spacing.y = unit(-.25, 'cm'),
             legend.text = element_text(size = 11),
@@ -725,7 +804,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables", "Covariate_Joint_ORL_Bias",
             legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
             legend.key.size = unit(.5, "cm"),
             # plot elements
-            plot.margin = unit(c(t = .75, r = .2, b = 0, l = .1), "cm"),
+            plot.margin = unit(c(t = .25, r = .25, b = 0, l = .25), "cm"),
             panel.spacing.x = unit(.6, "cm"),
             panel.spacing.y = unit(.1, "cm"),
             strip.text = element_blank(),

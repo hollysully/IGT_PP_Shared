@@ -31,10 +31,8 @@ library(ggh4x)
 
 ## RMD Setup
 ```{r}
-# groups = c("Anx", "Dep", "SUD")
 groups = c("Female", "Anx", "Dep", "SUD")
 model_name = "Covariate_Joint_ORL_Bias"
-# sample = "T1_parent_Anx_Dep_SUD"
 sample = "T1_parent_Anx_Dep_SUD_Female"
 
 
@@ -145,7 +143,7 @@ x_scaling = list(grp_parameter == "Mu" & orl_parameter == "Arew" ~
 # -------------------------------------------
 # Model Diagnostics
 ## Traceplots
-```{r, eval = F}
+```{r, eval = T}
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, 
           sample,
@@ -172,11 +170,10 @@ for(i in person_parameters){
 ```
 
 
-
 # -------------------------------------------
 # Calculate Posterior Predictions
 ## Group-Level PPCs
-```{r, eval = F}
+```{r, eval = T}
 source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 
@@ -211,7 +208,7 @@ for(g in names(g_indices)){
 
 
 ## Person-Level PPCs
-```{r, eval = F}
+```{r, eval = T}
 ind_PPCs = data.frame(ID = stan_data$ID_participant,
                       deck = stan_data$card,
                       choice = ifelse(stan_data$choice == 1, 1, 0),
@@ -238,7 +235,6 @@ ind_PPCs = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
 ```
 
 
-
 # -------------------------------------------
 # Diagnosis Counts
 ```{r}
@@ -258,7 +254,8 @@ data.frame(diag = stan_data$X[,2:4,]) %>%
 # Table 2: ORL Summary Stats
 ```{r}
 # PROCESS POSTERIORS
-processed_posteriors = data.frame(iteration = 1:((orl_fit@sim$iter - orl_fit@sim$warmup) * orl_fit@sim$chains),
+processed_posteriors = data.frame(iteration = 1:((orl_fit@sim$iter - orl_fit@sim$warmup) *
+                                                   orl_fit@sim$chains),
            Arew = orl_posteriors$beta_Arew,
            Apun = orl_posteriors$beta_Apun,
            betaF = orl_posteriors$beta_betaF,
@@ -303,7 +300,7 @@ processed_posteriors %>%
 
 # -------------------------------------------
 # Figure 1: Diag PPC Plots
-```{r, eval = F}
+```{r, eval = T}
 # -------------------------------------------
 # PREP DATA
 diag_PPCs = 
@@ -324,7 +321,8 @@ diag_PPCs =
               lower50 = mean(lower50), upper50 = mean(upper50),
               lower95 = mean(lower95), upper95 = mean(upper95)) %>%
     ungroup() %>% 
-    mutate(group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"), ordered = T))
+    mutate(group = factor(group, levels = c("Con", "Anx", "Dep", "SUD"), 
+                          labels = c("HC", "Anx", "Dep", "SUD"), ordered = T))
 
 
 # -------------------------------------------
@@ -372,8 +370,8 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             plot.margin = margin(t = .75, r = .3, unit = 'cm'),
             strip.text = element_blank(),
             strip.background = element_blank(),
-            panel.spacing.x = unit(-.5,"lines"),
-            panel.spacing.y = unit(0.075,"lines")
+            panel.spacing.x = unit(.25,"cm"),
+            panel.spacing.y = unit(.25,"cm")
             ) +
       guides(color = guide_legend(override.aes = list(size = 2.25), nrow = 1)) +
       facet_rep_wrap(.~group, nrow = 2)
@@ -384,7 +382,7 @@ dev.off()
 
 # -------------------------------------------
 # Figure 2: Diag Posterior Plots
-```{r, eval = F}
+```{r, eval = T}
 # -------------------------------------------
 # ORGANIZE DATA
 orl_diag_parameters = data.frame(
@@ -498,7 +496,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
       scale_fill_manual(values = c("black", "#E01818", "#2184DA", "#FFC107"),
                         limits = c("HC", "Anx", "Dep", "SUD")) +
       # themes
-      labs(x = "Estimate") +
+      labs(x = "Estimate", y = "Density") +
       coord_cartesian(clip = "off") +
       theme_classic() +
       theme(#axis elements
@@ -507,22 +505,21 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             axis.text.y = element_blank(),
             axis.ticks.y = element_blank(),
             axis.line.y = element_blank(),
-            axis.title.x = element_text(size = 13),
-            axis.title.y = element_blank(),
+            axis.title = element_text(size = 14),
             # legend elements
-            legend.title = element_text(size = 10),
+            legend.title = element_text(size = 11),
             legend.background = element_rect(fill = "white", colour = "white"),
-            # legend.position = "none", 
-            legend.position = "top", 
+            legend.position = "none", 
+            # legend.position = c(.5, 1.05), 
             legend.spacing.x = unit(.05, 'cm'),
             legend.spacing.y = unit(-.25, 'cm'),
-            legend.text = element_text(size = 12),
+            legend.text = element_text(size = 11),
             legend.direction = "horizontal",
             legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
             legend.key.size = unit(.5, "cm"),
             # plot elements
             plot.margin = unit(c(t = .25, r = .25, b = 0, l = .25), "cm"),
-            panel.spacing.x = unit(.75, "cm"),
+            panel.spacing.x = unit(.6, "cm"),
             panel.spacing.y = unit(.1, "cm"),
             strip.text = element_blank(),
             strip.background = element_rect(fill = "transparent", colour = "transparent"),
@@ -539,7 +536,7 @@ dev.off()
 
 # -------------------------------------------
 # Figure 3: Sex PPC Plots
-```{r, eval = F}
+```{r, eval = T}
 # -------------------------------------------
 # PREP DATA
 sex_PPCs = 
@@ -555,7 +552,7 @@ sex_PPCs =
               lower95 = mean(lower95), upper95 = mean(upper95)) %>%
     ungroup() %>% 
     mutate(group = factor(group, levels = c("Male", "Female"),
-                          labels = c("Men", "Women"), ordered = T))
+                          labels = c("Male", "Female"), ordered = T))
 
 
 # -------------------------------------------
@@ -603,8 +600,8 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             plot.margin = margin(t = .75, r = .3, unit = 'cm'),
             strip.text = element_blank(),
             strip.background = element_blank(),
-            panel.spacing.x = unit(-.5,"lines"),
-            panel.spacing.y = unit(0.075,"lines")
+            panel.spacing.x = unit(.25,"cm"),
+            panel.spacing.y = unit(.25,"cm")
             ) +
       guides(color = guide_legend(override.aes = list(size = 2.25), nrow = 1)) +
       facet_rep_wrap(.~group, nrow = 2)
@@ -615,7 +612,7 @@ dev.off()
 
 # -------------------------------------------
 # Figure 4: Sex Posterior Plots
-```{r, eval = F}
+```{r, eval = T}
 # ORGANIZE DATA
 orl_sex_parameters = data.frame(
   iteration = 1:((orl_fit@sim$iter -
@@ -642,7 +639,7 @@ orl_sex_parameters = data.frame(
                                 levels = c("Arew", "Apun", "betaF", "betaB")),
          grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
                                 labels = c("Mu", "Beta")),
-         sex = factor(sex, levels = c("male", "female"), labels = c("Men", "Women"),
+         sex = factor(sex, levels = c("male", "female"), labels = c("Male", "Female"),
                       ordered = T))
 
 
@@ -670,23 +667,36 @@ orl_sex_parameters %>%
 
 # -------------------------------------------
 # BUILD PLOT
+summary_data = orl_sex_parameters %>% 
+  group_by(sex, grp_parameter, orl_parameter) %>% 
+  reframe(mu    = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2],
+          height_ci = max(density(estimate)$y)) %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  mutate(height_ci = max(height_ci),
+         height_ci = case_when(sex == "Male"  ~ height_ci*1.225,
+                               sex == "Female" ~ height_ci*1.175),
+         xint  = case_when(grp_parameter == "Beta" ~ 0))
+
 tiff(here("1_TADS_Parents_PP", "Figs_Tables",
           model_name, sample, "Figure 4 - Sex Posterior Distributions.tiff"),
-     width = 7, height = 10, units = "cm", res = 300)
+     width = 7, height = 9, units = "cm", res = 300)
   # PLOT
   orl_sex_parameters %>% 
     ggplot(aes(x = estimate, fill = sex)) +
       # geoms
-      geom_text_npc(data = horizontal_lab, aes(label = lab_),
-                    npcx = "left", npcy = "top", size = 4, vjust = 1) +
       geom_density(alpha = .5, linewidth = .25) +
       geom_hline(yintercept = 0) +
+      geom_vline(data = summary_data, aes(xintercept = xint), linetype = "dashed") +
+      geom_pointrange(data = summary_data, aes(x = mu, y = height_ci, xmin = lower, xmax = upper,
+                                               color = sex), show.legend = F, fatten = 1.5) +
       # scales
       scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
-      scale_color_manual(values = c("black", "gray90"),
-                         limits = c("Men", "Women")) +
-      scale_fill_manual(values = c("black", "gray90"),
-                        limits = c("Men", "Women")) +
+      scale_color_manual(values = c("black", "gray75"),
+                         limits = c("Male", "Female")) +
+      scale_fill_manual(values = c("black", "gray75"),
+                        limits = c("Male", "Female")) +
       # themes
       labs(x = "Estimate", y = "Density") +
       coord_cartesian(clip = "off") +
@@ -701,7 +711,8 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             # legend elements
             legend.title = element_text(size = 11),
             legend.background = element_rect(fill = "white", colour = "white"),
-            legend.position = c(.5, 1.05), 
+            legend.position = "none", 
+            # legend.position = c(.5, 1.05), 
             legend.spacing.x = unit(.05, 'cm'),
             legend.spacing.y = unit(-.25, 'cm'),
             legend.text = element_text(size = 11),
@@ -709,7 +720,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
             legend.key.size = unit(.5, "cm"),
             # plot elements
-            plot.margin = unit(c(t = .75, r = .2, b = 0, l = .1), "cm"),
+            plot.margin = unit(c(t = .25, r = .25, b = 0, l = .25), "cm"),
             panel.spacing.x = unit(.6, "cm"),
             panel.spacing.y = unit(.1, "cm"),
             strip.text = element_blank(),
@@ -734,7 +745,7 @@ dev.off()
 
 # -------------------------------------------
 # Figure S1: Differences w/Anxiety
-```{r, eval = F}
+```{r, eval = T}
 # -------------------------------------------
 # CALCULATE PARAMETER DIFFERENCES
 ind_parameters = data.frame(
@@ -865,6 +876,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             plot.margin = margin(t = .25, r = .1, unit = 'cm'),
             strip.text = element_blank(),
             panel.spacing.x = unit(1,"lines"),
+            panel.spacing.y = unit(1,"lines"),
             strip.background = element_blank()
             ) +
       guides(color = guide_legend(override.aes = list(size = 2.5))) +
@@ -886,7 +898,7 @@ dev.off()
 # -------------------------------------------
 # Figure S2: Sex-Differences
 ## Prep Data
-```{r, eval = F}
+```{r, eval = T}
 # -------------------------------------------
 # SETUP FOR DATA
 card_indices = data.frame(A = stan_data$card[1,,] == 1,
@@ -934,7 +946,7 @@ saveRDS(session_wide_data,
 
 
 ## Build Plot
-```{r, eval = F}
+```{r, eval = T}
 # -------------------------------------------
 # LOAD DATA
 session_wide_data = readRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
@@ -958,9 +970,9 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
                  show.legend = F, stroke = .75,
                  position = position_dodge(width = .75)) +
       scale_color_manual(values = c("gray60", "black"),
-                         labels = c("male" = "Men", "female" = "Women")) +
+                         labels = c("male" = "Male", "female" = "Female")) +
       scale_fill_manual(values = c("gray60", "black"),
-                        labels = c("male" = "Men", "female" = "Women")) +
+                        labels = c("male" = "Male", "female" = "Female")) +
       scale_y_continuous(limits = c(0, 1), expand = c(0, 0), breaks = seq(0, 1, .25)) +
       labs(x = "Deck", y = "Proportion Play") +
       coord_cartesian(clip = "off") +
@@ -983,7 +995,7 @@ dev.off()
 # -------------------------------------------
 # Correlations with BIS/BAS
 ## Calculate Cors
-```{r, eval = F}
+```{r, eval = T}
 ORL_BIS_BAS = data.frame()
 
 for(p in c("Arew", "Apun", "betaF", "betaB")) {
