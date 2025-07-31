@@ -10,6 +10,9 @@
 *.txt
 *.rds
 *.exe
+*.xml
+*.xlsx
+*.png
 
 *.pptx
 *.docx
