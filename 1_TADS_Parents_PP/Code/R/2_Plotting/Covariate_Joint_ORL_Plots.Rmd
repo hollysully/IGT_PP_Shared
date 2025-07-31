@@ -173,7 +173,7 @@ for(i in person_parameters){
 # -------------------------------------------
 # Calculate Posterior Predictions
 ## Group-Level PPCs
-```{r, eval = T}
+```{r, eval = F}
 source(here("1_TADS_Parents_PP", "Code", "R", "3_other", "helpful_functions.R"))
 
 
@@ -208,7 +208,7 @@ for(g in names(g_indices)){
 
 
 ## Person-Level PPCs
-```{r, eval = T}
+```{r, eval = F}
 ind_PPCs = data.frame(ID = stan_data$ID_participant,
                       deck = stan_data$card,
                       choice = ifelse(stan_data$choice == 1, 1, 0),
@@ -508,7 +508,8 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             axis.title = element_text(size = 14),
             # legend elements
             legend.title = element_text(size = 11),
-            legend.background = element_rect(fill = "white", colour = "white"),
+            legend.background = element_rect(fill = "transparent",
+                                             colour = "transparent"),
             legend.position = "none", 
             # legend.position = c(.5, 1.05), 
             legend.spacing.x = unit(.05, 'cm'),
@@ -785,7 +786,7 @@ ind_parameters = data.frame(
 # -------------------------------------------
 # SUBSET DATA
 con_index = ind_parameters %>% 
-  filter(con == 0) %>%
+  filter(anx == 0) %>%
   filter(parameter == "Apun") %>%
   group_by(ID) %>% 
   summarise(abx_z = abs(z)) %>% 
@@ -850,6 +851,9 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
       geom_text_npc(data = data.frame(comparison = 1, deck = "B", lab_ = "Deck B"),
                     aes(npcx = "left", npcy = "top", label = lab_),
                     size = 5, hjust = 0, vjust = .75) +
+      geom_text_npc(data = data.frame(comparison = 1, deck = "D", lab_ = "Deck D"),
+                    aes(npcx = "left", npcy = "top", label = lab_),
+                    size = 5, hjust = 0, vjust = .75) +
       geom_ribbon(aes(ymin = lower95, ymax = upper95, fill = group), color = "transparent",
                   alpha = .2) +
       geom_ribbon(aes(ymin = lower50, ymax = upper50, fill = group), color = "transparent",
@@ -876,7 +880,7 @@ tiff(here("1_TADS_Parents_PP", "Figs_Tables",
             plot.margin = margin(t = .25, r = .1, unit = 'cm'),
             strip.text = element_blank(),
             panel.spacing.x = unit(1,"lines"),
-            panel.spacing.y = unit(1,"lines"),
+            panel.spacing.y = unit(.25,"lines"),
             strip.background = element_blank()
             ) +
       guides(color = guide_legend(override.aes = list(size = 2.5))) +
@@ -1006,13 +1010,14 @@ for(p in c("Arew", "Apun", "betaF", "betaB")) {
       left_join(bis_bas) %>% 
       filter(!is.na(bas_drive))
     
-    ORL_BIS_BAS = data.frame(iteration = i,
-                             parameter = p,
-                             bas_drive = cor(cur_data$estimate, cur_data$bas_drive),
-                             bas_fun = cor(cur_data$estimate, cur_data$bas_fun),
-                             bas_rew = cor(cur_data$estimate, cur_data$bas_rew),
-                             bas_tot = cor(cur_data$estimate, cur_data$bas_tot),
-                             bis = cor(cur_data$estimate, cur_data$bis)) %>% 
+    ORL_BIS_BAS = data.frame(
+      iteration = i,
+      parameter = p,
+      bas_drive = cor(cur_data$estimate, cur_data$bas_drive),
+      bas_fun = cor(cur_data$estimate, cur_data$bas_fun),
+      bas_rew = cor(cur_data$estimate, cur_data$bas_rew),
+      bas_tot = cor(cur_data$estimate, cur_data$bas_tot),
+      bis = cor(cur_data$estimate, cur_data$bis)) %>% 
       bind_rows(ORL_BIS_BAS)
   }
 }
@@ -1091,22 +1096,47 @@ included %>%
 
 included %>% 
   group_by(gender) %>% 
-  summarise(n(),
-            n()/286*100)
+  summarise(count = n(),
+            percent = n()/nrow(included)*100)
 
 included %>% 
   group_by(race) %>% 
-  summarise(n(),
-            n()/286*100)
+  summarise(count = n(),
+            percent = n()/nrow(included)*100)
 
 included %>% 
   group_by(ethnicity) %>% 
-  summarise(n(),
-            n()/286*100)
+  summarise(count = n(),
+            percent = n()/nrow(included)*100)
 ```
 
 
+```{r}
+choice_data = 
+  data.frame(ID = stan_data$ID_participant,
+             depression = stan_data$X[,3,],
+             card = stan_data$card,
+             choice = stan_data$choice) %>% 
+  pivot_longer(starts_with(c("card", "choice")),
+               values_to = "value",
+               names_to = c("variable", "trial"),
+               names_sep = "\\.",
+               names_transform = list(trial = as.numeric)) %>% 
+  pivot_wider(names_from = "variable", values_from = "value") %>% 
+  mutate(card = case_when(card == 1 ~ "A", card == 2 ~ "B",
+                          card == 3 ~ "C", card == 4 ~ "D"),
+         choice = case_when(choice == 1 ~ 1, T ~ 0),
+         depression = case_when(depression == 1 ~ "Depression",
+                                T ~ "No Depression"))
+choice_data %>% 
+  group_by(ID, depression) %>% 
+  reframe(passes = mean(choice == 0)) %>% 
+  group_by(depression) %>% 
+  reframe(passes = mean(passes))
+```
 
+# -------------------------------------------
+# RESPONSE TO REVIEWS
 # -------------------------------------------
 # Comorbidities
 ```{r}
@@ -1124,4 +1154,355 @@ data.frame(stan_data$X[,2:4,1]) %>%
 ```
 
 
+
 # -------------------------------------------
+# Mother-Father Pairs
+## Identify Pairs
+```{r}
+pair_IDs = data.frame(ID_participant = stan_data$ID_participant,
+                      ID_OG = stan_data$ID_OG,
+                      anxiety = stan_data$X[,2,]) %>% 
+  group_by(ID_OG) %>% 
+  reframe(anx = mean(anxiety), participants = n()) %>%
+  filter(participants == 2) %>% .$ID_OG
+```
+
+
+## Correlation b/w Pairs
+```{r}
+# CALCULATE APUN FOR INDIVIDUAL PARTICIPANTS
+person_Apuns = data.frame(ID = stan_data$ID_OG,
+                          participant = stan_data$participant_number,
+                          Apun = apply(orl_posteriors$Apun, 2, mean))
+# SUBSET PAIRS OF APUN
+pair_Apuns = person_Apuns %>% 
+  filter(ID %in% pair_IDs) %>% 
+  mutate(participant = case_when(participant == 2 ~ "dad", T ~ "mom")) %>% 
+  pivot_wider(names_from = "participant", values_from = "Apun")
+# EXAMINE CORRELATIONS BETWEEN APUNS
+cor.test(qnorm(pair_Apuns$dad), qnorm(pair_Apuns$mom), method = "pearson")
+```
+
+
+## Sensitivity Analysis for Anxiety
+```{r}
+pairs_sensitivity_posteriors = readRDS(
+  here("1_TADS_Parents_PP", "Data", "2_Fitted",
+       "Covariate_Joint_ORL_Bias",
+       "T1_parent_Pairs_Sensitivity_Covariate_Joint_ORL_Bias_posteriors.rds"))
+
+data.frame(Arew = ORL_posteriors$beta_Arew[,2],
+           Apun = ORL_posteriors$beta_Apun[,2],
+           betaF = ORL_posteriors$beta_betaF[,2],
+           betaB = ORL_posteriors$beta_betaB[,2]) %>% 
+  pivot_longer(everything(), names_to = "parameter",
+               values_to = "estimate") %>% 
+  group_by(parameter) %>% 
+  reframe(mu = round(mean(estimate), 2),
+          lower = round(HDIofMCMC(estimate)[1], 3),
+          upper = round(HDIofMCMC(estimate)[2], 3))
+```
+
+
+
+# -------------------------------------------
+# Behavioral Results
+## Prep Data
+```{r}
+behavior = data.frame(ID = stan_data$ID_participant,
+                      Apun = apply(orl_posteriors$Apun, 2, mean),
+                      anx = stan_data$X[,2,],
+                      dep = stan_data$X[,3,],
+                      sud = stan_data$X[,4,],
+                      deck = stan_data$card,
+                      sign = stan_data$sign,
+                      outcome = stan_data$outcome,
+                      choice = ifelse(stan_data$choice == 1, 1, 0)) %>% 
+  pivot_longer(c(starts_with("deck"), starts_with("choice"),
+                 starts_with("sign"), starts_with("outcome")),
+               names_to = c("dv", "trial"), names_sep = "\\.", values_to = "value",
+               names_transform = list(trial = as.numeric)) %>% 
+  pivot_wider(names_from = "dv", values_from = "value") %>%
+  group_by(ID, deck) %>% 
+  mutate(con = case_when(anx + dep + sud == 0 ~ "Control", T ~ "Diag Present"),
+         anx = case_when(anx == 1 ~ "Anx", T ~ "No Anx"),
+         dep = case_when(dep == 1 ~ "Dep", T ~ "No Dep"),
+         sud = case_when(sud == 1 ~ "SUD", T ~ "No SUD"),
+         valence = case_when(deck %in% c(1, 2) ~ "Bad", T ~ "Good"),
+         card_trial = 1:30,
+         block = case_when(card_trial <= 10 ~ 1, card_trial <= 20 ~ 2, T ~ 3),
+         pass = case_when(choice == 0 ~ 1, T ~ 0),
+         loss = case_when(sign == -1 ~ outcome*-100, T ~ 0),
+         avoidance = case_when(lag(outcome) < 0 & pass == 1 ~ 1, T ~ 0))
+```
+
+
+## Cumulative Avoidances vs. Cumulative Losses
+```{r, fig.height=5, fig.width=6}
+behavior %>%
+  mutate(deck = case_when(deck == 1 ~ "Deck A", deck == 2 ~ "Deck B",
+                          deck == 3 ~ "Deck C", deck == 4 ~ "Deck D"),
+         anx = case_when(anx == "Anx" ~ "Anx+", T ~ "Anx-")) %>% 
+  group_by(ID, deck) %>%
+  arrange(card_trial) %>%
+  mutate(cumulative_losses = cumsum(loss),
+         cumulative_avoidances = cumsum(avoidance)) %>%
+  group_by(anx, card_trial, deck) %>%
+  reframe(cumulative_losses = mean(cumulative_losses),
+          cumulative_avoidances = mean(cumulative_avoidances)) %>% 
+  ggplot(aes(x = cumulative_losses, y = cumulative_avoidances, color = anx)) +
+  geom_line(linewidth = 1) +
+  scale_color_manual(values = c("black", "#E01818")) +
+  labs(x = "Cumulative Losses", y = "Cumulative Avoidance Responses") +
+  theme_classic() +
+  theme(axis.text = element_text(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        plot.margin = margin(r = .5, unit = "cm"),
+        strip.background = element_rect(colour = "transparent"),
+        legend.position = "top", legend.title = element_blank()) +
+  facet_rep_wrap(.~deck, scales = "free")
+```
+
+
+## Loss Avoidance
+```{r, fig.height=4, fig.width=6}
+loss_avoidance = behavior %>%
+  mutate(deck = case_when(deck == 1 ~ "Deck A", deck == 2 ~ "Deck B",
+                          deck == 3 ~ "Deck C", deck == 4 ~ "Deck D"),
+         anx = case_when(anx == "Anx" ~ "Anx+", T ~ "Anx-"),
+         loss_trial = case_when(outcome < 0 ~ card_trial)) %>%
+  group_by(ID, deck, anx, Apun) %>% 
+  mutate(min_loss_trial = min(loss_trial, na.rm = T),
+         loss_trial_1 = min_loss_trial + 1,
+         loss_trial_2 = min_loss_trial + 2,
+         loss_trial_3 = min_loss_trial + 3,
+         loss_trial_4 = min_loss_trial + 4,
+         loss_trial_5 = min_loss_trial + 5,
+         loss_trial_6 = min_loss_trial + 6,
+         loss_trial_7 = min_loss_trial + 7,
+         loss_trial_8 = min_loss_trial + 8,
+         loss_trial_9 = min_loss_trial + 9,
+         loss_trial_10 = min_loss_trial + 10
+         ) %>% 
+  group_by(ID, deck, anx, Apun) %>% 
+  filter(card_trial %in% 
+           c(loss_trial_1, loss_trial_2, loss_trial_3, loss_trial_4, loss_trial_5,
+             loss_trial_6, loss_trial_7, loss_trial_8, loss_trial_9, loss_trial_10)) %>% 
+  mutate(consecutive_trial = rank(card_trial))
+
+loss_avoidance %>%
+  group_by(anx, deck, consecutive_trial) %>% 
+  reframe(avoidance = mean(pass)) %>% 
+  ggplot(aes(x = consecutive_trial, y = avoidance, fill = anx)) +
+  geom_bar(stat = "identity", position = position_dodge(width = .75),
+           width = .75, color = "black", alpha = .75) +
+  scale_x_continuous(breaks = seq(1, 10, 1)) +
+  scale_y_continuous(limits = c(0, NA), expand = c(0, 0)) +
+  scale_fill_manual(values = c("black", "#E01818")) +
+  labs(x = "Trial", y = "Proportion of Participants Passing") +
+  theme_classic() +
+  theme(axis.text = element_text(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        plot.margin = margin(r = .5, unit = "cm"),
+        strip.background = element_rect(colour = "transparent"),
+        legend.position = "top", legend.title = element_blank()) +
+  facet_rep_wrap(.~deck, scales = "free_y")
+```
+
+
+## Trends
+```{r}
+behavior %>% 
+  group_by(ID, anx, block) %>% 
+  reframe(choice = mean(choice)) %>%
+  group_by(anx, block) %>% 
+  reframe(choice_proportion = mean(choice)) %>%
+  pivot_wider(names_from = "anx", values_from = "choice_proportion")
+
+behavior %>% 
+  mutate(win_frequency = case_when(deck %in% c(2, 4) ~ "High", T ~ "Low")) %>% 
+  group_by(ID, dep, block, deck) %>% 
+  reframe(choice = mean(choice)) %>%
+  group_by(dep, block, deck) %>% 
+  reframe(choice_proportion = mean(choice)) %>%
+  pivot_wider(names_from = "block", values_from = "choice_proportion",
+              names_prefix = "block_") %>% 
+  mutate(diff_1 = block_2 - block_1,
+         diff_2 = block_3 - block_1) %>% 
+  filter(deck == 1)
+
+behavior %>% 
+  mutate(win_frequency = case_when(deck %in% c(2, 4) ~ "High", T ~ "Low")) %>% 
+  group_by(ID, dep, block, deck) %>% 
+  reframe(choice = mean(choice)) %>%
+  group_by(dep, block, deck) %>% 
+  reframe(choice_proportion = mean(choice)) %>%
+  pivot_wider(names_from = "dep", values_from = "choice_proportion") %>% 
+  mutate(diff = Dep - `No Dep`) %>% 
+  filter(deck %in% c(2, 4))
+```
+
+
+
+# -------------------------------------------
+# Collinearity
+```{r}
+sim_orl_posteriors = readRDS(here("1_TADS_Parents_PP", "Data",
+                                  "4_Parameter_Recovery", "sim_orl_posteriors.RDS"))
+data.frame(Arew = apply(sim_orl_posteriors$Arew, 2, mean),
+           Apun = apply(sim_orl_posteriors$Apun, 2, mean),
+           betaF = apply(sim_orl_posteriors$betaF, 2, mean),
+           betaB = apply(sim_orl_posteriors$betaB, 2, mean)) %>% 
+  cor()
+```
+
+
+
+# -------------------------------------------
+# Past vs. Current Anxiety
+## Load Model
+```{r}
+cAnx_pAnx_posteriors = readRDS(
+  here("1_TADS_Parents_PP", "Data", "2_Fitted",
+       "Covariate_Joint_ORL_Bias",
+       "T1_parent_current_cAnx_pAnx_Covariate_Joint_ORL_Bias_posteriors.rds"))
+
+```
+
+
+
+## Organize Data
+```{r}
+# -------------------------------------------
+# ORGANIZE PARAMETERS
+cAnx_pAnx_parameters = data.frame(
+  iteration = 1:nrow(cAnx_pAnx_posteriors$mu_Arew),
+  # get non-diag posteriors by averaging across men/women posteriors
+  Arew_mu = cAnx_pAnx_posteriors$mu_Arew[,,1:2],
+  Apun_mu = cAnx_pAnx_posteriors$mu_Apun[,,1:2],
+  betaF_mu = cAnx_pAnx_posteriors$mu_betaF[,,1:2],
+  betaB_mu = cAnx_pAnx_posteriors$mu_betaB[,,1:2],
+  # get betas for diagnostic variables
+  Arew_beta.2 = cAnx_pAnx_posteriors$beta_Arew[,2],
+  Apun_beta.2 = cAnx_pAnx_posteriors$beta_Apun[,2],
+  betaF_beta.2 = cAnx_pAnx_posteriors$beta_betaF[,2],
+  betaB_beta.2 = cAnx_pAnx_posteriors$beta_betaB[,2]) %>% 
+  pivot_longer(starts_with(c("Arew", "Apun", "betaF", "betaB")),
+               names_to = c("orl_par", "group"),
+               values_to = "estimate", names_sep = "\\.") %>% 
+  mutate(grp_parameter = case_when(str_detect(orl_par, "mu") ~ "mu",
+                                   str_detect(orl_par, "_beta") ~ "beta"),
+         orl_parameter = str_remove(orl_par, "_mu|_beta")) %>% 
+  dplyr::select(-orl_par) %>% 
+  mutate(group = case_when(group == 1 & grp_parameter == "mu" ~ "pAnx",
+                           group == 2 & grp_parameter == "mu" ~ "cAnx",
+                           group == 2 & grp_parameter == "beta" ~ "cAnx"),
+         orl_parameter = factor(orl_parameter, ordered = T,
+                                levels = c("Arew", "Apun", "betaF", "betaB")),
+         grp_parameter = factor(grp_parameter, levels = c("mu", "beta"), ordered = T,
+                         labels = c("Mu", "Beta")),
+         group = factor(group, levels = c("pAnx", "cAnx"),
+                        labels = c("Past Anxiety", "Current Anxiety"), ordered = T))
+# -------------------------------------------
+# CALCULATE SUMMARY DATA
+cAnx_pAnx_summary_data = cAnx_pAnx_parameters %>% 
+  group_by(group, grp_parameter, orl_parameter) %>% 
+  reframe(mu    = mean(estimate),
+         lower = HDIofMCMC(estimate)[1],
+         upper = HDIofMCMC(estimate)[2],
+         height_ci = max(density(estimate)$y)) %>% 
+  group_by(grp_parameter, orl_parameter) %>% 
+  mutate(height_ci = max(height_ci),
+         height_ci = case_when(group == "Current Anxiety" ~ height_ci*1.125,
+                               group == "Past Anxiety" ~ height_ci*1.075),
+         xint  = case_when(grp_parameter == "Beta" ~ 0))
+# -------------------------------------------
+# CALCULATE PERCENT ABOVE/BELOW 0
+data.frame(Arew = cAnx_pAnx_posteriors$beta_Arew[,2],
+           Apun = cAnx_pAnx_posteriors$beta_Apun[,2],
+           betaF = cAnx_pAnx_posteriors$beta_betaF[,2],
+           betaB = cAnx_pAnx_posteriors$beta_betaB[,2]) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "estimate") %>% 
+  group_by(parameter) %>% 
+  reframe(mu = mean(estimate),
+          lower = HDIofMCMC(estimate)[1],
+          upper = HDIofMCMC(estimate)[2],
+          sig = case_when(lower < 0 & upper < 0 ~ "*",
+                          lower > 0 & upper > 0 ~ "*",
+                          T ~ ""),
+          below_0 = mean(estimate<0)*100,
+          above_0 = mean(estimate>0)*100)
+```
+
+
+
+## Build Plot
+```{r}
+tiff(here("1_TADS_Parents_PP", "Figs_Tables",
+          model_name, sample, "Figure S4 - Past vs. Current Anxiety Posterior Distributions.tiff"),
+     width = 7, height = 9, units = "cm", res = 300)
+  # PLOT
+  cAnx_pAnx_parameters %>% 
+    ggplot(aes(x = estimate, fill = group)) +
+      # geoms
+      geom_text_npc(data = orl_lab, aes(label = lab_), fontface = "italic",
+                    npcx = "left", npcy = .75, size = 4, vjust = 1, hjust = 0) +
+      geom_density(alpha = .5, linewidth = .25) +
+      geom_hline(yintercept = 0) +
+      geom_vline(data = cAnx_pAnx_summary_data, aes(xintercept = xint),
+                 linetype = "dashed") +
+      geom_pointrange(data = cAnx_pAnx_summary_data,
+                      aes(x = mu, y = height_ci, xmin = lower, xmax = upper,
+                          color = group), show.legend = F, fatten = 1.5) +
+      # scales
+      scale_y_continuous(limits = c(0,NA), expand = expansion(mult = c(0, .05)), n.breaks = 3) +
+      scale_color_manual(values = c("black", "#E01818"),
+                         limits = c("Past Anxiety", "Current Anxiety")) +
+      scale_fill_manual(values = c("black", "#E01818"),
+                        limits = c("Past Anxiety", "Current Anxiety")) +
+      # themes
+      labs(x = "Estimate", y = "Density") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(#axis elements
+            axis.text.x = element_text(color = "black", size = 11),
+            axis.ticks.x = element_line(color = "black"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.title = element_text(size = 14),
+            # legend elements
+            legend.title = element_text(size = 11),
+            legend.background = element_rect(fill = "transparent",
+                                             colour = "transparent"),
+            legend.position = "none",
+            # legend.position = c(.5, 1.05),
+            legend.spacing.x = unit(.05, 'cm'),
+            legend.spacing.y = unit(-.25, 'cm'),
+            legend.text = element_text(size = 11),
+            legend.direction = "horizontal",
+            legend.margin = margin(t = .01, b = .01, r = .01, unit = 'cm'),
+            legend.key.size = unit(.5, "cm"),
+            # plot elements
+            plot.margin = unit(c(t = .25, r = .25, b = 0, l = .25), "cm"),
+            panel.spacing.x = unit(.6, "cm"),
+            panel.spacing.y = unit(.1, "cm"),
+            strip.text = element_blank(),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      facet_rep_wrap(orl_parameter~grp_parameter, nrow = 4, ncol = 2,
+                     scales = "free") +
+      facetted_pos_scales(x = x_scaling) +
+      guides(fill = guide_legend(title = "Group: ", nrow = 2))
+dev.off()
+```
+
+
+
+# -------------------------------------------
+
+
+
+
+

@@ -1,0 +1,160 @@
+---
+title: "Fitting ORL"
+output: html_document
+date: "2023-03-07"
+---
+
+
+# -------------------------------------------
+# Setup
+## Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(ggpp)
+library(lemon)
+library(grid)
+# source(here("Code", "R", "3_Other", "helpful_functions.R"))
+```
+
+
+## RMD Setup
+```{r}
+focal_parameters = c(
+  "mu_Arew", "mu_Apun", "mu_betaF", "mu_betaB", 
+  "sigma_Arew", "sigma_Apun", "sigma_betaF", "sigma_betaB", 
+  "Arew", "Apun", "betaF", "betaB", 
+  "beta_Arew", "beta_Apun", "beta_betaF", "beta_betaB", 
+  "R_Arew", "R_Apun", "R_betaF", "R_betaB"
+)
+
+
+group_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE)
+person_parameters <- grep("mu|sigma|R", focal_parameters, value=TRUE, invert=TRUE)
+```
+
+
+# -------------------------------------------
+# Fit Current vs. Past Anxiety Model
+```{r, eval = F}
+# Compile model
+orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                            "Covariate_Joint_ORL_Bias.stan"))
+  
+# -----------------------------------------------------------------------------------
+# load data
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         "design_T1_parent_current_cAnx_pAnx_IGT.RDS"))
+
+# -----------------------------------------------------------------------------------
+# Fit model
+orl_fit = sampling(orl_model, 
+                   data   = stan_data, 
+                   iter   = 5000, 
+                   warmup = 1000, 
+                   chains = 4, 
+                   cores  = 4,
+                   seed   = 43210,
+                   save_warmup = F)
+saveRDS(orl_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                      "Covariate_Joint_ORL_Bias",
+                      "T1_parent_current_cAnx_pAnx_Covariate_Joint_ORL_Bias_fit.rds"))
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+saveRDS(extract(orl_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                               "Covariate_Joint_ORL_Bias",
+                               "T1_parent_current_cAnx_pAnx_Covariate_Joint_ORL_Bias_posteriors.rds"))
+
+# -----------------------------------------------------------------------------------
+# save rhats
+rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               "Covariate_Joint_ORL_Bias",
+               "T1_parent_current_cAnx_pAnx_Covariate_Joint_ORL_Bias_rhats.rds"))
+```
+
+
+# -------------------------------------------
+# Fit Non-Pairs Model
+```{r, eval = F}
+# Compile model
+orl_model = stan_model(here("1_TADS_Parents_PP", "Code", "Stan",
+                            "Covariate_Joint_ORL_Bias.stan"))
+  
+# -----------------------------------------------------------------------------------
+# Load data
+stan_data = readRDS(here("1_TADS_Parents_PP", "Data", "1_Stan",
+                         "design_T1_parent_Anx_Dep_SUD_Female_IGT.RDS"))
+# Identify pairs
+pair_IDs = data.frame(ID_participant = stan_data$ID_participant,
+                      ID_OG = stan_data$ID_OG) %>% 
+  group_by(ID_OG) %>% 
+  reframe(participants = n()) %>%
+  filter(participants == 2) %>% .$ID_OG
+# Randomly remove 1 participant of each pair
+set.seed(20250527)
+for(i in 1:length(pair_IDs)){
+  index = which(stan_data$ID_OG == pair_IDs[i] & 
+                  stan_data$participant_number == sample(c(2, 3), 1),
+                arr.ind = T)
+  stan_data$Tsubj[index,1] = 0
+}
+# -----------------------------------------------------------------------------------
+# Fit model
+orl_fit = sampling(orl_model, 
+                   data   = stan_data, 
+                   iter   = 5000, 
+                   warmup = 1000, 
+                   chains = 4, 
+                   cores  = 4,
+                   seed   = 43210,
+                   save_warmup = F)
+saveRDS(orl_fit, here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                      "Covariate_Joint_ORL_Bias",
+                      "T1_parent_Pairs_Sensitivity_Covariate_Joint_ORL_Bias_fit.rds"))
+
+# -----------------------------------------------------------------------------------
+# save posteriors
+saveRDS(extract(orl_fit), here("1_TADS_Parents_PP", "Data", "2_Fitted",
+                               "Covariate_Joint_ORL_Bias",
+                               "T1_parent_Pairs_Sensitivity_Covariate_Joint_ORL_Bias_posteriors.rds"))
+
+# -----------------------------------------------------------------------------------
+# save rhats
+rhat(orl_fit, pars = focal_parameters) %>%
+  data.frame() %>% mutate(parameter = rownames(.)) %>% 
+  saveRDS(here("1_TADS_Parents_PP", "Data", "2_Fitted",
+               "Covariate_Joint_ORL_Bias",
+               "T1_parent_Pairs_Sensitivity_Covariate_Joint_ORL_Bias_rhats.rds"))
+```
+
+
+
+# -------------------------------------------
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

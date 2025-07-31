@@ -1,0 +1,380 @@
+---
+title: "Running SBC and Testing Conditional Growth ORL"
+output: html_document
+date: "2024-09-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstan)
+library(hBayesDM)
+library(bayesplot)
+library(ggplot2)
+library(here)
+library(miscTools)
+library(cmdstanr)
+library(stringi)
+library(foreach)
+library(tidybayes)
+library(ggdist)
+source(here("1_TADS_long", "Code", "R", "3_Other", "helpful_functions.R"))
+source(here("1_TADS_long", "Code", "R", "utils.R"))
+```
+
+
+# Load Data
+```{r}
+all_task_data <- readRDS(here("1_TADS_long", "Data", "1_Preprocessed", "TADS_12345_IGT.rds"))
+all_survey_data <- readRDS(here("1_TADS_long", "Data", "1_Preprocessed", "TADS_SCID.rds"))
+```
+
+
+# Fit to Real Data
+```{r}
+SEED <- 43210
+
+FIT_CONDITIONAL <- TRUE
+
+set.seed(SEED)
+
+orl_model <- cmdstan_model(here("1_TADS_long", "Code", "Stan", "igt_orl_playpass_conditional_growth.stan"))
+
+if (FIT_CONDITIONAL) {
+  model_text <- "
+    Arew_int ~ 1 + anxiety + depression + SUD + sex;
+    Apun_int ~ 1 + anxiety + depression + SUD + sex;
+    betaF_int ~ 1 + anxiety + depression + SUD + sex;
+    betaP_int ~ 1 + anxiety + depression + SUD + sex;
+    Arew_slope ~ 1 + anxiety + depression + SUD + sex;
+    Apun_slope ~ 1 + anxiety + depression + SUD + sex;
+    betaF_slope ~ 1 + anxiety + depression + SUD + sex;
+    betaP_slope ~ 1 + anxiety + depression + SUD + sex;
+  "
+  
+  relabel_map <- c(
+    "gamma0[1]" = "Arew int. (base)",
+    "gamma0[2]" = "Arew int. (anx)",
+    "gamma0[3]" = "Arew int. (dep)",
+    "gamma0[4]" = "Arew int. (sud)",
+    "gamma0[5]" = "Arew int. (sex)",
+    "gamma0[6]" = "Apun int. (base)",
+    "gamma0[7]" = "Apun int. (anx)",
+    "gamma0[8]" = "Apun int. (dep)",
+    "gamma0[9]" = "Apun int. (sud)",
+    "gamma0[10]" = "Apun int. (sex)",
+    "gamma0[11]" = "betaF int. (base)",
+    "gamma0[12]" = "betaF int. (anx)",
+    "gamma0[13]" = "betaF int. (dep)",
+    "gamma0[14]" = "betaF int. (sud)",
+    "gamma0[15]" = "betaF int. (sex)",
+    "gamma0[16]" = "betaB int. (base)",
+    "gamma0[17]" = "betaB int. (anx)",
+    "gamma0[18]" = "betaB int. (dep)",
+    "gamma0[19]" = "betaB int. (sud)",
+    "gamma0[20]" = "betaB int. (sex)",
+    "gamma1[1]" = "Arew slope (base)",
+    "gamma1[2]" = "Arew slope (anx)",
+    "gamma1[3]" = "Arew slope (dep)",
+    "gamma1[4]" = "Arew slope (sud)",
+    "gamma1[5]" = "Arew slope (sex)",
+    "gamma1[6]" = "Apun slope (base)",
+    "gamma1[7]" = "Apun slope (anx)",
+    "gamma1[8]" = "Apun slope (dep)",
+    "gamma1[9]" = "Apun slope (sud)",
+    "gamma1[10]" = "Apun slope (sex)",
+    "gamma1[11]" = "betaF slope (base)",
+    "gamma1[12]" = "betaF slope (anx)",
+    "gamma1[13]" = "betaF slope (dep)",
+    "gamma1[14]" = "betaF slope (sud)",
+    "gamma1[15]" = "betaF slope (sex)",
+    "gamma1[16]" = "betaB slope (base)",
+    "gamma1[17]" = "betaB slope (anx)",
+    "gamma1[18]" = "betaB slope (dep)",
+    "gamma1[19]" = "betaB slope (sud)",
+    "gamma1[20]" = "betaB slope (sex)"
+  )
+} else {
+  model_text <- "
+    Arew_int ~ 1;
+    Apun_int ~ 1;
+    betaF_int ~ 1;
+    betaP_int ~ 1;
+    Arew_slope ~ 1;
+    Apun_slope ~ 1;
+    betaF_slope ~ 1;
+    betaP_slope ~ 1;
+  "  
+  
+  relabel_map <- c(
+    "gamma0[1]" = "Arew int.",
+    "gamma0[2]" = "Apun int.",
+    "gamma0[3]" = "betaF int.",
+    "gamma0[4]" = "betaB int.",
+    "gamma1[1]" = "Arew slope",
+    "gamma1[2]" = "Apun slope",
+    "gamma1[3]" = "betaF slope",
+    "gamma1[4]" = "betaB slope"
+  )
+}
+
+stan_data <- make_stan_data_growth(
+  all_task_data, 
+  all_survey_data,
+  model_text,
+  "session"
+)
+stan_data$prior_only <- 0
+
+orl_fit <- orl_model$sample(
+  stan_data,
+  chains = 8,
+  parallel_chains = 8,
+  iter_sampling = 500,
+  iter_warmup = 200,
+  init = 0,
+  seed=SEED,
+  output_dir=here("1_TADS_long", "Data", "2_Fitted", ifelse(FIT_CONDITIONAL, "Conditional_Growth", "Unconditional_Growth")),
+)
+# save out model
+saveRDS(orl_fit, file=here("1_TADS_long", "Data", "2_Fitted", ifelse(FIT_CONDITIONAL, "Conditional_Growth", "Unconditional_Growth"), "fit.rds"))
+
+### Plot parameter posteriors (either conditional or unc. model)
+
+# Extract + relabel parameter names for convenience
+draws_gamma <- orl_fit$draws(variables = c("gamma0", "gamma1", "sigma_theta"))
+new_names <- relabel_map[dimnames(draws_gamma)$variable]
+new_names <- ifelse(is.na(new_names), dimnames(draws_gamma)$variable, new_names)
+gamma <- grep("^gamma", dimnames(draws_gamma)$variable, value = TRUE)
+dimnames(draws_gamma)$variable[dimnames(draws_gamma)$variable %in% gamma] <- new_names[gamma]
+
+# look at some traceplots
+mcmc_trace(   
+  draws_gamma,
+  pars = new_names[gamma],
+) +
+  theme_minimal(base_size = 15) +
+  ggtitle("Growth Model Traceplots")
+
+
+# summarize draws for plotting coefficients
+draws_df <- draws_gamma %>%
+  gather_draws(!!!syms(c(new_names[gamma]))) %>%  # Extract only the relevant parameters
+  mutate(
+    par = factor(
+      case_when(
+        grepl("Arew", .variable) ~ "A[+]",
+        grepl("Apun", .variable) ~ "A[-]",
+        grepl("betaF", .variable) ~ "beta[F]",
+        grepl("betaB", .variable) ~ "beta[B]",
+        TRUE ~ "Other"
+      ),
+      levels = c("A[+]", "A[-]", "beta[F]", "beta[B]", "Other"),
+      labels = c("A[\"+\"]*minute", "A[\"-\"]*minute", "beta[F]", "beta[B]", "Other")
+    )
+  ) %>%
+  filter(par != "Other") %>%
+  mutate(
+    type = case_when(
+      grepl("int", .variable) ~ "Intercept",
+      grepl("slope", .variable) ~ "Slope",
+      TRUE ~ "Other"
+    ),
+    group = factor(
+      case_when(
+        grepl("base", .variable) ~ "Baseline",
+        grepl("anx", .variable) ~ "Anxiety",
+        grepl("dep", .variable) ~ "Depression",
+        grepl("sud", .variable) ~ "SUD",
+        grepl("sex", .variable) ~ "Sex (M)",
+        TRUE ~ ""
+      ), 
+    levels = rev(c("Baseline", "Anxiety", "Depression", "SUD", "Sex (M)", "")),
+    )
+  )
+
+
+# plot parameter coefficients
+ggplot(draws_df, aes(x = .value, y = group)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
+  stat_pointinterval(.width=c(.8, .95)) +
+  facet_grid(par ~ type, scales = "free", labeller = label_parsed) +
+  labs(title = paste0(ifelse(FIT_CONDITIONAL, "Conditional", "Unconditional"), " model coefficients"), x = "Parameter Value", y = "Parameter") +
+  theme_minimal(base_size = 20)
+
+
+### Plot group-level growth trajectories
+
+pars <- par_from_draws(orl_fit, c("gamma0", "gamma1", "sigma_theta"))
+colnames(pars$gamma0) <- relabel_map[grep("gamma0", names(relabel_map))]
+colnames(pars$gamma1) <- relabel_map[grep("gamma1", names(relabel_map))]
+
+# for learning rates
+trans <- function(x, par) {
+  if (par %in% c("Arew", "Apun")) {
+    pnorm(x)
+  } else {
+    x
+  }
+}
+
+# need to marginalize over group-level uncertainty to get the actual 
+# mean curve due to the transformation for learning rate parameters. if 
+# not, the "mean" is actually the median, and we will be 
+# under-estimating the mean since learning rates are generally right 
+# skewed
+marginal_mean_growth <- function(gamma0, gamma1, sigma, covars, session, par, n_samples=4000) {
+  pred = foreach(i=1:n_samples, .combine="c") %do% {
+    # for each MCMC sample, generate a bunch of "person-level" curves
+    # given the sigma term, then take the mean across "people" to obtain
+    # the estimated mean curve
+    sim_growth <- trans(as.vector((gamma0[i,] %*% covars) + (gamma1[i,] %*% covars) * (session-1)) + rnorm(10000, 0, sigma[i]), par)
+    mean(sim_growth)
+  }
+}
+
+# tweaked for unconditional model
+marginal_mean_growth_unc <- function(gamma0, gamma1, sigma, covars, session, par, n_samples=4000) {
+  pred = foreach(i=1:n_samples, .combine="c") %do% {
+    sim_growth <- trans(as.vector(gamma0[i] + gamma1[i] * (session-1)) + rnorm(10000, 0, sigma[i]), par)
+    mean(sim_growth)
+  }
+}
+
+# perform marginalization and make DF for plotting growth curves
+make_pred <- function(pars, par, covars, label, marginal_fn=marginal_mean_growth) {
+  gamma0 <- pars$gamma0[,grep(par, colnames(pars$gamma0))]
+  gamma1 <- pars$gamma1[,grep(par, colnames(pars$gamma1))]
+  sigma <- pars$sigma_theta[,switch(par, "Arew"=1, "Apun"=2, "betaF"=3, "betaB"=4)]
+  
+  foreach(s=1:5, .combine="rbind") %do% {
+    data.frame(
+      session = s,
+      par = par,
+      sex = ifelse(label != "All groups", strsplit(label, "_")[[1]][1], "All"),
+      group = ifelse(label != "All groups", strsplit(label, "_")[[1]][2], "All"),
+      pred = marginal_fn(gamma0, gamma1, sigma, covars, s, par)
+    )
+  }
+}
+
+# Summarize + plot conditional model
+if (FIT_CONDITIONAL) {
+  # Design matrices representing each distinct group for plotting curves
+  pred_cov <- list(
+    Female_Baseline = c(1, 0, 0, 0, 0), 
+    Female_Anxiety = c(1, 1, 0, 0, 0),
+    Female_Depression = c(1, 0, 1, 0, 0),
+    Female_SUD = c(1, 0, 0, 1, 0),
+    Male_Baseline = c(1, 0, 0, 0, 1),
+    Male_Anxiety = c(1, 1, 0, 0, 1),
+    Male_Depression = c(1, 0, 1, 0, 1),
+    Male_SUD = c(1, 0, 0, 1, 1)
+  )
+  
+  # perform marginalization
+  pred_growth <- foreach(label=names(pred_cov), .combine="rbind") %do% {
+    foreach(par=c("Arew", "Apun", "betaF", "betaB"), .combine="rbind") %do% {
+      make_pred(pars, par, pred_cov[[label]], label)
+    }
+  }
+  
+  # summarize growth curves before plotting
+  pred_growth_summary <- pred_growth %>%
+    group_by(session, group, par, sex) %>%
+    summarise(
+      lower = quantile(pred, 0.25),  # 25% quantile
+      upper = quantile(pred, 0.75),  # 75% quantile
+      median = median(pred),          # Median prediction
+      .groups = "drop"
+    ) %>%
+    mutate(
+      group = factor(group, levels = c("Baseline", "Anxiety", "Depression", "SUD")),
+      sex = factor(sex, levels = c("Female", "Male")),
+      par = factor(par, levels = c("Arew", "Apun", "betaF", "betaB"), labels = c("A[\"+\"]", "A[\"-\"]", "beta[F]", "beta[B]"))
+    )
+  
+  # Plot the summarized data
+  ggplot(pred_growth_summary, aes(x = session, fill = group)) +
+    geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.3) +
+    geom_line(aes(y = median, color = group), show.legend = F) +
+    scale_fill_brewer("50% CI", palette = "Set1") +
+    scale_color_brewer(palette = "Set1") +
+    facet_grid(par ~ sex, scales = "free_y", labeller = label_parsed) +
+    labs(title = "Conditional growth trajectories", x = "Session", y = "Parameter Value") +
+    theme_minimal(base_size = 20)
+}
+
+
+# Summarize + plot unconditional model
+if (!FIT_CONDITIONAL) {
+  # perform marginalization
+  pred_growth <- foreach(par=c("Arew", "Apun", "betaF", "betaB"), .combine="rbind") %do% {
+    make_pred(pars, par, NULL, "All groups", marginal_mean_growth_unc)
+  }
+  
+  pred_growth_summary <- pred_growth %>%
+    group_by(session, par) %>%
+    summarise(
+      q025 = quantile(pred, 0.025),
+      q10  = quantile(pred, 0.10),
+      q25  = quantile(pred, 0.25),
+      q50  = quantile(pred, 0.50),
+      q75  = quantile(pred, 0.75),
+      q90  = quantile(pred, 0.90),
+      q975 = quantile(pred, 0.975),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      par = factor(
+        par, 
+        levels = c("Arew", "Apun", "betaF", "betaB"),
+        labels = c("A[\"+\"]", "A[\"-\"]", "beta[F]", "beta[B]")
+      )
+    )
+  
+  # long format for ribbons
+  ribbons <- pred_growth_summary %>%
+    pivot_longer(
+      cols = c(q025, q10, q25, q75, q90, q975),
+      names_to = "bound",
+      values_to = "value"
+    ) %>%
+    mutate(
+      CI = case_when(
+        bound %in% c("q025", "q975") ~ "0.95",
+        bound %in% c("q10",  "q90")  ~ "0.80",
+        bound %in% c("q25",  "q75")  ~ "0.50"
+      ),
+      bound_type = ifelse(bound %in% c("q025", "q10", "q25"), "lower", "upper")
+    ) %>%
+    mutate(CI = factor(CI, levels = c("0.95", "0.80", "0.50"))) %>%
+    select(-bound) %>%
+    pivot_wider(names_from = bound_type, values_from = value)
+  
+  ggplot() +
+    geom_ribbon(
+      data = ribbons, 
+      aes(x = session, ymin = lower, ymax = upper, fill = CI), 
+      alpha = 0.6
+    ) +
+    geom_line(
+      data = pred_growth_summary, 
+      aes(x = session, y = q50), 
+      color = "black"
+    ) +
+    facet_wrap(~par, scales = "free_y", labeller = label_parsed) +
+    scale_fill_manual(
+      "CI", 
+      values = c("0.95" = "#c6dbef", "0.80" = "#6baed6", "0.50" = "#2171b5")
+    ) +
+    labs(
+      title = "Unconditional growth trajectories", 
+      x = "Session", 
+      y = "Parameter Value"
+    ) +
+    theme_minimal(base_size = 20) +
+    theme(legend.position = "right")
+}
+```

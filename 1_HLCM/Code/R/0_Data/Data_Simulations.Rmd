@@ -113,7 +113,7 @@ HLM_parameters = list(# negative beta combined with negative, 0, & positive r
                       neg.beta_pos.cor = c(mu_beta_UT  = -.3,
                                            int_slope_R = +.3),
                       # 0 beta combined with negative, 0, & positive r
-                      nue.beta_neg.cor = c(mu_beta_UT  =  .0,
+                      neu.beta_neg.cor = c(mu_beta_UT  =  .0,
                                            int_slope_R = -.3),
                       neu.beta_neu.cor = c(mu_beta_UT  =  .0,
                                            int_slope_R =  .0),
@@ -133,7 +133,7 @@ for(f in names(HLM_parameters)){
 }
 # -----------------------------------------------------------------------------------
 # SPECIFY CONDITIONS FOR SIMULATION
-clusters = makeCluster(4)
+clusters = makeCluster(8)
 S             = 3
 N             = 50
 n_simulations = 100

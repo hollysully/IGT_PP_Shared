@@ -29,18 +29,101 @@ SCID    = readRDS(here("1_HLCM", "Data", "0_Raw_TADS", "SCID_Anx_Dep_SUD.RDS"))
 SCID_processed = SCID %>% 
   mutate(sex = case_when(participant == "mom" ~ "female", participant == "dad" ~ "male"),
          participant_num = case_when(participant == "mom" ~ 3, participant == "dad" ~ 2),
-         participant0ID = as.numeric(paste(participant_num, ID, sep = "0"))) %>% 
+         participant0ID = as.numeric(paste(participant_num, ID, sep = "0")),
+         anxiety = case_when(lanx == 1 ~ 1, T ~ 0),
+         depression = case_when(ldep == 1 ~ 1, T ~ 0),
+         SUD = case_when(lsub == 1 ~ 1, lalc == 1 ~ 1, T ~ 0)) %>% 
   select(participant0ID, ID, participant, session, anxiety, depression, SUD, sex)
 ```
 
 
-```{r}
+```{r, eval = F}
 saveRDS(SCID_processed, here("1_HLCM", "Data", "0_Raw_TADS", "TADS_SCID.RDS"))
 ```
 
 
 # --------------------------------------
+# Checking Nate's Participants
+```{r}
+survey_data = SCID_processed
+survey_data = readRDS(here("1_HLCM", "Data", "0_Raw_TADS", "TADS_SCID.RDS"))
+task_data = readRDS(here("1_HLCM", "Data", "0_Raw_TADS", "TADS_12345_IGT.RDS"))
+```
 
+
+```{r}
+comb_data <- task_data %>%
+    left_join(survey_data,
+              by = c("ID", "session", "participant", "participant0ID")) %>%
+    arrange(ID, session, task_trial)
+ 
+  survey_columns <- setdiff(names(survey_data), names(task_data))
+ 
+  subj_has_survey <- comb_data %>%
+    filter(session == 1) %>%
+    group_by(participant0ID) %>%
+    summarize(survey = all(!is.na(across(all_of(survey_columns))))) %>%
+    filter(survey) %>%
+    {.$participant0ID}
+ 
+  subj_has_task_sessions <- comb_data %>%
+    group_by(participant0ID) %>%
+    summarize(n_sessions = length(unique(session))) %>%
+    ungroup() %>%
+    filter(n_sessions >= 1) %>%
+    {.$participant0ID}
+ 
+  comb_data <- comb_data %>%
+    filter(participant0ID %in% subj_has_survey) %>%
+    filter(participant0ID %in% subj_has_task_sessions)
+ 
+  subj_list <- unique(comb_data$participant0ID)
+```
+
+
+```{r}
+data.frame(participant0ID = subj_list) %>% 
+  saveRDS(here("1_HLCM", "Data", "0_Raw_TADS", "TADS_IDs.RDS"))
+```
+
+
+
+# --------------------------------------
+# Getting Demographics
+```{r}
+demographics = readRDS(here("1_TADS_Parents_PP", "Data", "0_Raw", 
+                                 "processed_demographics_data.RDS"))
+```
+
+
+```{r}
+included = data.frame(participant0ID = subj_list) %>% 
+  mutate(gender = as.numeric(substr(participant0ID, 1, 1)),
+         gender = case_when(gender == 2 ~ "Male", gender == 3 ~ "Female"),
+         ID = as.numeric(substr(participant0ID, 3, 6))) %>% 
+  left_join(demographics)
+```
+
+```{r}
+included %>% 
+  summarise(age = paste0(round(mean(age, na.rm = T), 2),
+                         "(", round(sd(age, na.rm = T), 2), ")"))
+
+included %>% 
+  group_by(gender) %>% 
+  summarise(count = n(),
+            percent = n()/nrow(included)*100)
+
+included %>% 
+  group_by(race) %>% 
+  summarise(count = n(),
+            percent = n()/nrow(included)*100)
+
+included %>% 
+  group_by(ethnicity) %>% 
+  summarise(count = n(),
+            percent = n()/nrow(included)*100)
+```
 
 
 
