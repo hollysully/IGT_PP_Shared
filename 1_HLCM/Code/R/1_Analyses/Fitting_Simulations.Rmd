@@ -27,6 +27,7 @@ library(brms)
 library(posterior)
 library(foreach)
 library(doParallel)
+library(stringr)
 ```
 
 
