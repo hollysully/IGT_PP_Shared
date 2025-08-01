@@ -27,7 +27,6 @@ library(brms)
 library(posterior)
 library(foreach)
 library(doParallel)
-library(stringr)
 ```
 
 
@@ -111,8 +110,7 @@ n_warmup    = 500
 n_chains    = 4
 N           = 50
 S           = 3
-# clusters    = makeCluster(1)
-clusters    = makeCluster(4)
+clusters    = makeCluster(1)
 sim_numbers = 1:100
 conditions  = list.files(here("1_HLCM", "Data", "1_Simulations"))
 
