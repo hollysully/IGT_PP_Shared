@@ -1,106 +1,51 @@
 library(dplyr)
 library(posterior)
 
-PARAMETERS <- c("Arew", "Apun", "betaF", "betaP")
-
 PARAMETERS_GROWTH <- c(
   "Arew_int", "Apun_int", "betaF_int", "betaP_int",
   "Arew_slope", "Apun_slope", "betaF_slope", "betaP_slope"
 )
 
-make_stan_data <- function(task_data, survey_data, formula) {
+make_stan_data_growth <- function(task_data, survey_data, model_text, time_variable) {
   comb_data <- task_data %>% 
     left_join(survey_data, 
-              by = c("ID", "session")) %>%
-    arrange(ID, session, Trialorder)
+              by = c("ID", "session", "participant", "participant0ID")) %>%
+    arrange(ID, session, task_trial)
   
-  subj_list <- unique(comb_data$ID)
-  n_subj <- length(subj_list)
+  survey_columns <- setdiff(names(survey_data), names(task_data))
   
-  n_sessions <- length(unique(comb_data$session))
-  t_subj <- array(0, c(n_subj, n_sessions)) 
+  subj_has_survey <- comb_data %>%
+    filter(session == 1) %>%
+    group_by(participant0ID) %>%
+    summarize(survey = all(!is.na(across(all_of(survey_columns))))) %>%
+    filter(survey) %>%
+    {.$participant0ID}
   
-  for (i in 1:n_subj)  {
-    for (s in 1:n_sessions) {
-      t_subj[i,s] <- sum(with(comb_data, ID==subj_list[i] & session==s))
-    }
-  }
-  t_max <- max(t_subj) 
+  subj_has_task_sessions <- comb_data %>%
+    group_by(participant0ID) %>%
+    summarize(n_sessions = length(unique(session))) %>%
+    ungroup() %>%
+    filter(n_sessions >= 1) %>%
+    {.$participant0ID}
   
-  # parsed list of formulas
-  named_formulas <- parse_formula(formula, PARAMETERS)
+  comb_data <- comb_data %>%
+    filter(participant0ID %in% subj_has_survey) %>%
+    filter(participant0ID %in% subj_has_task_sessions)
   
-  # Behavioral data arrays
-  choice <- outcome <- sign_outcome <- card <- array(-1, c(n_subj, t_max, n_sessions))
-  # create model matrix for each formula in list_formula
-  X <- lapply(named_formulas, function(f) model.matrix(f, comb_data))
-  design_matrix <- lapply(X, function(x) array(0, c(n_subj, t_max, ncol(x), n_sessions)))
-  
-  # Filling arrays with task and survey covariate data
-  for (i in 1:n_subj) {
-    subj_idx <- comb_data$Subject == subj_list[i]
-    # sessions are "special" covariates because the model
-    # initial conditions need reset each session start
-    # regardless of the covariate model assumptions
-    for (s in 1:n_sessions) {
-      session_idx <- comb_data$session == s
-      if (sum(subj_idx & session_idx) > 0) {
-        for (par in PARAMETERS) {
-          design_matrix[[par]][i,,,s] <- X[[par]][subj_idx & session_idx,]  
-        }
-      }
-      subj_dat <- comb_data %>% 
-        filter(ID==subj_list[i] & session==s)
-      if (nrow(subj_dat) > 0) {
-        card[i,,s] <- subj_dat$card
-        choice[i,,s] <- subj_dat$choice
-        outcome[i,,s] <- subj_dat$outcome / 100
-        sign_outcome[i,,s] <- sign(subj_dat$outcome)
-      }
-    }
-  }  
-  
-  stan_list <- list(
-    N = n_subj,
-    T = t_max,
-    S = n_sessions,
-    D = ncol(X[[1]]),
-    Tsubj = t_subj,
-    card = card,
-    outcome = outcome,     
-    sign = sign_outcome,
-    choice = choice,
-    X_Arew = design_matrix$Arew,
-    X_Apun = design_matrix$Apun,
-    X_betaF = design_matrix$betaF,
-    X_betaP = design_matrix$betaP,
-    subj_list = subj_list
-  )
-  return(stan_list)
-}
-
-
-
-make_stan_data_growth <- function(task_data, survey_data, formula, time_variable, scale_covars=T) {
-  comb_data <- task_data %>% 
-    left_join(survey_data, 
-              by = c("ID", "session")) %>%
-    arrange(ID, session, Trialorder)
-  
-  subj_list <- unique(comb_data$ID)
+  subj_list <- unique(comb_data$participant0ID)
   
   # trials per subject
   n_subj <- length(subj_list)
   t_subj <- array(0, c(n_subj)) 
   for (i in 1:n_subj)  {
-    t_subj[i] <- sum(comb_data$ID==subj_list[i])
+    t_subj[i] <- sum(comb_data$participant0ID==subj_list[i])
   }
   t_max <- max(t_subj) 
-    
+  
   # new session start trial markers
   session_start <- array(0, c(n_subj, t_max)) 
   for (i in 1:n_subj) {
-    subj_trials <- subset(comb_data, ID==subj_list[i])$Trialorder
+    subj_trials <- subset(comb_data, participant0ID==subj_list[i])$task_trial
     for (t in 1:t_subj[i]) {
       if (subj_trials[t] == 1) {
         session_start[i,t] <- 1
@@ -113,7 +58,7 @@ make_stan_data_growth <- function(task_data, survey_data, formula, time_variable
   time <- array(0, c(n_subj, n_sessions)) 
   for (i in 1:n_subj) {
     for (s in 1:n_sessions) {
-      subj_session <- subset(comb_data, ID==subj_list[i] & session==s)
+      subj_session <- subset(comb_data, participant0ID==subj_list[i] & session==s)
       if (nrow(subj_session) > 0) {
         time[i,s] <- as.integer(unique(subj_session[time_variable])[1])
         # fill in missing times with mean of non-missing
@@ -124,16 +69,32 @@ make_stan_data_growth <- function(task_data, survey_data, formula, time_variable
   time <- time - min(time)
   
   # parsed list of formulas
-  named_formulas <- parse_formula(formula, PARAMETERS_GROWTH)
+  named_formulas <- parse_formula(model_text, PARAMETERS_GROWTH)
   
   # Behavioral data arrays
   choice <- outcome <- sign_outcome <- card <- array(-1, c(n_subj, t_max))
-  # summarize data to get covariate values per ID, session
+  # # summarize data to get covariate values per ID, session
+  # covar_data <- comb_data %>%
+  #   group_by(participant0ID, session) %>% 
+  #   summarize(across(where(is.numeric), mean))
+  # TODO: validate—carry forward last value if covar is missing for a session
   covar_data <- comb_data %>%
-    group_by(ID, session) %>% 
-    summarize(across(where(is.numeric), mean))
+    group_by(participant0ID, session) %>%
+    summarize(
+      across(where(is.numeric), mean, na.rm = TRUE), 
+      across(where(is.character), ~ first(na.omit(.))),
+      .groups = "drop"
+    ) %>%
+    # Expand to include all participant0ID-session combinations, filling missing sessions with NA
+    complete(participant0ID, session) %>%
+    arrange(participant0ID, session) %>%
+    # Apply last observation carried forward within each participant group
+    group_by(participant0ID) %>%
+    fill(everything(), .direction = "down") %>%
+    ungroup()
+  
   # create model matrix for each formula in list_formula
-  X <- lapply(named_formulas, function(f) model.matrix(f, covar_data))
+  X <- lapply(named_formulas, function(f) model.matrix.lm(f, covar_data, na.action="na.pass"))
   D_end <- cumsum(sapply(X, ncol))
   D <- D_end[length(D_end)]
   D_start <- c(1, D_end[-length(D_end)] + 1)
@@ -143,22 +104,25 @@ make_stan_data_growth <- function(task_data, survey_data, formula, time_variable
   # Filling arrays with task and survey covariate data
   for (i in 1:n_subj) {
     subj_dat <- comb_data %>% 
-      filter(ID==subj_list[i])
+      filter(participant0ID==subj_list[i])
     n_session_subj <- length(unique(subj_dat$session))
     
     if (nrow(subj_dat) > 0) {
       card[i,1:t_subj[i]] <- subj_dat$card
-      choice[i,1:t_subj[i]] <- subj_dat$choice
+      choice[i,1:t_subj[i]] <- 2-subj_dat$play
       outcome[i,1:t_subj[i]] <- subj_dat$outcome / 100
       sign_outcome[i,1:t_subj[i]] <- sign(subj_dat$outcome)
       for (par in PARAMETERS_GROWTH) {
         for (s in 1:n_session_subj) {
-          subj_covar_idx <- covar_data$ID==subj_list[i] & covar_data$session==s
-          design_matrix[i,s,D_start[par]:D_end[par]] <- X[[par]][subj_covar_idx]
+          subj_covar_idx <- covar_data$participant0ID==subj_list[i] & covar_data$session==s
+          if (any(subj_covar_idx)) {
+            design_matrix[i,s,D_start[par]:D_end[par]] <- X[[par]][subj_covar_idx] 
+          }
         }
       }
     }
   }  
+  design_matrix[is.na(design_matrix)] <- -99
   
   stan_list <- list(
     N = n_subj,

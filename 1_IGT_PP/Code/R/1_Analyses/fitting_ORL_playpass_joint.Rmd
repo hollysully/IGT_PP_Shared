@@ -25,7 +25,6 @@ source(here("1_TADS_long", "Code", "R", "3_Other", "helpful_functions.R"))
 source(here("1_IGT_PP", "Code", "R", "utils.R"))
 ```
 
-
 ## Load Data
 ```{r}
 all_task_data <- readRDS(here("1_IGT_PP", "Data", "1_Preprocessed", "all_task_data.rds"))
@@ -75,10 +74,6 @@ orl_fit_orig <- orl_orig_model$sample(
 ) 
 ```
 
-
-
-
-# a plot Nate made for comparing this flex model w/ the previous 2 timepoint joint model
 ```{r}
 # all person-level parameters should match (be on the identity line)
 pars <- c("Arew", "Apun", "betaF", "betaP")
@@ -90,10 +85,6 @@ df <- foreach(par=pars, .combine="rbind") %do% {
       rep("Original", stan_data_orig$N*2),
       rep("Design Matrix", stan_data_orig$N*2)
     ),
-    # removing subject in design matrix data but not in 
-    # original data. Note 50-99 and 51-100 are pairs of 
-    # the same subject across sessions, so below is only 
-    # removing 2 subjects' data
     value=scale(c(
       apply(orl_fit_orig$draws(paste0(par)), 3, mean),
       apply(orl_fit$draws(paste0(par)), 3, mean)

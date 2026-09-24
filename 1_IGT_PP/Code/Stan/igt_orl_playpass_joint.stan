@@ -172,7 +172,7 @@ model {
         ev = rep_vector(0,4);
         ef = rep_vector(0,4);
         pers = rep_vector(1,4);
-        utility = ev + ef * betaF[i,s] + pers * betaP[i,s];;
+        utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
         
         for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
           
@@ -278,7 +278,7 @@ generated quantities {
           ef = rep_vector(0,4);
           pers = rep_vector(1,4);
           utility = ev + ef * betaF[i,s] + pers * betaP[i,s];
-          
+
           for (t in 1:Tsubj[i,s]) { // Run through RL algorithm trial-by-trial
             // softmax choice
             log_lik[i] += categorical_logit_lpmf(choice[i,t,s]|to_vector({utility[card[i,t,s]], 0}));
